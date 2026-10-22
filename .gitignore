@@ -1,0 +1,74 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+.vite/
+
+# Env and secrets (commit .env.example only)
+.env
+.env.*
+!.env.example
+
+# Tests and coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Capacitor native build artifacts (the ios/ and android/ projects themselves are committed)
+apps/web/ios/App/Pods/
+apps/web/ios/App/build/
+apps/web/ios/App/App/public/
+apps/web/android/.gradle/
+apps/web/android/build/
+apps/web/android/app/build/
+apps/web/android/app/src/main/assets/public/
+apps/web/android/local.properties
+*.keystore
+*.jks
+
+# Terraform (commit .terraform.lock.hcl; never state or tfvars)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+.terraform.tfstate.lock.info
+
+# Local Postgres data / dumps
+pgdata/
+backups/
+*.dump
+*.sql.gz
+
+# Private keys and certificates
+*.pem
+*.key
+id_*
+!*.pub
+
+# Editor and OS
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/worktrees/
+
+# Local agent workspaces
+.superpowers/
+
+# Agent work reports (kept outside the repo)
+/task-*-report.md

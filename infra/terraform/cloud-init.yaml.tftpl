@@ -1,0 +1,69 @@
+#cloud-config
+# Runs once, on the Droplet's first boot. Contains public keys only, no secrets.
+
+users:
+  # You: SSH + sudo. Use for maintenance.
+  - name: admin
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${admin_ssh_public_key}
+  # CI: SSH + docker only (added to the docker group in runcmd), no sudo.
+  - name: deploy
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+      - restrict ${deploy_ssh_public_key}
+
+disable_root: true
+ssh_pwauth: false
+
+package_update: true
+package_upgrade: true
+
+apt:
+  sources:
+    docker.list:
+      source: "deb [signed-by=$KEY_FILE] https://download.docker.com/linux/ubuntu $RELEASE stable"
+      # Docker's release signing key.
+      keyid: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+
+packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-compose-plugin
+  - fail2ban
+  - unattended-upgrades
+
+swap:
+  filename: /swapfile
+  size: 1G
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-hardening.conf
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      X11Forwarding no
+      AllowTcpForwarding no
+      AllowAgentForwarding no
+      MaxAuthTries 3
+      AllowUsers admin deploy
+  - path: /etc/docker/daemon.json
+    content: |
+      { "log-driver": "local", "log-opts": { "max-size": "10m", "max-file": "5" } }
+  - path: /etc/apt/apt.conf.d/52unattended-upgrades-local
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "true";
+      Unattended-Upgrade::Automatic-Reboot-Time "04:00";
+
+runcmd:
+  - usermod -aG docker deploy
+  - install -d -o deploy -g deploy -m 750 /opt/workout-tracker
+  - systemctl enable --now docker fail2ban unattended-upgrades
+  - systemctl restart docker
+  - systemctl restart ssh

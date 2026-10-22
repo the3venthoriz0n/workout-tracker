@@ -1,0 +1,5 @@
+# Normalize line endings; shell scripts and YAML must stay LF (they run on Linux).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

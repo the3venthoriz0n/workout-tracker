@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Dockerfile Node tag matches .node-version
+        run: |
+          want="$(tr -d '[:space:]' < .node-version)"
+          froms="$(grep -E '^FROM node:' Dockerfile)"
+          test "$(printf '%s\n' "$froms" | wc -l)" -eq 2
+          printf '%s\n' "$froms" | while read -r _ ref _; do
+            tag="${ref%%@*}"
+            test "$tag" = "node:$want-alpine" || { echo "Dockerfile has $tag but .node-version is $want"; exit 1; }
+          done
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build production image (not pushed)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: runtime
+          push: false
+
+  prod-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Production compose publishes only ports 80 and 443
+        working-directory: deploy
+        env:
+          IMAGE_REF: ghcr.io/example/app@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          DOMAIN: example.invalid
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+          BETTER_AUTH_SECRET: ci
+          BETTER_AUTH_URL: https://example.invalid
+        run: |
+          published=$(docker compose config --format json | jq -c '[.services[].ports[]? | .published] | map(tonumber) | unique')
+          echo "published ports: $published"
+          test "$published" = "[80,443]"
+
+  deploy-script:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: shellcheck
+        run: docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d deploy/deploy.sh deploy/test/deploy.test.sh
+      - name: deploy.sh tests (stubbed docker)
+        run: sh deploy/test/deploy.test.sh
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high

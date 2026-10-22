@@ -1,2 +1,74 @@
 # workout-tracker
-A workout tracking and planning app to help design and track workouts
+
+A free, simple lifting tracker: build an exercise library, make plans, log sets, and let progression rules set the next session's targets. It works without an account and runs on web, iOS and Android from one codebase.
+
+See [docs/spec.md](docs/spec.md) for the full design.
+
+## Local development
+
+Requires [Docker](https://docs.docker.com/get-docker/) and [just](https://github.com/casey/just). Node and pnpm run inside containers.
+
+```sh
+just dev        # Postgres + API (:3000) + web with hot reload: http://localhost:5173
+just check      # typecheck, test, build (same as CI)
+just preview    # run the production image locally: http://localhost:8080
+just            # list all recipes
+```
+
+The first run creates `.env` with random local-only secrets. It is gitignored.
+
+### Testing on a phone (same Wi-Fi)
+
+The dev web port (5173) listens on all interfaces; Postgres and the API stay on loopback, and the Vite dev server only serves the web app's own files. Set `DEV_BIND=127.0.0.1` to keep it loopback-only, or `DEV_ALLOWED_HOSTS=name.local` to also allow opening it by machine name. None of this applies to production (`deploy/` publishes only ports 80/443, and CI enforces that).
+
+Run `just lan` for the address to open on the phone and, on Windows with WSL2, the one-time port-forward and firewall commands (WSL2 sits on a private network that other devices cannot reach directly).
+
+## Repository layout
+
+```
+apps/
+  api/            Hono API (Node), Drizzle schema and migrations
+  web/            React + Vite SPA (Capacitor iOS/Android later)
+packages/
+  shared/         zod schemas, types and logic shared by api and web
+deploy/           production compose stack, Caddyfile, deploy script (runs on the server)
+infra/terraform/  DigitalOcean Droplet, firewall and reserved IP
+docs/             spec
+.github/          CI, release/deploy, CodeQL, Dependabot
+```
+
+## Releases and deployment
+
+Builds and deploys run only in GitHub Actions:
+
+- **Every PR and push to `main`:** typecheck, test, build, Docker build, dependency review, CodeQL.
+- **Pushing a tag `vX.Y.Z`:** runs CI, then publishes a signed-provenance image to GHCR and deploys it by digest to the `production` environment. Only `v*` tags can deploy there.
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+## First-time infrastructure setup
+
+You need `gh` (logged in), an SSH key at `~/.ssh/id_ed25519.pub` (or set `WORKOUT_ADMIN_SSH_KEY`), and a DigitalOcean API token. A custom-scoped token is best.
+
+```sh
+read -rs DIGITALOCEAN_TOKEN && export DIGITALOCEAN_TOKEN   # never written to disk or history
+just infra-plan                 # review
+just infra-apply                # Droplet + firewall + reserved IP (safe to re-run)
+just server-wait                # wait for first-boot hardening and Docker install
+# point your domain's A record at `just tf output -raw ip`
+just github-setup example.com   # production environment, deploy key, host, domain
+```
+
+Before the first release, work through [docs/release-checklist.md](docs/release-checklist.md) (tag ruleset, environment reviewers, GHCR visibility, DNS, backups, rollback).
+
+Production secrets (database password, auth secret) are generated on the server during the first deploy and never leave it. Terraform state is local and gitignored, so back up `infra/terraform/terraform.tfstate`. The Droplet ignores later changes to its SSH keys and cloud-init (`ignore_changes`), so rotating the admin or deploy key is a manual step on the server.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) to report a vulnerability.
+
+## License
+
+MIT
