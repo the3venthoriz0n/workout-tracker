@@ -300,7 +300,7 @@ test('a failed override write reverts the field and toasts a friendly error', as
   await waitFor(() => expect(reps.value).toBe('5'))
 })
 
-test('add_weight rule editor explains increment snapping, add_reps does not', async () => {
+test('add_weight rule editor explains progression step snapping, add_reps does not', async () => {
   const user = userEvent.setup()
   const { repo, item, view } = await withItem()
   await repo.updateProfile({ weight_increment: 2.5 })
@@ -308,7 +308,7 @@ test('add_weight rule editor explains increment snapping, add_reps does not', as
   const row = await screen.findByRole('listitem', { name: 'Bench Press' })
   await user.click(within(row).getByRole('button', { name: 'Progression for Bench Press' }))
   expect(
-    await within(row).findByText('Steps snap to your 2.5 lb increment (change it in Settings).'),
+    await within(row).findByText('Steps snap to your 2.5 lb progression step (change it in the Progression tab).'),
   ).toBeTruthy()
   void item
   await user.selectOptions(within(row).getByLabelText('On success'), 'add_reps')
