@@ -40,7 +40,7 @@ M1 is deliberately client-only: guest mode is a v1 requirement anyway, and it is
 | Exercise library | Name, notes, video/instruction URL, required gear, default sets/reps/weight, active toggle. Per user, seeded from a starter list. | M1 |
 | Plans | Named plans → ordered days → ordered items. Each item references an exercise, with optional overrides and a progression rule. | M1 |
 | Session logging | Pick a plan day, then mark sets done with one tap. Edit actual reps and weight in place. Per-set and per-session notes. Resumes if the app closes. | M1 |
-| Progression | Runs when a session is finished. See §6. | M1 |
+| Progression | Runs when a session is finished. See §6. Has its own tab: the progression step, defaults for new plan items, and every plan item's rule. | M1 |
 | History | Completed sessions by date, with the exact sets, reps and weights. | M1 |
 | Units | lb or kg, chosen in Settings; changing it converts stored weights. | M1 |
 | Export | Download all data as JSON. | M1 |
@@ -88,7 +88,7 @@ The zod schemas in `packages/shared` are the single definition. Dexie (M1) and D
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| `profile` | user_id, plan (`free`\|`pro`), units (`lb`\|`kg`), weight_increment | `weight_increment` = smallest weight jump (default 5 lb / 2.5 kg); used for rounding |
+| `profile` | user_id, plan (`free`\|`pro`), units (`lb`\|`kg`), weight_increment, default_rule? | `weight_increment` is the progression step: the smallest weight change you can load (default 5 lb / 2.5 kg), used for rounding. `default_rule` (optional rule shape) is what new plan items start with; absent means the default rule in §6 |
 | `gear` | id, user_id, name, owned | Seeded list plus custom items; `owned` drives the picker |
 | `exercise` | id, user_id, name, notes, video_url, required_gear_ids[], active, default_sets, default_reps, default_weight | The reusable "var" |
 | `plan` | id, user_id, name, archived | A routine |
@@ -99,7 +99,7 @@ The zod schemas in `packages/shared` are the single definition. Dexie (M1) and D
 | `workout_session` | id, user_id, plan_day_id, plan_name, day_name, started_at, completed_at?, note | `completed_at` null = in progress (at most one). Names are snapshots. |
 | `set_log` | id, session_id, plan_item_id, exercise_id, exercise_name, set_no, position, target_reps, target_weight, actual_reps, weight, done, note | Created when the session starts; snapshots values, so history never changes when plans or exercises do. `position`: plan item position at session start (ordering snapshot) |
 
-Weights are stored in the profile's unit as decimals. Changing units converts every stored weight in one transaction, rounded to 0.1, and resets `weight_increment` to that unit's default.
+Weights are stored in the profile's unit as decimals. Changing units converts every stored weight in one transaction, rounded to 0.1, and resets the progression step (`weight_increment`) to that unit's default and converts an `add_weight` `default_rule` amount like plan-item rules.
 
 ## 6. Core logic (`packages/shared`, pure functions)
 
@@ -126,7 +126,7 @@ Sessions pre-fill from `targetReps` and `targetWeight`. Overriding a plan item n
 5. Weights are rounded to the nearest `increment` and never go below 0. A successful `add_weight` step is rounded to the increment and is never smaller than one increment.
 6. Write the new `target_reps`, `target_weight` and `item_state`.
 
-**Default rule** for a new plan item: `add_weight` by the profile increment, `fail_streak_limit = 3`, `deload_pct = 10`, no rep ceiling.
+**Default rule** for a new plan item (unless the profile sets `default_rule`): `add_weight` by the progression step, `fail_streak_limit = 3`, `deload_pct = 10`, no rep ceiling.
 
 ## 7. Data access, guest mode and sync
 
@@ -141,7 +141,7 @@ Sessions pre-fill from `targetReps` and `targetWeight`. Overriding a plan item n
 
 ## 8. Screens
 
-Five tabs: a bottom nav on phones and a sidebar on desktop. **Today** is home. Mobile-first, one column.
+Six tabs (Today, Plans, Library, Progression, History, Settings): a bottom nav on phones and a sidebar on desktop. **Today** is home. Mobile-first, one column.
 
 | Route | Screen | What it does |
 | --- | --- | --- |
@@ -149,7 +149,8 @@ Five tabs: a bottom nav on phones and a sidebar on desktop. **Today** is home. M
 | `/plans`, `/plans/:id` | Plans | List and create plans; inside a plan, manage days and items. Inline edit of sets/reps/weight overrides and the progression rule per item. Reorder with up/down buttons. Add items via the exercise picker. |
 | `/library` | Library | Two sections: Exercises (list, active toggle, notes, video link, required gear, defaults — create/edit in a sheet; an exercise used in a plan can be deactivated but not deleted) and Gear (owned toggles + custom gear). Section is kept in `?section=gear`. |
 | `/history`, `/history/:id` | History | Completed sessions, newest first; tap one for exact sets, reps and weights. |
-| `/settings` | Settings | Units and increment, export JSON. Account section placeholder ("coming soon") until M2. |
+| `/progression` | Progression | Three cards: the progression step (smallest weight change you can load; steps and deloads snap to it), defaults for new plan items (the `default_rule`, which only affects items added afterwards), and every live plan item's rule grouped by plan and day, each editable in place. |
+| `/settings` | Settings | Units, export JSON. Account section placeholder ("coming soon") until M2. |
 
 UX rules: tap targets at least 44 px; `inputmode="decimal"` for weight and `inputmode="numeric"` for reps; never more than one modal or sheet open; edit in place; works in light and dark mode.
 
@@ -160,7 +161,7 @@ REST under `/api/v1`, JSON validated by the shared zod schemas. Changes are addi
 | Method | Path | Purpose |
 | --- | --- | --- |
 | \* | `/api/auth/**` | Better Auth |
-| GET/PUT | `/api/v1/me` | Profile: units, increment, plan |
+| GET/PUT | `/api/v1/me` | Profile: units, progression step, plan |
 | GET/POST/PATCH/DELETE | `/api/v1/gear` | Gear |
 | GET/POST/PATCH/DELETE | `/api/v1/exercises` | Library; `?active=true&available=true` filters |
 | GET/POST/PATCH/DELETE | `/api/v1/plans` | Plans with nested days, items and rules |
@@ -216,7 +217,7 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | Terraform for the Droplet | Safe to re-run; `prevent_destroy` protects the database |
 | M1 is guest-only (`LocalRepo`) | Fastest usable MVP; guest mode is required anyway; Drizzle and auth wait for M2 |
 | Targets win over overrides; editing an override clears targets | Progression drives the numbers, but a manual edit always takes effect |
-| `weight_increment` on the profile | Needed for deload rounding and double progression; plates differ by gym and unit |
+| `weight_increment` (progression step) on the profile | Needed for deload rounding and double progression; plates differ by gym and unit |
 | Weights stored in the user's unit | No float drift on display; changing units converts once |
 | Set logs created at session start | Pre-filled rows make logging one tap; resume works for free |
 | Exercise and day names snapshotted into history | History never changes when plans or exercises do |

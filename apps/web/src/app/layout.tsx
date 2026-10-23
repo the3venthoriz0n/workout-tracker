@@ -1,4 +1,11 @@
-import { CalendarCheck, ClipboardList, Dumbbell, History, Settings } from 'lucide-react'
+import {
+  CalendarCheck,
+  ClipboardList,
+  Dumbbell,
+  History,
+  Settings,
+  TrendingUp,
+} from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
 import { Toaster } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
@@ -7,6 +14,7 @@ const tabs = [
   { to: '/', label: 'Today', icon: CalendarCheck, end: true },
   { to: '/plans', label: 'Plans', icon: ClipboardList, end: false },
   { to: '/library', label: 'Library', icon: Dumbbell, end: false },
+  { to: '/progression', label: 'Progression', icon: TrendingUp, end: false },
   { to: '/history', label: 'History', icon: History, end: false },
   { to: '/settings', label: 'Settings', icon: Settings, end: false },
 ]
@@ -26,8 +34,8 @@ export function Layout() {
             end={end}
             className={({ isActive }) =>
               cn(
-                'flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors',
-                'md:min-h-11 md:flex-none md:flex-row md:justify-start md:gap-3 md:rounded-md md:px-3 md:text-sm',
+                'flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-medium tracking-tight transition-colors',
+                'md:min-h-11 md:flex-none md:flex-row md:justify-start md:gap-3 md:rounded-md md:px-3 md:text-sm md:[&>span]:max-w-none',
                 isActive
                   ? 'text-primary md:bg-accent'
                   : 'text-muted-foreground hover:text-foreground md:hover:bg-accent/50',
@@ -35,7 +43,7 @@ export function Layout() {
             }
           >
             <Icon className="size-5" aria-hidden />
-            {label}
+            <span className="max-w-full truncate">{label}</span>
           </NavLink>
         ))}
       </nav>

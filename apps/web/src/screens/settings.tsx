@@ -2,7 +2,6 @@ import type { Units } from '@workout/shared'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Screen } from '@/app/screen'
-import { NumberField } from '@/components/number-field'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useProfile, useUpdateProfile } from '@/repo/hooks'
@@ -18,7 +17,6 @@ export function SettingsScreen() {
   const repo = useRepo()
   const [pendingUnits, setPendingUnits] = useState<Units | null>(null)
   const [unitsError, setUnitsError] = useState<string | null>(null)
-  const [incrementError, setIncrementError] = useState<string | null>(null)
 
   function confirmUnits() {
     if (!pendingUnits) return
@@ -83,8 +81,8 @@ export function SettingsScreen() {
             {pendingUnits && (
               <div role="alertdialog" aria-label="Confirm unit change" className="flex flex-col gap-2 rounded-lg border p-3">
                 <p className="text-sm">
-                  Switch to {pendingUnits}? All saved weights will be converted and the increment
-                  reset to the default.
+                  Switch to {pendingUnits}? All saved weights will be converted and the progression
+                  step reset to the default.
                 </p>
                 {unitsError && (
                   <p role="alert" className="text-destructive text-sm">
@@ -106,28 +104,6 @@ export function SettingsScreen() {
                     Cancel
                   </Button>
                 </div>
-              </div>
-            )}
-            {profile && (
-              <div className="flex flex-col gap-1">
-                <NumberField
-                  label="Weight increment"
-                  kind="weight"
-                  suffix={profile.units}
-                  value={profile.weight_increment}
-                  onCommit={(v) => {
-                    if (v === null || v <= 0) {
-                      setIncrementError('Increment must be greater than 0.')
-                      return false
-                    }
-                    setIncrementError(null)
-                    updateProfile.mutate(
-                      { weight_increment: v },
-                      { onError: (err) => notifyError(err) },
-                    )
-                  }}
-                />
-                {incrementError && <p className="text-destructive text-sm">{incrementError}</p>}
               </div>
             )}
           </CardContent>

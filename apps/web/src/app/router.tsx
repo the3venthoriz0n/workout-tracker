@@ -4,6 +4,7 @@ import { HistoryDetailScreen } from '@/screens/history-detail'
 import { LibraryScreen } from '@/screens/library'
 import { PlanDetailScreen } from '@/screens/plan-detail'
 import { PlansScreen } from '@/screens/plans'
+import { ProgressionScreen } from '@/screens/progression'
 import { SettingsScreen } from '@/screens/settings'
 import { TodayScreen } from '@/screens/today'
 import { Layout } from './layout'
@@ -16,6 +17,7 @@ export const routes: RouteObject[] = [
       { path: '/plans', element: <PlansScreen /> },
       { path: '/plans/:id', element: <PlanDetailScreen /> },
       { path: '/library', element: <LibraryScreen /> },
+      { path: '/progression', element: <ProgressionScreen /> },
       { path: '/history', element: <HistoryScreen /> },
       { path: '/history/:id', element: <HistoryDetailScreen /> },
       { path: '/settings', element: <SettingsScreen /> },

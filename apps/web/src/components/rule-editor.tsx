@@ -30,10 +30,12 @@ type FieldsProps = {
   rule: RuleInput
   onSave: (rule: RuleInput) => Promise<void>
   idPrefix: string
+  // Hint under the amount (it points at the Progression tab, so hide it on that tab)
+  showStepHint?: boolean
 }
 
 // Action, amount, fail limit, deload % and rep ceiling (no "No progression" switch)
-export function RuleFields({ rule, onSave, idPrefix }: FieldsProps) {
+export function RuleFields({ rule, onSave, idPrefix, showStepHint = true }: FieldsProps) {
   const profile = useProfile().data
   const units = profile?.units ?? 'lb'
   const step = profile?.weight_increment ?? 5
@@ -67,7 +69,7 @@ export function RuleFields({ rule, onSave, idPrefix }: FieldsProps) {
           value={rule.success_amount}
           onCommit={(v) => (v === null || v <= 0 ? false : save({ ...rule, success_amount: v }))}
         />
-        {rule.success_action === 'add_weight' && (
+        {showStepHint && rule.success_action === 'add_weight' && (
           <p className="text-muted-foreground col-span-2 -mt-1 text-xs">
             Steps snap to your {formatWeight(step)} {units} progression step (change it in the
             Progression tab).
