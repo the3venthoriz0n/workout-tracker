@@ -314,3 +314,28 @@ test('add_weight rule editor explains progression step snapping, add_reps does n
   await user.selectOptions(within(row).getByLabelText('On success'), 'add_reps')
   await waitFor(() => expect(within(row).queryByText(/Steps snap to/)).toBeNull())
 })
+
+test('re-enabling progression restores the profile default rule', async () => {
+  const user = userEvent.setup()
+  const { repo, plan, view } = await withItem()
+  const dflt = {
+    success_action: 'add_reps' as const,
+    success_amount: 2,
+    fail_streak_limit: 2,
+    deload_pct: 15,
+    rep_ceiling: 10,
+  }
+  await repo.updateProfile({ default_rule: dflt })
+  view()
+  const row = await screen.findByRole('listitem', { name: 'Bench Press' })
+  await user.click(within(row).getByRole('button', { name: 'Progression for Bench Press' }))
+  const sw = within(row).getByRole('switch')
+  await user.click(sw)
+  await waitFor(async () =>
+    expect((await repo.getPlan(plan.id))?.days[0]?.items[0]?.rule).toBeNull(),
+  )
+  await user.click(sw)
+  await waitFor(async () =>
+    expect((await repo.getPlan(plan.id))?.days[0]?.items[0]?.rule).toMatchObject(dflt),
+  )
+})

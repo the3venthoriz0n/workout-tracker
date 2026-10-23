@@ -82,7 +82,7 @@ export interface Repo {
   deletePlan(id: string): Promise<void> // soft-deletes days and items too
   savePlanDay(input: { id?: string; plan_id: string; name: string }): Promise<PlanDay>
   deletePlanDay(id: string): Promise<void>
-  addPlanItem(planDayId: string, exerciseId: string): Promise<PlanItem> // appends; creates defaultRule(increment)
+  addPlanItem(planDayId: string, exerciseId: string): Promise<PlanItem> // appends; rule = profile.default_rule if set, else defaultRule(progression step)
   updatePlanItem(
     id: string,
     patch: { sets?: number | null; reps?: number | null; weight?: number | null },

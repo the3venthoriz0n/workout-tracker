@@ -148,8 +148,8 @@ Six tabs (Today, Plans, Library, Progression, History, Settings): a bottom nav o
 | `/` | Today | No session: pick a plan day, then Start. In progress: exercises with their sets pre-filled from targets. Tap a set to mark it done; tap again to undo. Long-press (or an edit button) edits reps and weight. Each exercise has a video link and notes. Finish runs progression and shows a short summary of the new targets. |
 | `/plans`, `/plans/:id` | Plans | List and create plans; inside a plan, manage days and items. Inline edit of sets/reps/weight overrides and the progression rule per item. Reorder with up/down buttons. Add items via the exercise picker. |
 | `/library` | Library | Two sections: Exercises (list, active toggle, notes, video link, required gear, defaults — create/edit in a sheet; an exercise used in a plan can be deactivated but not deleted) and Gear (owned toggles + custom gear). Section is kept in `?section=gear`. |
-| `/history`, `/history/:id` | History | Completed sessions, newest first; tap one for exact sets, reps and weights. |
 | `/progression` | Progression | Three cards: the progression step (smallest weight change you can load; steps and deloads snap to it), defaults for new plan items (the `default_rule`, which only affects items added afterwards), and every live plan item's rule grouped by plan and day, each editable in place. |
+| `/history`, `/history/:id` | History | Completed sessions, newest first; tap one for exact sets, reps and weights. |
 | `/settings` | Settings | Units, export JSON. Account section placeholder ("coming soon") until M2. |
 
 UX rules: tap targets at least 44 px; `inputmode="decimal"` for weight and `inputmode="numeric"` for reps; never more than one modal or sheet open; edit in place; works in light and dark mode.

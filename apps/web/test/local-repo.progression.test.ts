@@ -71,12 +71,20 @@ describe('profile default_rule', () => {
   })
 
   it('a legacy profile without default_rule still loads', async () => {
-    const { db, repo } = await setup()
-    const raw = await db.profile.toCollection().first()
-    const { default_rule: _drop, ...legacy } = raw as Record<string, unknown>
-    await db.profile.clear()
-    await db.profile.add(legacy as never)
+    const { db, repo, ex1 } = await setup()
+    await repo.updateProfile({ default_rule: custom })
+    const raw = (await db.profile.toCollection().first()) as unknown as Record<string, unknown>
+    expect(raw.default_rule).toBeDefined()
+    const { default_rule: _drop, ...legacy } = raw
+    await db.profile.put(legacy as never) // same key, field removed
+    expect(Object.keys((await db.profile.toCollection().first()) as object)).not.toContain(
+      'default_rule',
+    )
     expect((await repo.getProfile()).default_rule).toBeUndefined()
+    const plan = await repo.savePlan({ name: 'A' })
+    const day = await repo.savePlanDay({ plan_id: plan.id, name: 'D' })
+    await repo.addPlanItem(day.id, ex1.id)
+    expect((await repo.getPlan(plan.id))?.days[0]?.items[0]?.rule).toMatchObject(defaultRule(5))
     await repo.updateProfile({ units: 'kg' })
     expect((await repo.getProfile()).units).toBe('kg')
   })

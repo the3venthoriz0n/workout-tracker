@@ -112,8 +112,10 @@ type Props = {
 
 // The expandable body: "No progression" switch plus the fields when a rule exists
 export function RuleEditor({ rule, onSave, itemName, idPrefix }: Props) {
-  const step = useProfile().data?.weight_increment ?? 5
+  const profile = useProfile().data
   const save = useSaveRule<RuleInput | null>(onSave)
+  // Same rule a new plan item would get
+  const restoredRule = profile?.default_rule ?? defaultRule(profile?.weight_increment ?? 5)
   return (
     <div className="flex flex-col gap-3">
       <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
@@ -121,7 +123,7 @@ export function RuleEditor({ rule, onSave, itemName, idPrefix }: Props) {
         <Switch
           checked={rule === null}
           aria-label={`No progression for ${itemName}`}
-          onCheckedChange={(off) => void save(off ? null : defaultRule(step))}
+          onCheckedChange={(off) => void save(off ? null : restoredRule)}
         />
       </label>
       {rule && <RuleFields rule={rule} onSave={onSave} idPrefix={idPrefix} />}

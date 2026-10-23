@@ -1,4 +1,4 @@
-import type { RuleInput } from '@workout/shared'
+import { defaultRule, type RuleInput } from '@workout/shared'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -148,6 +148,54 @@ test('the No progression switch works from the list', async () => {
   await waitFor(() => expect(within(row).getAllByText('No progression').length).toBeGreaterThan(0))
   await user.click(within(row).getByRole('switch'))
   await waitFor(async () => expect(await ruleOf(repo, planId, items[0]!)).not.toBeNull())
+})
+
+test('re-enabling progression restores the profile default rule (list)', async () => {
+  const user = userEvent.setup()
+  const dflt: RuleInput = { ...repsRule, success_amount: 2, rep_ceiling: 10 }
+  const { repo } = await setup(true, async (r) => {
+    await r.updateProfile({ default_rule: dflt })
+  })
+  const row = (await screen.findAllByRole('listitem'))[0]!
+  await user.click(within(row).getByRole('button', { name: /^Edit rule for / }))
+  await user.click(within(row).getByRole('switch'))
+  await waitFor(async () => expect((await repo.listProgression())[0]?.rule).toBeNull())
+  await user.click(within(row).getByRole('switch'))
+  await waitFor(async () => expect((await repo.listProgression())[0]?.rule).toMatchObject(dflt))
+})
+
+test('re-enabling progression without a default restores defaultRule(step)', async () => {
+  const user = userEvent.setup()
+  const { repo } = await setup()
+  const row = (await screen.findAllByRole('listitem'))[0]!
+  await user.click(within(row).getByRole('button', { name: /^Edit rule for / }))
+  await user.click(within(row).getByRole('switch'))
+  await waitFor(async () => expect((await repo.listProgression())[0]?.rule).toBeNull())
+  await user.click(within(row).getByRole('switch'))
+  await waitFor(async () =>
+    expect((await repo.listProgression())[0]?.rule).toMatchObject(defaultRule(5)),
+  )
+})
+
+test('defaults card rejects deload % of 0 and 101 and clears the rep ceiling to null', async () => {
+  const user = userEvent.setup()
+  const { repo } = await setup(false, async (r) => {
+    await r.updateProfile({ default_rule: repsRule })
+  })
+  const heading = await screen.findByText('Defaults for new plan items')
+  const card = within(heading.closest('[data-slot="card"]') as HTMLElement)
+  const deload = card.getByLabelText('Deload %') as HTMLInputElement
+  for (const bad of ['0', '101']) {
+    await user.clear(deload)
+    await user.type(deload, `${bad}{Enter}`)
+    await waitFor(() => expect(deload.value).toBe('15'))
+    expect((await repo.getProfile()).default_rule?.deload_pct).toBe(15)
+  }
+  const ceiling = card.getByLabelText('Rep ceiling') as HTMLInputElement
+  expect(ceiling.value).toBe('12')
+  await user.clear(ceiling)
+  await user.tab()
+  await waitFor(async () => expect((await repo.getProfile()).default_rule?.rep_ceiling).toBeNull())
 })
 
 test('empty state links to Plans', async () => {
