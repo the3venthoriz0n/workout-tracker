@@ -1,7 +1,23 @@
 import { serve } from '@hono/node-server'
-import { app } from './app.js'
-import { sql } from './db/index.js'
+import { createApp } from './app.js'
+import { createAuth } from './auth.js'
+import { db, sql } from './db/index.js'
 import { env } from './env.js'
+import { createService } from './service/index.js'
+
+const app = createApp({
+  auth: createAuth(db, env),
+  env,
+  getService: (userId) => createService(db, userId),
+  sqlHealth: async () => {
+    try {
+      await sql`select 1`
+      return true
+    } catch {
+      return false
+    }
+  },
+})
 
 const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`API listening on :${info.port}`)
