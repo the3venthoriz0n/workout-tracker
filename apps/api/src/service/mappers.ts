@@ -1,8 +1,17 @@
 // Row -> shared record mappers. Postgres boundary rules: timestamps become ISO strings,
 // numeric columns (returned as strings by the driver) become numbers, jsonb is re-validated.
-import { exerciseSchema, gearSchema, profileSchema, ruleInputSchema } from '@workout/shared'
-import type { Exercise, Gear, Profile } from '@workout/shared'
-import type { exercise, gear, profile } from '../db/schema.js'
+import {
+  exerciseSchema,
+  gearSchema,
+  planDaySchema,
+  planItemSchema,
+  planSchema,
+  profileSchema,
+  progressionRuleSchema,
+  ruleInputSchema,
+} from '@workout/shared'
+import type { Exercise, Gear, Plan, PlanDay, PlanItem, Profile, ProgressionRule } from '@workout/shared'
+import type { exercise, gear, plan, planDay, planItem, profile, progressionRule } from '../db/schema.js'
 
 export const now = (): Date => new Date()
 
@@ -66,3 +75,56 @@ export function toExercise(row: typeof exercise.$inferSelect): Exercise {
 }
 
 export const byName = <T extends { name: string }>(a: T, b: T): number => a.name.localeCompare(b.name)
+
+const syncOf = (row: { createdAt: Date; updatedAt: Date; deletedAt: Date | null }) => ({
+  created_at: iso(row.createdAt),
+  updated_at: iso(row.updatedAt),
+  deleted_at: isoOrNull(row.deletedAt),
+})
+
+export function toPlan(row: typeof plan.$inferSelect): Plan {
+  return planSchema.parse({
+    id: row.id,
+    name: row.name,
+    archived: row.archived,
+    user_id: row.userId,
+    ...syncOf(row),
+  })
+}
+
+export function toPlanDay(row: typeof planDay.$inferSelect): PlanDay {
+  return planDaySchema.parse({
+    id: row.id,
+    plan_id: row.planId,
+    name: row.name,
+    position: row.position,
+    ...syncOf(row),
+  })
+}
+
+export function toPlanItem(row: typeof planItem.$inferSelect): PlanItem {
+  return planItemSchema.parse({
+    id: row.id,
+    plan_day_id: row.planDayId,
+    exercise_id: row.exerciseId,
+    position: row.position,
+    sets: row.sets,
+    reps: row.reps,
+    weight: numOrNull(row.weight),
+    target_reps: row.targetReps,
+    target_weight: numOrNull(row.targetWeight),
+    ...syncOf(row),
+  })
+}
+
+export function toRule(row: typeof progressionRule.$inferSelect): ProgressionRule {
+  return progressionRuleSchema.parse({
+    plan_item_id: row.planItemId,
+    success_action: row.successAction,
+    success_amount: num(row.successAmount),
+    fail_streak_limit: row.failStreakLimit,
+    deload_pct: num(row.deloadPct),
+    rep_ceiling: row.repCeiling,
+    ...syncOf(row),
+  })
+}

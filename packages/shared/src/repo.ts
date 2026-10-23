@@ -61,6 +61,13 @@ export type ProgressionRow = {
   rule: ProgressionRule | null
 }
 export class SessionInProgressError extends Error {}
+// Thrown when an id does not resolve to a live row owned by the caller (missing, deleted or foreign).
+export class NotFoundError extends Error {
+  constructor(what = 'Resource') {
+    super(`${what} not found`)
+    this.name = 'NotFoundError'
+  }
+}
 // Thrown by getProfile() when the account has no profile yet (init() has not run).
 export class ProfileNotFoundError extends Error {
   constructor() {

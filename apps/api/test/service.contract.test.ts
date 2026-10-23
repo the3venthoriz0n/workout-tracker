@@ -14,9 +14,15 @@ runRepoContract(
     await repo.init()
     return { repo, cleanup }
   },
-  // Task 2a targets ['profile', 'gear', 'exercises'], but 3 of those 6 cases (unit switch,
-  // deleteExercise cascade, exerciseUsage) build plans and sessions, which arrive in Tasks 2b/2c.
-  // Widen to all three groups in 2b/2c; until then the 'profile' init case is covered by
-  // service.profile.test.ts.
-  { groups: ['gear'] },
+  // Sessions and import arrive in Task 2c; those groups are added there.
+  {
+    groups: ['profile', 'gear', 'exercises', 'plans', 'progression'],
+    // These cases drive startSession/finishSession/exportAll, which arrive in Task 2c (remove then).
+    pending: [
+      'unit switch converts exercise defaults, item weights/targets, set-log weights and add_weight rule amounts, and resets the step',
+      'deleteExercise cascades to its live plan items and keeps history names',
+      'addPlanItem uses default_rule when set, else the default rule',
+      "editing an item's reps or weight clears targets and the fail streak",
+    ],
+  },
 )

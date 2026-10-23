@@ -104,8 +104,11 @@ function normalise(data: ExportData) {
 export function runRepoContract(
   label: string,
   make: () => Promise<RepoHarness>,
-  opts?: { groups?: ContractGroup[] },
+  // `pending`: exact titles of cases that need methods the harness has not implemented yet
+  // (reported as skipped, not silently dropped). Remove entries as the methods land.
+  opts?: { groups?: ContractGroup[]; pending?: string[] },
 ): void {
+  const pending = new Set(opts?.pending ?? [])
   const enabled = new Set<ContractGroup>(
     opts?.groups ?? ['profile', 'gear', 'exercises', 'plans', 'progression', 'sessions', 'transfer'],
   )
@@ -124,7 +127,8 @@ export function runRepoContract(
 
     const contract = (group: ContractGroup, title: string, body: (c: Ctx) => Promise<void>) => {
       if (!enabled.has(group)) return
-      it(title, async (t) => {
+      const register = pending.has(title) ? it.skip : it
+      register(title, async (t) => {
         const h = await fresh()
         await body({ repo: h.repo, h, make: fresh, skip: () => t.skip() })
       })
