@@ -25,12 +25,14 @@ A free, very simple lifting tracker. You build your own exercise library, pick t
 | Milestone | Contents | Runs |
 | --- | --- | --- |
 | **M1: Local MVP (guest mode)** ✅ done | Gear (a section of Library), exercise library, plans, progression rules, Today logging, progression engine, history, settings and export. Everything runs on-device through `LocalRepo`. | `just dev`, `just preview` |
-| M2: Accounts and sync | Drizzle schema, Better Auth, `ApiRepo`, `/api/v1` endpoints, guest import, offline set-log queue | locally |
+| **M2: Accounts and sync** (in progress) | Postgres schema (Drizzle), Better Auth email + password, the REST API in §9, `ApiRepo`, guest-data import on signup, offline set-log queue. Plan: `docs/superpowers/plans/2026-10-22-m2-accounts-and-sync.md`. | locally (`just dev`) |
 | M3: Production | Droplet via Terraform, GitHub production environment, first `v*` release, nightly `pg_dump` backups | DigitalOcean |
 | M4: Mobile | Capacitor wrap, bearer auth, store builds | iOS / Android |
 | Later | Google/Apple sign-in, charts/PRs, AI plan helper, Pro gating, frontend/backend container split | |
 
 M1 is deliberately client-only: guest mode is a v1 requirement anyway, and it is the fastest path to something usable in the gym. The API stays as scaffolded (`/healthz`, empty `/api/v1`) until M2.
+
+M2 scope decisions (owner): REST resources as in §9 (not a single RPC endpoint); email + password only, with no email verification or password reset yet (both need an email provider).
 
 ## 3. Features
 
@@ -101,6 +103,12 @@ The zod schemas in `packages/shared` are the single definition. Dexie (M1) and D
 
 Weights are stored in the profile's unit as decimals. Changing units converts every stored weight in one transaction, rounded to 0.1, and resets the progression step (`weight_increment`) to that unit's default and converts an `add_weight` `default_rule` amount like plan-item rules.
 
+**Postgres mapping (M2).** Drizzle tables mirror the zod schemas, with these rules:
+- Every domain table has the primary key `(user_id, id)`, so two accounts can never collide on a client-generated UUID and a foreign ID never resolves to another user's row. `user_id` is `text` (Better Auth's user id) with a foreign key to the auth user and `ON DELETE CASCADE`; `id` and all other ids are `uuid`.
+- Timestamps are `timestamptz`; `required_gear_ids` is `uuid[]`; `default_rule` is `jsonb` validated by the shared zod schema on every write; weights are `numeric(8,2)`.
+- Soft deletes use `deleted_at timestamptz null`, exactly as in the client; every query filters it. Foreign keys are composite `(user_id, parent_id)` so a child can never point at another user's parent.
+- Better Auth owns `user`, `session`, `account` and `verification`. The `profile` row is created on first use, not at signup.
+
 ## 6. Core logic (`packages/shared`, pure functions)
 
 **Effective values** for a plan item:
@@ -132,8 +140,12 @@ Sessions pre-fill from `targetReps` and `targetWeight`. Overriding a plan item n
 
 - The UI talks only to a `Repo` interface (for example `listExercises()`, `startSession(dayId)`, `logSet()`, `finishSession()`), always through TanStack Query hooks. Mutations invalidate the affected queries.
 - **M1**: `LocalRepo` uses Dexie. On first launch it creates a guest profile (`user_id` = a local UUID) and the seed gear and exercises. Multi-record writes, such as finishing a session or changing units, run in one Dexie transaction.
-- **M2**: `ApiRepo` calls `/api/v1`. On first login, push all local records to `POST /api/v1/import` (idempotent on UUID, with `user_id` rewritten server-side), switch to `ApiRepo`, and clear local data. Offline while signed in: only set logs are queued locally and replayed on reconnect, last-write-wins on `updated_at`.
-- **Web auth (M2)**: Better Auth email/password with session cookies (same origin, no CORS).
+- **M2**: `ApiRepo` implements the same `Repo` interface over the REST API in §9. The app uses `LocalRepo` when signed out and `ApiRepo` when signed in; the UI never knows which. One shared **contract test suite** runs against `LocalRepo`, the server's service layer, and `ApiRepo` (through the real HTTP routes), so the three cannot drift.
+  - **Sign up**: create the account, then upload the guest data once with `POST /api/v1/import` (the same JSON as `exportAll()`; ids are kept; `user_id` is set server-side) and, only after the server confirms, clear the local database and switch to `ApiRepo`. If the upload fails the guest data stays untouched and the upload can be retried from Settings → Account.
+  - **Log in**: if the account already has data, local guest data is discarded after an explicit confirmation that offers a JSON export first; there is no merge, because seed data would duplicate. If the account is new and empty, the guest data is imported as in sign up.
+  - **Sign out**: clears the session and local caches and returns to a fresh guest database; the account's data stays on the server.
+  - **Offline while signed in**: only set logs are queued. `ApiRepo` mirrors the active session locally; set toggles and edits update the mirror immediately and are queued as `PATCH /sets/:id` calls carrying the client `updated_at`, replayed in order when the connection returns (on the `online` event, at app start, and every 30 s while the queue is non-empty). The server applies a set update only if its `updated_at` is newer than the stored one (last write wins). A replayed update the server rejects with a 4xx other than 401 is dropped and the user is told; a 401 pauses the queue until the user signs in again. Starting or finishing a workout needs a connection.
+- **Web auth (M2)**: Better Auth email + password with HttpOnly, SameSite=Lax session cookies (Secure in production), same origin so no CORS. Passwords are 10-128 characters. Better Auth's rate limiting is on for sign in and sign up. No email verification or password reset yet.
 - **Mobile auth (M4)**: Better Auth bearer plugin; token in Capacitor Preferences, sent as `Authorization: Bearer`. Capacitor origins are added to CORS and `trustedOrigins` (exact strings unverified).
 - **Social login (later)**: Google blocks OAuth in WebViews (`disallowed_useragent`), so mobile needs a native plugin (`@capgo/capacitor-social-login`, which handles both Google and Apple), with the ID token verified server-side. Offering Google means also offering Sign in with Apple (App Store Guideline 4.8), so ship both together.
   - Apple setup: enable Sign in with Apple on the App ID that matches the Capacitor `appId`, then regenerate its provisioning profiles. iOS uses the native sheet. Android and web need a Services ID plus an HTTPS return URL on the API (Apple rejects `localhost`).
@@ -150,26 +162,47 @@ Six tabs (Today, Plans, Library, Progression, History, Settings): a bottom nav o
 | `/library` | Library | One Add button in the header (same place and look for both sections; opens an exercise or gear sheet). Two sections: Exercises (list, active toggle, notes, video link, required gear, defaults) and Gear (owned toggles). Every row has pencil (edit in the sheet; gear can be renamed) and trash row actions. Delete asks for inline confirmation that states the impact and cascades: deleting an exercise also removes it from plans (past workouts keep their records); deleting gear unlinks it from exercises that required it. Section is kept in `?section=gear`. |
 | `/progression` | Progression | Three cards: the progression step (smallest weight change you can load; steps and deloads snap to it), defaults for new plan items (the `default_rule`, which only affects items added afterwards), and every live plan item's rule grouped by plan and day, each editable in place. |
 | `/history`, `/history/:id` | History | Completed sessions, newest first; tap one for exact sets, reps and weights; skipped sets show planned numbers. An Edit toggle on finished workouts allows editing reps, weight, done/skipped, set notes and the session note (no date edit or delete); edits never change plan targets or progression. |
-| `/settings` | Settings | Units, export JSON. Account section placeholder ("coming soon") until M2. |
+| `/settings` | Settings | Units, export JSON, and an Account card: sign up, log in, log out, and (after a failed upload) retry the guest-data upload. Signed out, the app is in guest mode. |
 
 UX rules: tap targets at least 44 px; `inputmode="decimal"` for weight and `inputmode="numeric"` for reps; never more than one modal or sheet open; edit in place; works in light and dark mode.
 
 ## 9. API surface (M2)
 
-REST under `/api/v1`, JSON validated by the shared zod schemas. Changes are additive only, so older mobile builds keep working. Authorization lives in the API layer, not in DB row-level security.
+REST under `/api/v1`, JSON bodies validated by the shared zod schemas. Changes are additive only, so older mobile builds keep working. Authorization lives in the API layer, not in DB row-level security.
+
+**Rules for every route**
+- Every `/api/v1/*` route (except `/healthz`) needs a valid session cookie, otherwise `401 {"error":"unauthorized"}`.
+- Every query is scoped by the session's user id. An id that does not exist **or belongs to another user** returns `404 {"error":"not_found"}` (never 403, so existence is not leaked).
+- Resources have client-generated UUIDs, so creates are idempotent `PUT /resource/:id` upserts (re-sending the same request is safe, which the offline queue relies on). The server sets `user_id` and timestamps.
+- State-changing requests (anything but GET/HEAD) must pass an Origin check (Hono `csrf`), in addition to SameSite=Lax cookies; bodies must be `application/json`.
+- Errors: `400 {"error":"invalid","issues":[...]}` for validation, `404`, `409 {"error":"conflict"|"session_in_progress"|"already_has_data"}`, `413` over the body limit (1 MB; 10 MB for `/import`), `500 {"error":"internal_error"}` (never internal messages).
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| \* | `/api/auth/**` | Better Auth |
-| GET/PUT | `/api/v1/me` | Profile: units, progression step, plan |
-| GET/POST/PATCH/DELETE | `/api/v1/gear` | Gear |
-| GET/POST/PATCH/DELETE | `/api/v1/exercises` | Library; `?active=true&available=true` filters |
-| GET/POST/PATCH/DELETE | `/api/v1/plans` | Plans with nested days, items and rules |
-| POST | `/api/v1/sessions` | Start a session from a plan day (pre-filled set logs) |
-| PATCH | `/api/v1/sessions/:id/sets/:setId` | Mark done or edit a set |
-| POST | `/api/v1/sessions/:id/complete` | Finish; runs progression, returns new targets |
-| GET | `/api/v1/sessions` | History, paged, newest first |
-| POST | `/api/v1/import` | One-time guest upload |
+| \* | `/api/auth/**` | Better Auth (sign up, sign in, sign out, session) |
+| POST | `/api/v1/me/init` | Create the profile and seed gear/exercises on first use; returns the profile (idempotent) |
+| GET / PATCH | `/api/v1/me` | Profile; PATCH takes `units`, `weight_increment`, `default_rule` (a unit change converts stored weights and rules, as in §5/§6) |
+| GET | `/api/v1/gear` | List gear (sorted by name) |
+| PUT / DELETE | `/api/v1/gear/:id` | Create/rename/own-toggle gear; delete also removes it from exercises' required gear |
+| GET | `/api/v1/exercises` | List exercises (sorted by name) |
+| PUT / DELETE | `/api/v1/exercises/:id` | Create/update; delete cascades to its live plan items |
+| GET | `/api/v1/exercises/:id/usage` | `{ planItemCount, plans }` for the delete confirmation |
+| GET | `/api/v1/plans`, `/api/v1/plans/:id` | Plans; one plan as a tree (days, items, rules, effective values) |
+| PUT / DELETE | `/api/v1/plans/:id` | Create/rename; delete cascades to days and items |
+| PUT / DELETE | `/api/v1/days/:id` | Create/rename a day (`plan_id` in the body); delete cascades to items |
+| POST | `/api/v1/days/:dayId/items` | Add an exercise to a day (`exercise_id`, optional `id`); gets the profile's default rule |
+| PATCH / DELETE | `/api/v1/items/:id` | Edit `sets`/`reps`/`weight` overrides (null clears; reps/weight edits clear targets); delete |
+| PUT | `/api/v1/items/:id/rule` | Set a rule, or `null` for no progression |
+| POST | `/api/v1/move` | `{ kind: 'day' \| 'item', id, direction: -1 \| 1 }` |
+| GET | `/api/v1/progression` | Every live plan item with its rule, in plan/day/item order |
+| GET | `/api/v1/sessions` | Completed sessions, newest first |
+| GET | `/api/v1/sessions/active` | The in-progress session, or `null` |
+| POST | `/api/v1/sessions` | Start from a plan day (`plan_day_id`); `409 session_in_progress` if one is active |
+| GET / PATCH / DELETE | `/api/v1/sessions/:id` | Detail; PATCH edits the note; DELETE discards an unfinished session (`409` if completed) |
+| POST | `/api/v1/sessions/:id/complete` | Finish; runs progression, returns the summary |
+| PATCH | `/api/v1/sets/:id` | Edit a set (`done`, `actual_reps`, `weight`, `note`); optional client `updated_at` for last-write-wins replays |
+| GET | `/api/v1/export` | All of the account's data as the `exportAll()` JSON |
+| POST | `/api/v1/import` | One-time guest upload; `409 already_has_data` if the account already has a profile |
 | GET | `/healthz` | Health check (exists) |
 
 ## 10. Pro plan structure
@@ -223,12 +256,20 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | Exercise and day names snapshotted into history | History never changes when plans or exercises do |
 | No ad-hoc exercises or per-set schemes in v1 | Keeps logging and progression simple |
 | IDs via `newId()` | `crypto.randomUUID` needs a secure context; LAN phone testing over http would otherwise fail at startup |
+| REST resources for the M2 API (owner's choice) | Conventional and easy to inspect; costs about 30 routes, so a shared contract test suite guards against drift between `LocalRepo`, the server and `ApiRepo` |
+| Email + password only in M2, no email sending (owner's choice) | Verification and password reset need an email provider; deferred |
+| Composite primary keys `(user_id, id)` | Client-generated ids can't collide across accounts or reveal another user's rows |
+| 404 (not 403) for ids owned by someone else | Doesn't leak which ids exist |
+| Guest import only into an account with no profile; logging into an existing account discards local guest data after confirmation | Seed data would duplicate on merge; a JSON export is offered first |
+| Sign out returns to a fresh guest database | Server data stays safe on the server; nothing sensitive lingers on a shared device |
+| Offline queue limited to set edits (+ a local mirror of the active session) | Matches the gym use case; starting or finishing a workout needs a connection |
+| `Repo` interface and view types move to `packages/shared` | Web (`LocalRepo`, `ApiRepo`) and API (server service) implement and test against one contract |
 
 ## 14. Open questions
 
-None block M1.
+None block M2.
 
-- M2: Export format is JSON for now. Is CSV wanted too?
+- After M2: email verification and password reset (needs an email provider), account deletion and per-account data export endpoints (needed before real users), CSV export.
 - M3: Domain name, and the DigitalOcean region (`sfo2` in Terraform may not accept new Droplets; `just infra-plan` will tell).
 
 **Unverified; check before building the part that depends on them**: Capacitor origin strings for CORS and `trustedOrigins`; Apple's in-app payment rules; App Store stance on web wrappers; Gemini free-tier terms and limits; Capacitor live-update terms; whether Dependabot supports the pnpm 12 lockfile; whether new GHCR packages default to private.
