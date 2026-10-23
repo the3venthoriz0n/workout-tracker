@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { DeleteConfirm, RowActions } from '@/components/row-actions'
+import { DeleteConfirm, focusLibraryPanel, RowActions, useRestoreFocus } from '@/components/row-actions'
 import { Switch } from '@/components/ui/switch'
 import { pluralize } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
@@ -54,10 +54,11 @@ function GearRow({
   const saveGear = useSaveGear()
   const remove = useDeleteGear()
   const [confirming, setConfirming] = useState(false)
+  const trashRef = useRestoreFocus(confirming)
 
   const impact =
     needCount > 0
-      ? `${pluralize(needCount, 'exercise')} need this gear. They stay in your library but will no longer require it.`
+      ? `${pluralize(needCount, 'exercise')} ${needCount === 1 ? 'needs' : 'need'} this gear. ${needCount === 1 ? 'It stays' : 'They stay'} in your library but will no longer require it.`
       : "This can't be undone."
 
   return (
@@ -82,7 +83,7 @@ function GearRow({
           />
         </label>
         {!confirming && (
-          <RowActions name={g.name} onEdit={onEdit} onDelete={() => setConfirming(true)} />
+          <RowActions trashRef={trashRef} name={g.name} onEdit={onEdit} onDelete={() => setConfirming(true)} />
         )}
       </div>
       {confirming && (
@@ -93,7 +94,10 @@ function GearRow({
           onCancel={() => setConfirming(false)}
           onConfirm={() =>
             remove.mutate(g.id, {
-              onSuccess: () => toast.success('Gear deleted'),
+              onSuccess: () => {
+                toast.success('Gear deleted')
+                focusLibraryPanel()
+              },
               onError: (err) => {
                 setConfirming(false)
                 notifyError(err, "Couldn't delete that gear")

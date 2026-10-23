@@ -32,6 +32,7 @@ export const useExerciseUsage = (id: string, enabled: boolean) => {
     queryKey: keys.exerciseUsage(id),
     queryFn: () => repo.exerciseUsage(id),
     enabled,
+    retry: false, // surface a failed check immediately so the delete confirm can fail closed
   })
 }
 export const usePlans = () => {

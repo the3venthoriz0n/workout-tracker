@@ -1,5 +1,5 @@
 import { exerciseInputSchema, type Exercise } from '@workout/shared'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { notifyError } from '@/lib/notify'
 import { NumberField } from '@/components/number-field'
@@ -38,6 +38,7 @@ function ExerciseForm({ exercise, onDone }: { exercise?: Exercise; onDone: () =>
   const gear = useGear().data ?? []
   const units = useProfile().data?.units ?? 'lb'
   const save = useSaveExercise()
+  const submitted = useRef(false)
 
   const [name, setName] = useState(exercise?.name ?? '')
   const [notes, setNotes] = useState(exercise?.notes ?? '')
@@ -57,7 +58,7 @@ function ExerciseForm({ exercise, onDone }: { exercise?: Exercise; onDone: () =>
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (save.isPending) return
+    if (submitted.current) return
     const parsed = exerciseInputSchema.safeParse({
       ...(exercise ? { id: exercise.id } : {}),
       name,
@@ -79,12 +80,16 @@ function ExerciseForm({ exercise, onDone }: { exercise?: Exercise; onDone: () =>
       return
     }
     setErrors({})
+    submitted.current = true
     save.mutate(parsed.data, {
       onSuccess: () => {
         toast.success(exercise ? 'Exercise saved' : 'Exercise added')
         onDone()
       },
-      onError: (err) => notifyError(err, "Couldn't save the exercise"),
+      onError: (err) => {
+        submitted.current = false
+        notifyError(err, "Couldn't save the exercise")
+      },
     })
   }
 

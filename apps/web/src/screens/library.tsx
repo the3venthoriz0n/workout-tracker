@@ -56,7 +56,7 @@ export function LibraryScreen() {
           </button>
         ))}
       </div>
-      <div role="tabpanel" id="library-panel" aria-labelledby={`library-tab-${active}`}>
+      <div role="tabpanel" id="library-panel" tabIndex={-1} className="outline-none" aria-labelledby={`library-tab-${active}`}>
         {active === 'gear' ? (
           <LibraryGear onEdit={(item) => setEditing({ kind: 'gear', item })} />
         ) : (

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { DeleteConfirm, RowActions } from '@/components/row-actions'
+import { DeleteConfirm, focusLibraryPanel, RowActions, useRestoreFocus } from '@/components/row-actions'
 import { formatWeight, pluralize } from '@/lib/format'
 import { isHttpUrl } from '@/lib/links'
 import { notifyError } from '@/lib/notify'
@@ -63,11 +63,19 @@ function ExerciseRow({
   const remove = useDeleteExercise()
   const [confirming, setConfirming] = useState(false)
   const usage = useExerciseUsage(ex.id, confirming)
+  const trashRef = useRestoreFocus(confirming)
 
   const gearLabel =
     ex.required_gear_ids.map((id) => gearNames.get(id)).filter(Boolean).join(', ') || 'No gear'
+  const status: 'checking' | 'error' | 'ready' = usage.isFetching
+    ? 'checking'
+    : usage.isSuccess
+      ? 'ready'
+      : usage.isError
+        ? 'error'
+        : 'checking'
   const impact =
-    usage.data && usage.data.planItemCount > 0
+    usage.isSuccess && usage.data.planItemCount > 0
       ? `Used in ${pluralize(usage.data.planItemCount, 'plan item')} in: ${usage.data.plans.join(', ')}. Deleting also removes it from those plans. Past workouts keep their records.`
       : "This can't be undone."
 
@@ -108,18 +116,23 @@ function ExerciseRow({
           />
         </label>
         {!confirming && (
-          <RowActions name={ex.name} onEdit={onEdit} onDelete={() => setConfirming(true)} />
+          <RowActions trashRef={trashRef} name={ex.name} onEdit={onEdit} onDelete={() => setConfirming(true)} />
         )}
       </div>
       {confirming && (
         <DeleteConfirm
           name={ex.name}
           impact={impact}
-          pending={remove.isPending || usage.isPending}
+          status={status}
+          onRetry={() => void usage.refetch()}
+          pending={remove.isPending}
           onCancel={() => setConfirming(false)}
           onConfirm={() =>
             remove.mutate(ex.id, {
-              onSuccess: () => toast.success('Exercise deleted'),
+              onSuccess: () => {
+                toast.success('Exercise deleted')
+                focusLibraryPanel()
+              },
               onError: (err) => {
                 setConfirming(false)
                 notifyError(err, "Couldn't delete that exercise")

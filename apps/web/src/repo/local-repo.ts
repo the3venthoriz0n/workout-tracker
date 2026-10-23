@@ -173,12 +173,16 @@ export class LocalRepo implements Repo {
       .filter((item) => item.deleted_at === null)
       .toArray()
     const names = new Set<string>()
+    let planItemCount = 0
     for (const item of items) {
       const day = await this.db.planDays.get(item.plan_day_id)
       const plan = day && day.deleted_at === null ? await this.db.plans.get(day.plan_id) : undefined
-      if (plan && plan.deleted_at === null) names.add(plan.name)
+      if (plan && plan.deleted_at === null) {
+        names.add(plan.name)
+        planItemCount++
+      }
     }
-    return { planItemCount: items.length, plans: [...names].sort((a, b) => a.localeCompare(b)) }
+    return { planItemCount, plans: [...names].sort((a, b) => a.localeCompare(b)) }
   }
 
   async deleteGear(id: string): Promise<void> {
@@ -356,7 +360,7 @@ export class LocalRepo implements Repo {
 
   private async softDeleteItems(planDayId: string, ts: string): Promise<void> {
     for (const item of await this.db.planItems.where('plan_day_id').equals(planDayId).toArray()) {
-      if (item.deleted_at === null) await this.db.planItems.put({ ...item, deleted_at: ts, updated_at: ts })
+      if (item.deleted_at === null) await this.softDeleteItem(item, ts)
     }
   }
 

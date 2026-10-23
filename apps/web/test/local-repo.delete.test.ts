@@ -49,15 +49,25 @@ describe('deleteExercise cascade', () => {
     expect(shown!.exercises.map((e) => e.exercise_name)).toContain(ex1.name)
   })
 
-  it('an in-progress workout still finishes cleanly after its exercise is deleted', async () => {
-    const { repo, ex1, ex2, dayA } = await setup()
+  it('an in-progress workout with done sets finishes cleanly after its exercise is deleted', async () => {
+    const { db, repo, ex1, ex2, dayA, itemA1, itemA2 } = await setup()
     const detail = await repo.startSession(dayA.id)
+    for (const g of detail.exercises)
+      for (const set of g.sets) await repo.updateSet(set.id, { done: true })
     await repo.deleteExercise(ex1.id)
     const summary = await repo.finishSession(detail.id)
     expect(summary.find((s) => s.exercise_name === ex1.name)?.outcome).toBe('skipped')
-    expect(summary.some((s) => s.exercise_name === ex2.name)).toBe(true)
+    expect(summary.find((s) => s.exercise_name === ex2.name)?.outcome).not.toBe('skipped')
+    const gone = await db.planItems.get(itemA1.id)
+    expect(gone?.deleted_at).not.toBeNull()
+    expect(gone?.target_reps).toBeNull()
+    expect(gone?.target_weight).toBeNull()
+    const kept = await db.planItems.get(itemA2.id)
+    expect(kept?.target_reps ?? kept?.target_weight).not.toBeNull()
     const done = await repo.getSession(detail.id)
-    expect(done!.exercises.map((e) => e.exercise_name)).toContain(ex1.name)
+    const group = done!.exercises.find((e) => e.exercise_name === ex1.name)!
+    expect(group.sets.length).toBeGreaterThan(0)
+    expect(group.sets.every((x) => x.done)).toBe(true)
   })
 })
 
@@ -73,10 +83,12 @@ describe('exerciseUsage', () => {
     expect(await repo.exerciseUsage('nope')).toEqual({ planItemCount: 0, plans: [] })
   })
 
-  it('ignores items in deleted plans', async () => {
-    const { repo, ex1, planB } = await setup()
+  it('ignores items in deleted plans and days', async () => {
+    const { repo, ex1, planB, dayA } = await setup()
     await repo.deletePlan(planB.id)
     expect(await repo.exerciseUsage(ex1.id)).toEqual({ planItemCount: 1, plans: ['Plan B'] })
+    await repo.deletePlanDay(dayA.id)
+    expect(await repo.exerciseUsage(ex1.id)).toEqual({ planItemCount: 0, plans: [] })
   })
 })
 

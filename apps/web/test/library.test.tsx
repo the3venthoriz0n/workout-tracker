@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
-import { expect, test } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import { routes } from '../src/app/router'
 import { AppDb } from '../src/repo/db'
 import { LocalRepo } from '../src/repo/local-repo'
@@ -364,7 +364,7 @@ test('deleting gear states how many exercises need it and unlinks them', async (
   const confirm = await screen.findByRole('group', { name: 'Confirm delete Zebra Sled' })
   expect(
     within(confirm).getByText(
-      '1 exercise need this gear. They stay in your library but will no longer require it.',
+      '1 exercise needs this gear. It stays in your library but will no longer require it.',
     ),
   ).toBeTruthy()
   await user.click(within(confirm).getByRole('button', { name: 'Delete' }))
@@ -375,7 +375,90 @@ test('deleting gear states how many exercises need it and unlinks them', async (
   expect(after.required_gear_ids).toEqual([])
 })
 
-test('ExerciseInUseError no longer exists', async () => {
-  const types = await import('../src/repo/types')
-  expect('ExerciseInUseError' in types).toBe(false)
+afterEach(() => vi.restoreAllMocks())
+
+const deleteBtn = (scope: HTMLElement) =>
+  within(scope).getByRole('button', { name: 'Delete' }) as HTMLButtonElement
+
+test('gear confirm uses plural grammar for several exercises', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  const g = await repo.saveGear({ name: 'Zebra Sled', owned: true })
+  await repo.saveExercise({ ...sample, name: 'A1', required_gear_ids: [g.id] })
+  await repo.saveExercise({ ...sample, name: 'A2', required_gear_ids: [g.id] })
+  renderLibrary(repo, '/library?section=gear')
+  await user.click(await screen.findByRole('button', { name: 'Delete Zebra Sled' }))
+  expect(
+    await screen.findByText(
+      '2 exercises need this gear. They stay in your library but will no longer require it.',
+    ),
+  ).toBeTruthy()
+})
+
+test('exercise delete fails closed when the usage check errors, and Retry recovers', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  await repo.saveExercise(sample)
+  const spy = vi.spyOn(repo, 'exerciseUsage').mockRejectedValueOnce(new Error('boom'))
+  renderLibrary(repo)
+  await user.click(await screen.findByRole('button', { name: 'Delete Zercher Squat' }))
+  const confirm = await screen.findByRole('group', { name: 'Confirm delete Zercher Squat' })
+  expect(
+    await within(confirm).findByText(
+      "Couldn't check where this exercise is used. It may be in your plans.",
+    ),
+  ).toBeTruthy()
+  expect(deleteBtn(confirm).disabled).toBe(true)
+  await user.click(within(confirm).getByRole('button', { name: 'Retry' }))
+  expect(await within(confirm).findByText("This can't be undone.")).toBeTruthy()
+  expect(deleteBtn(confirm).disabled).toBe(false)
+  expect(spy).toHaveBeenCalledTimes(2)
+})
+
+test('exercise delete is disabled while the usage check is pending', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  await repo.saveExercise(sample)
+  let release!: (v: { planItemCount: number; plans: string[] }) => void
+  vi.spyOn(repo, 'exerciseUsage').mockReturnValue(new Promise((r) => (release = r)))
+  renderLibrary(repo)
+  await user.click(await screen.findByRole('button', { name: 'Delete Zercher Squat' }))
+  const confirm = await screen.findByRole('group', { name: 'Confirm delete Zercher Squat' })
+  expect(within(confirm).getByText('Checking where this is used…')).toBeTruthy()
+  expect(deleteBtn(confirm).disabled).toBe(true)
+  release({ planItemCount: 0, plans: [] })
+  await waitFor(() => expect(deleteBtn(confirm).disabled).toBe(false))
+})
+
+test('confirm focuses Cancel, Cancel returns focus to the trash button, delete parks focus on the panel', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  const ex = await repo.saveExercise(sample)
+  renderLibrary(repo)
+  await user.click(await screen.findByRole('button', { name: 'Delete Zercher Squat' }))
+  const confirm = await screen.findByRole('group', { name: 'Confirm delete Zercher Squat' })
+  const cancel = within(confirm).getByRole('button', { name: 'Cancel' })
+  expect(document.activeElement).toBe(cancel)
+  await user.click(cancel)
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Delete Zercher Squat' })),
+  )
+  await user.click(screen.getByRole('button', { name: 'Delete Zercher Squat' }))
+  const again = await screen.findByRole('group', { name: /Confirm delete/ })
+  await waitFor(() => expect(deleteBtn(again).disabled).toBe(false))
+  await user.click(deleteBtn(again))
+  await waitFor(async () => {
+    expect((await repo.listExercises()).some((e) => e.id === ex.id)).toBe(false)
+  })
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('tabpanel')))
+})
+
+test('two rapid Enters in the exercise sheet create one exercise', async () => {
+  const user = userEvent.setup()
+  const repo = renderLibrary()
+  await user.click(await screen.findByRole('button', { name: 'Add exercise' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.type(within(dialog).getByLabelText('Name'), 'Double Tap{Enter}{Enter}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect((await repo.listExercises()).filter((e) => e.name === 'Double Tap')).toHaveLength(1)
 })

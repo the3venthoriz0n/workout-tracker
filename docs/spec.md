@@ -82,7 +82,7 @@ Excluded: Next.js/SSR, Supabase, a separate frontend container (v1), App Platfor
 
 ## 5. Data model
 
-Each user owns their own exercise library, seeded from a starter list on first use; there is no shared global library. All IDs are client-generated UUIDs from the shared `newId()` helper, which falls back to `crypto.getRandomValues` because `crypto.randomUUID` is unavailable on plain-http LAN origins, so guest records keep their IDs when uploaded. Every user-owned record has `user_id`, `created_at`, `updated_at` and `deleted_at` (soft delete, for sync). Deleting an exercise soft-deletes its live plan items in the same transaction; deleting gear removes it from every exercise's required gear. Timestamps are ISO strings on the client and `timestamptz` in Postgres. In M2, Better Auth adds its own `user`, `session`, `account` and `verification` tables.
+Each user owns their own exercise library, seeded from a starter list on first use; there is no shared global library. All IDs are client-generated UUIDs from the shared `newId()` helper, which falls back to `crypto.getRandomValues` because `crypto.randomUUID` is unavailable on plain-http LAN origins, so guest records keep their IDs when uploaded. Every user-owned record has `user_id`, `created_at`, `updated_at` and `deleted_at` (soft delete, for sync). Deleting an exercise soft-deletes its live plan items in the same transaction; deleting gear removes it from every live exercise's required gear. Timestamps are ISO strings on the client and `timestamptz` in Postgres. In M2, Better Auth adds its own `user`, `session`, `account` and `verification` tables.
 
 The zod schemas in `packages/shared` are the single definition. Dexie (M1) and Drizzle (M2) mirror them.
 
