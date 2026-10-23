@@ -35,7 +35,7 @@ import type {
   WorkoutSession,
 } from '@workout/shared'
 import type { AppDb } from './db'
-import { ExerciseInUseError, SessionInProgressError } from './types'
+import { SessionInProgressError } from './types'
 import type { ExportData, FinishSummary, PlanTree, Repo, SessionDetail } from './types'
 
 const now = () => new Date().toISOString()
@@ -153,17 +153,56 @@ export class LocalRepo implements Repo {
 
   async deleteExercise(id: string): Promise<void> {
     await this.db.transaction('rw', this.db.exercises, this.db.planItems, async () => {
-      const used = await this.db.planItems
-        .where('exercise_id')
-        .equals(id)
-        .filter((item) => item.deleted_at === null)
-        .count()
-      if (used > 0) throw new ExerciseInUseError('Exercise is used by a plan')
       const existing = await this.db.exercises.get(id)
       if (!existing || existing.deleted_at !== null) return
       const ts = now()
+      const items = await this.db.planItems
+        .where('exercise_id')
+        .equals(id)
+        .filter((item) => item.deleted_at === null)
+        .toArray()
+      for (const item of items) await this.softDeleteItem(item, ts)
       await this.db.exercises.put({ ...existing, deleted_at: ts, updated_at: ts })
     })
+  }
+
+  async exerciseUsage(id: string): Promise<{ planItemCount: number; plans: string[] }> {
+    const items = await this.db.planItems
+      .where('exercise_id')
+      .equals(id)
+      .filter((item) => item.deleted_at === null)
+      .toArray()
+    const names = new Set<string>()
+    for (const item of items) {
+      const day = await this.db.planDays.get(item.plan_day_id)
+      const plan = day && day.deleted_at === null ? await this.db.plans.get(day.plan_id) : undefined
+      if (plan && plan.deleted_at === null) names.add(plan.name)
+    }
+    return { planItemCount: items.length, plans: [...names].sort((a, b) => a.localeCompare(b)) }
+  }
+
+  async deleteGear(id: string): Promise<void> {
+    await this.db.transaction('rw', this.db.gear, this.db.exercises, async () => {
+      const existing = await this.db.gear.get(id)
+      if (!existing || existing.deleted_at !== null) return
+      const ts = now()
+      const exercises = await this.db.exercises.toArray()
+      for (const ex of exercises) {
+        if (ex.deleted_at === null && ex.required_gear_ids.includes(id)) {
+          await this.db.exercises.put({
+            ...ex,
+            required_gear_ids: ex.required_gear_ids.filter((g) => g !== id),
+            updated_at: ts,
+          })
+        }
+      }
+      await this.db.gear.put({ ...existing, deleted_at: ts, updated_at: ts })
+    })
+  }
+
+  // Shared per-item cleanup for deletePlanItem and deleteExercise (keep them consistent).
+  private async softDeleteItem(item: PlanItem, ts: string): Promise<void> {
+    await this.db.planItems.put({ ...item, deleted_at: ts, updated_at: ts })
   }
 
   async updateProfile(patch: { units?: Units; weight_increment?: number }): Promise<Profile> {
@@ -378,8 +417,7 @@ export class LocalRepo implements Repo {
   async deletePlanItem(id: string): Promise<void> {
     const item = await this.db.planItems.get(id)
     if (!item || item.deleted_at !== null) return
-    const ts = now()
-    await this.db.planItems.put({ ...item, deleted_at: ts, updated_at: ts })
+    await this.softDeleteItem(item, now())
   }
 
   async setRule(planItemId: string, rule: RuleInput | null): Promise<void> {

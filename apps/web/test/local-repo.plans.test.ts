@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { defaultRule } from '@workout/shared'
 import { AppDb } from '../src/repo/db'
 import { LocalRepo } from '../src/repo/local-repo'
-import { ExerciseInUseError } from '../src/repo/types'
 
 async function setup() {
   const db = new AppDb(crypto.randomUUID())
@@ -69,14 +68,6 @@ describe('LocalRepo plans', () => {
     const updated = await repo.updatePlanItem(item1.id, { sets: 4 })
     expect(updated).toMatchObject({ sets: 4, target_weight: 110, target_reps: 6 })
     expect((await db.itemStates.get(item1.id))?.fail_streak).toBe(2)
-  })
-
-  it('deleteExercise is blocked while a live item uses it', async () => {
-    const { repo, item1, ex1 } = await setup()
-    await expect(repo.deleteExercise(ex1.id)).rejects.toBeInstanceOf(ExerciseInUseError)
-    await repo.deletePlanItem(item1.id)
-    await repo.deleteExercise(ex1.id)
-    expect((await repo.listExercises()).some((e) => e.id === ex1.id)).toBe(false)
   })
 
   it('deletePlan hides the plan, days and items', async () => {

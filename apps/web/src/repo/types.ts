@@ -51,7 +51,6 @@ export type ExportData = {
   workout_sessions: WorkoutSession[]
   set_logs: SetLog[]
 }
-export class ExerciseInUseError extends Error {}
 export class SessionInProgressError extends Error {}
 
 export interface Repo {
@@ -62,7 +61,9 @@ export interface Repo {
   saveGear(input: { id?: string; name: string; owned: boolean }): Promise<Gear>
   listExercises(): Promise<Exercise[]> // sorted by name
   saveExercise(input: ExerciseInput): Promise<Exercise>
-  deleteExercise(id: string): Promise<void> // throws ExerciseInUseError if any live plan item uses it
+  deleteExercise(id: string): Promise<void> // cascades: soft-deletes its live plan items too
+  exerciseUsage(id: string): Promise<{ planItemCount: number; plans: string[] }>
+  deleteGear(id: string): Promise<void> // also removes it from exercises' required_gear_ids
   listPlans(): Promise<Plan[]>
   getPlan(id: string): Promise<PlanTree | undefined> // days and items sorted by position
   savePlan(input: { id?: string; name: string }): Promise<Plan>

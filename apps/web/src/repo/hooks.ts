@@ -11,6 +11,7 @@ export const keys = {
   activeSession: ['session', 'active'] as const,
   sessions: ['sessions'] as const,
   session: (id: string) => ['session', id] as const,
+  exerciseUsage: (id: string) => ['exercise-usage', id] as const,
 }
 
 export const useProfile = () => {
@@ -24,6 +25,14 @@ export const useGear = () => {
 export const useExercises = () => {
   const repo = useRepo()
   return useQuery({ queryKey: keys.exercises, queryFn: () => repo.listExercises() })
+}
+export const useExerciseUsage = (id: string, enabled: boolean) => {
+  const repo = useRepo()
+  return useQuery({
+    queryKey: keys.exerciseUsage(id),
+    queryFn: () => repo.exerciseUsage(id),
+    enabled,
+  })
 }
 export const usePlans = () => {
   const repo = useRepo()
@@ -75,6 +84,7 @@ export const useSaveGear = () => useRepoMutation((r, input: GearInput) => r.save
 export const useSaveExercise = () =>
   useRepoMutation((r, input: ExerciseInputT) => r.saveExercise(input))
 export const useDeleteExercise = () => useRepoMutation((r, id: string) => r.deleteExercise(id))
+export const useDeleteGear = () => useRepoMutation((r, id: string) => r.deleteGear(id))
 export const useSavePlan = () =>
   useRepoMutation((r, input: { id?: string; name: string }) => r.savePlan(input))
 export const useDeletePlan = () => useRepoMutation((r, id: string) => r.deletePlan(id))
