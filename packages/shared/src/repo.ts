@@ -97,6 +97,31 @@ export class ProfileNotFoundError extends Error {
   }
 }
 
+// Thrown by ApiRepo on 401: there is no valid session (signed out or expired).
+export class UnauthenticatedError extends Error {
+  constructor() {
+    super('Not signed in')
+    this.name = 'UnauthenticatedError'
+  }
+}
+// Thrown by ApiRepo when the request never reached the server (network failure).
+export class OfflineError extends Error {
+  constructor() {
+    super('Offline')
+    this.name = 'OfflineError'
+  }
+}
+// Thrown by ApiRepo for any other non-2xx response. Carries the status and the server's error code only.
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(code ? `Request failed (${status}: ${code})` : `Request failed (${status})`)
+    this.name = 'ApiError'
+  }
+}
+
 export interface Repo {
   init(): Promise<void> // idempotent: guest profile + seeds on first run
   getProfile(): Promise<Profile>
