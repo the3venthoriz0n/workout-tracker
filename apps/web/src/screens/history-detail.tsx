@@ -85,7 +85,7 @@ function HistoryDetailBody({ id }: { id: string }) {
         />
         {editable && (
           <Button
-            variant="outline"
+            variant={editMode ? 'default' : 'outline'}
             className="mt-4 min-h-11"
             aria-pressed={editMode}
             onClick={() => {

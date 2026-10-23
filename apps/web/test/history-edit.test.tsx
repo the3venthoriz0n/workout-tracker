@@ -35,8 +35,7 @@ async function setup(finish = true) {
   const session = await repo.startSession(day.id)
   await repo.updateSet(session.exercises[0]!.sets[0]!.id, { done: true })
   if (finish) await repo.finishSession(session.id)
-  const sets = session.exercises[0]!.sets
-  return { repo, ex, session, sets }
+  return { repo, ex, session }
 }
 
 async function openEditor(n: number, exName: string) {
@@ -206,4 +205,15 @@ test('a trailing space in the set note is trimmed in the field', async () => {
   await userEvent.type(note, 'tight ')
   await userEvent.tab()
   await waitFor(() => expect(note.value).toBe('tight'))
+})
+
+test('the Edit button visibly changes state', async () => {
+  const { repo, session } = await setup()
+  renderAt(repo, `/history/${session.id}`)
+  const btn = await screen.findByRole('button', { name: 'Edit workout' })
+  const before = btn.className
+  expect(btn.getAttribute('aria-pressed')).toBe('false')
+  await userEvent.click(btn)
+  expect(btn.getAttribute('aria-pressed')).toBe('true')
+  expect(btn.className).not.toBe(before)
 })
