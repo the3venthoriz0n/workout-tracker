@@ -1,5 +1,5 @@
 import type { SetLog } from '@workout/shared'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NumberField } from '@/components/number-field'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -17,11 +17,16 @@ export function HistorySetEditor({
   onSave: (patch: Patch) => Promise<boolean>
 }) {
   const [note, setNote] = useState(set.note)
+  const repsId = `reps-${set.id}`
+  useEffect(() => {
+    document.getElementById(repsId)?.focus()
+  }, [repsId])
   return (
     <div className="mt-2 mb-1 flex flex-col gap-3 rounded-md border p-3">
       <div className="grid grid-cols-2 gap-3">
         <NumberField
           label="Reps"
+          id={repsId}
           kind="reps"
           value={set.actual_reps}
           onCommit={(v) => {
@@ -59,6 +64,7 @@ export function HistorySetEditor({
         onChange={(e) => setNote(e.target.value)}
         onBlur={() => {
           const next = note.trim()
+          setNote(next)
           if (next !== set.note) {
             void onSave({ note: next }).then((ok) => {
               if (!ok) setNote(set.note)

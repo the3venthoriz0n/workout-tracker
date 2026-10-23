@@ -11,6 +11,10 @@ import { useProfile, useSession, useUpdateSessionNote, useUpdateSet } from '@/re
 
 export function HistoryDetailScreen() {
   const { id = '' } = useParams()
+  return <HistoryDetailBody key={id} id={id} />
+}
+
+function HistoryDetailBody({ id }: { id: string }) {
   const { data: session, isPending } = useSession(id)
   const { data: profile } = useProfile()
   const updateSet = useUpdateSet()
@@ -89,7 +93,7 @@ export function HistoryDetailScreen() {
               setOpenSet(null)
             }}
           >
-            {editMode ? 'Done editing' : 'Edit'}
+            Edit workout
           </Button>
         )}
       </div>
