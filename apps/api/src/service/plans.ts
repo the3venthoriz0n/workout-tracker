@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import {
+  ConflictError,
   NotFoundError,
   defaultRule,
   effectiveValues,
@@ -170,7 +171,15 @@ export async function deletePlanDay(db: Db, userId: string, id: string): Promise
   })
 }
 
-export async function addPlanItem(db: Db, userId: string, planDayId: string, exerciseId: string): Promise<PlanItem> {
+/** `id` makes the add idempotent: the same id for the same day and exercise returns the existing item. */
+export async function addPlanItem(
+  db: Db,
+  userId: string,
+  planDayId: string,
+  exerciseId: string,
+  id?: string,
+): Promise<PlanItem> {
+  if (id !== undefined && !isUuid(id)) throw new Error('plan item id must be a UUID')
   if (!isUuid(planDayId)) throw new NotFoundError('Plan day')
   if (!isUuid(exerciseId)) throw new NotFoundError('Exercise')
   return db.transaction(async (tx) => {
@@ -189,12 +198,24 @@ export async function addPlanItem(db: Db, userId: string, planDayId: string, exe
     const [prof] = await tx.select().from(profile).where(eq(profile.userId, userId))
     if (!prof) throw new NotFoundError('Profile')
 
+    if (id !== undefined) {
+      const [dup] = await tx
+        .select()
+        .from(planItem)
+        .where(and(eq(planItem.userId, userId), eq(planItem.id, id)))
+      if (dup) {
+        if (dup.deletedAt !== null || dup.planDayId !== planDayId || dup.exerciseId !== exerciseId) {
+          throw new ConflictError('Plan item id already in use')
+        }
+        return toPlanItem(dup)
+      }
+    }
     const [max] = await tx
       .select({ max: sql<number | null>`max(${planItem.position})` })
       .from(planItem)
       .where(and(eq(planItem.userId, userId), eq(planItem.planDayId, planDayId), isNull(planItem.deletedAt)))
     const ts = now()
-    const itemId = newId()
+    const itemId = id ?? newId()
     const [row] = await tx
       .insert(planItem)
       .values({

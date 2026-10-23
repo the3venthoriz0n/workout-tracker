@@ -96,7 +96,7 @@ describe('Better Auth origin protection is live on its own', () => {
     const foreign = await call('https://evil.example')
     expect(foreign.status).toBe(403)
     // the session survived
-    expect((await h.request('/api/v1/_whoami', { cookie: jar })).status).toBe(200)
+    expect((await h.request('/api/v1/progression', { cookie: jar })).status).toBe(200)
     // control: the trusted origin is accepted by the same path
     expect((await call(h.origin)).status).toBe(200)
   })

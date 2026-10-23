@@ -121,7 +121,7 @@ describe('csrfGuard', () => {
 describe('requireUser', () => {
   it('401 unauthorized without a cookie, with the same body for every failure', async () => {
     h = await setupApp()
-    const res = await h.request('/api/v1/_whoami')
+    const res = await h.request('/api/v1/progression')
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: 'unauthorized' })
   })
@@ -147,7 +147,7 @@ describe('requireUser', () => {
       `${name}=${value.split('.')[0]}`, // token without signature
       `${name}=${value.split('.')[0]}.${'A'.repeat(44)}`,
     ]) {
-      const res = await h.request('/api/v1/_whoami', { cookie })
+      const res = await h.request('/api/v1/progression', { cookie })
       expect(res.status, cookie).toBe(401)
       expect(await res.json()).toEqual({ error: 'unauthorized' })
     }
@@ -157,9 +157,9 @@ describe('requireUser', () => {
     h = await setupApp()
     const up = await h.signUp('a@example.com')
     const jar = cookieJar(up)
-    expect((await h.request('/api/v1/_whoami', { cookie: jar })).status).toBe(200)
+    expect((await h.request('/api/v1/progression', { cookie: jar })).status).toBe(200)
     await h.db.execute(sql`update session set expires_at = now() - interval '1 minute'`)
-    const res = await h.request('/api/v1/_whoami', { cookie: jar })
+    const res = await h.request('/api/v1/progression', { cookie: jar })
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: 'unauthorized' })
   })
@@ -168,9 +168,10 @@ describe('requireUser', () => {
     h = await setupApp()
     const up = await h.signUp('a@example.com')
     const id = ((await up.json()) as { user: { id: string } }).user.id
-    const who = await h.request('/api/v1/_whoami', { cookie: cookieJar(up) })
-    expect(who.status).toBe(200)
-    expect(await who.json()).toEqual({ userId: id })
+    const cookie = cookieJar(up)
+    const init = await h.request('/api/v1/me/init', { method: 'POST', body: {}, cookie })
+    expect(init.status).toBe(200)
+    expect(((await init.json()) as { user_id: string }).user_id).toBe(id)
     expect((await h.request('/healthz')).status).toBe(200)
   })
 })

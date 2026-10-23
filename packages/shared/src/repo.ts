@@ -82,6 +82,13 @@ export class NotFoundError extends Error {
     this.name = 'NotFoundError'
   }
 }
+// Thrown when the request conflicts with the row's state (e.g. finishing or discarding a completed session).
+export class ConflictError extends Error {
+  constructor(message = 'Conflict') {
+    super(message)
+    this.name = 'ConflictError'
+  }
+}
 // Thrown by getProfile() when the account has no profile yet (init() has not run).
 export class ProfileNotFoundError extends Error {
   constructor() {

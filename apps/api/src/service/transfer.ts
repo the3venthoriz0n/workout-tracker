@@ -1,5 +1,5 @@
 import { asc, eq } from 'drizzle-orm'
-import { AlreadyHasDataError, ImportInvalidError, exportDataSchema } from '@workout/shared'
+import { AlreadyHasDataError, ImportInvalidError, ProfileNotFoundError, exportDataSchema } from '@workout/shared'
 import type { ExportData } from '@workout/shared'
 import {
   exercise,
@@ -35,7 +35,7 @@ export async function exportAll(db: Db, userId: string): Promise<ExportData> {
   return db.transaction(
     async (tx) => {
       const [prof] = await tx.select().from(profile).where(eq(profile.userId, userId))
-      if (!prof) throw new Error('Profile missing: init() has not run')
+      if (!prof) throw new ProfileNotFoundError()
       // Every row, soft-deleted ones included; a stable order keeps exports diffable.
       const rows = {
         gear: await tx.select().from(gear).where(eq(gear.userId, userId)).orderBy(asc(gear.createdAt), asc(gear.id)),

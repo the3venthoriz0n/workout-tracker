@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import {
+  ConflictError,
   NotFoundError,
   SessionInProgressError,
   effectiveValues,
@@ -223,7 +224,7 @@ export async function finishSession(db: Db, userId: string, id: string): Promise
       .where(and(eq(workoutSession.userId, userId), eq(workoutSession.id, id), isNull(workoutSession.deletedAt)))
       .for('update')
     if (!row) throw new NotFoundError('Session')
-    if (row.completedAt !== null) throw new Error('Session already completed')
+    if (row.completedAt !== null) throw new ConflictError('Session already completed')
     const detail = await detailOf(tx, userId, toSession(row))
     const [prof] = await tx.select().from(profile).where(eq(profile.userId, userId))
     if (!prof) throw new NotFoundError('Profile')
@@ -306,7 +307,7 @@ export async function discardSession(db: Db, userId: string, id: string): Promis
       .where(and(eq(workoutSession.userId, userId), eq(workoutSession.id, id)))
       .for('update')
     if (!row) return
-    if (row.completedAt !== null) throw new Error('Cannot discard a completed session')
+    if (row.completedAt !== null) throw new ConflictError('Cannot discard a completed session')
     await tx.delete(setLog).where(and(eq(setLog.userId, userId), eq(setLog.sessionId, id)))
     await tx.delete(workoutSession).where(and(eq(workoutSession.userId, userId), eq(workoutSession.id, id)))
   })

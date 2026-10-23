@@ -28,7 +28,7 @@ describe('sign up', () => {
     const body = (await res.json()) as { user: { email: string } }
     expect(body.user.email).toBe('alice@example.com')
 
-    const who = await h.request('/api/v1/_whoami', { cookie: cookieJar(res) })
+    const who = await h.request('/api/v1/progression', { cookie: cookieJar(res) })
     expect(who.status).toBe(200)
   })
 
@@ -41,7 +41,7 @@ describe('sign up', () => {
     expect(attrs).toContain('httponly')
     expect(attrs).toContain('samesite=lax')
     expect(res.headers.getSetCookie().some((c) => c.startsWith('__Secure-'))).toBe(true)
-    const who = await h.request('/api/v1/_whoami', { cookie: cookieJar(res) })
+    const who = await h.request('/api/v1/progression', { cookie: cookieJar(res) })
     expect(who.status).toBe(200)
   })
 
@@ -113,17 +113,17 @@ describe('sign in and out', () => {
     await h.signUp('real@example.com')
     const res = await h.signIn('real@example.com', GOOD_PASSWORD)
     expect(res.status).toBe(200)
-    expect((await h.request('/api/v1/_whoami', { cookie: cookieJar(res) })).status).toBe(200)
+    expect((await h.request('/api/v1/progression', { cookie: cookieJar(res) })).status).toBe(200)
   })
 
   it('sign out invalidates the cookie server-side, even if the client keeps it', async () => {
     h = await setupApp()
     const up = await h.signUp('real@example.com')
     const jar = cookieJar(up)
-    expect((await h.request('/api/v1/_whoami', { cookie: jar })).status).toBe(200)
+    expect((await h.request('/api/v1/progression', { cookie: jar })).status).toBe(200)
     const out = await h.request('/api/auth/sign-out', { method: 'POST', body: {}, cookie: jar })
     expect(out.status).toBe(200)
-    const after = await h.request('/api/v1/_whoami', { cookie: jar })
+    const after = await h.request('/api/v1/progression', { cookie: jar })
     expect(after.status).toBe(401)
     expect(await after.json()).toEqual({ error: 'unauthorized' })
   })

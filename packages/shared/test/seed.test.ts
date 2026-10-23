@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { exerciseInputSchema, seedExercises, SEED_GEAR } from '../src/index.js'
+import { exerciseInputSchema, newId, seedExercises, SEED_GEAR } from '../src/index.js'
 
-const gearIds = new Map(SEED_GEAR.map((name, i) => [name, `gear-${i}`]))
+const gearIds = new Map(SEED_GEAR.map((name) => [name, newId()]))
 
 describe('seedExercises', () => {
   it('creates 16 starter exercises', () => {
@@ -10,7 +10,7 @@ describe('seedExercises', () => {
 
   it('produces inputs that pass the exercise schema', () => {
     for (const exercise of seedExercises('kg', gearIds)) {
-      expect(exerciseInputSchema.safeParse({ id: 'x', ...exercise }).success).toBe(true)
+      expect(exerciseInputSchema.safeParse({ id: newId(), ...exercise }).success).toBe(true)
     }
   })
 

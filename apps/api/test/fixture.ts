@@ -1,0 +1,104 @@
+import { newId, type ExportData } from '@workout/shared'
+import { cookieJar, type Harness } from './helpers.js'
+import type { Fixture, RouteSpec } from '../src/routes/table.js'
+
+export type Client = ReturnType<typeof makeClient>
+
+export function makeClient(h: Harness, cookie: string) {
+  async function call(method: string, path: string, body?: unknown, over: { cookie?: string | null } = {}) {
+    const needsBody = method !== 'GET'
+    const res = await h.request(path, {
+      method,
+      body: body ?? (needsBody ? {} : undefined),
+      cookie: over.cookie === null ? undefined : (over.cookie ?? cookie),
+    })
+    const text = await res.text()
+    return { status: res.status, text, json: text ? (JSON.parse(text) as unknown) : undefined, headers: res.headers }
+  }
+  return { cookie, call }
+}
+
+export async function signUpClient(h: Harness, email: string): Promise<Client> {
+  const res = await h.signUp(email)
+  if (res.status !== 200) throw new Error(`sign-up failed: ${res.status}`)
+  return makeClient(h, cookieJar(res))
+}
+
+const must = <T>(v: T | undefined | null, what: string): T => {
+  if (v === undefined || v === null) throw new Error(`fixture: ${what} missing`)
+  return v
+}
+
+type Opts = { active?: boolean }
+
+/**
+ * Builds one user's data through the public API: gear, exercise, plan, day, item with a rule, a
+ * finished session and (unless `active: false`) a second, active session with its sets.
+ */
+export async function buildFixture(c: Client, opts: Opts = {}): Promise<Fixture> {
+  const ok = async (method: string, path: string, body?: unknown) => {
+    const r = await c.call(method, path, body)
+    if (r.status >= 300) throw new Error(`fixture ${method} ${path} -> ${r.status} ${r.text}`)
+    return r.json
+  }
+  const active = (await ok('GET', '/api/v1/sessions/active')) as { id: string } | null
+  if (active) await ok('DELETE', `/api/v1/sessions/${active.id}`)
+  await ok('POST', '/api/v1/me/init')
+  const f = { gear: newId(), exercise: newId(), plan: newId(), day: newId() }
+  await ok('PUT', `/api/v1/gear/${f.gear}`, { name: `Rack ${f.gear.slice(0, 4)}`, owned: true })
+  await ok('PUT', `/api/v1/exercises/${f.exercise}`, {
+    name: 'Bench Press',
+    notes: 'n',
+    video_url: null,
+    required_gear_ids: [f.gear],
+    active: true,
+    default_sets: 2,
+    default_reps: 5,
+    default_weight: 95,
+  })
+  await ok('PUT', `/api/v1/plans/${f.plan}`, { name: 'Plan A' })
+  await ok('PUT', `/api/v1/days/${f.day}`, { plan_id: f.plan, name: 'Day 1' })
+  const item = (await ok('POST', `/api/v1/days/${f.day}/items`, { exercise_id: f.exercise })) as { id: string }
+  await ok('PUT', `/api/v1/items/${item.id}/rule`, {
+    rule: { success_action: 'add_weight', success_amount: 5, fail_streak_limit: 3, deload_pct: 10, rep_ceiling: null },
+  })
+
+  const first = (await ok('POST', '/api/v1/sessions', { plan_day_id: f.day })) as { id: string }
+  await ok('POST', `/api/v1/sessions/${first.id}/complete`)
+  let session = ''
+  let set = ''
+  if (opts.active !== false) {
+    const second = (await ok('POST', '/api/v1/sessions', { plan_day_id: f.day })) as {
+      id: string
+      exercises: { sets: { id: string }[] }[]
+    }
+    session = second.id
+    set = must(second.exercises[0]?.sets[0]?.id, 'set')
+  } else {
+    // Without an active session, `session` and `set` point at the finished one.
+    const done = (await ok('GET', `/api/v1/sessions/${first.id}`)) as { exercises: { sets: { id: string }[] }[] }
+    session = first.id
+    set = must(done.exercises[0]?.sets[0]?.id, 'set')
+  }
+  const exported = (await ok('GET', '/api/v1/export')) as ExportData
+  return { ...f, item: item.id, session, set, completedSession: first.id, export: exported }
+}
+
+/** A fixture whose ids all belong to nobody. */
+export function randomFixture(like: Fixture): Fixture {
+  return {
+    gear: newId(),
+    exercise: newId(),
+    plan: newId(),
+    day: newId(),
+    item: newId(),
+    session: newId(),
+    set: newId(),
+    completedSession: newId(),
+    export: like.export,
+  }
+}
+
+export function fill(spec: RouteSpec, f: Fixture): string {
+  return spec.path.replace(/:(\w+)/g, (_m, name: string) => must(f[must(spec.params?.[name], `param ${name}`)], name))
+}

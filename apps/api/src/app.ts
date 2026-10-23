@@ -5,6 +5,8 @@ import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
 import type { Auth } from './auth.js'
+import { mapDomainError } from './routes/http.js'
+import { registerRoutes } from './routes/index.js'
 import { sanitizeError } from './logging.js'
 import type { Env } from './env.js'
 import { csrfGuard, requireUser, type AppEnv } from './middleware.js'
@@ -41,7 +43,12 @@ export function createApp(deps: AppDeps): Hono {
     }),
   )
   app.use('/api/*', csrfGuard(env))
-  app.use('/api/*', bodyLimit({ maxSize: 1024 * 1024 }))
+  // 1 MB everywhere under /api, except the one-time guest upload, which gets its own 10 MB.
+  const smallLimit = bodyLimit({ maxSize: 1024 * 1024 })
+  const importLimit = bodyLimit({ maxSize: 10 * 1024 * 1024 })
+  app.use('/api/*', (c, next) =>
+    c.req.method === 'POST' && c.req.path === `${API_PREFIX}/import` ? importLimit(c, next) : smallLimit(c, next),
+  )
 
   app.get('/healthz', async (c) => {
     let ok = false
@@ -58,8 +65,7 @@ export function createApp(deps: AppDeps): Hono {
 
   const v1 = new Hono<AppEnv>()
   v1.use('*', requireUser(auth))
-  // Temporary probe for the middleware tests. Removed in Task 4.
-  v1.get('/_whoami', (c) => c.json({ userId: c.var.userId }))
+  registerRoutes(v1, { getService: deps.getService })
   app.route(API_PREFIX, v1)
 
   // Unknown API routes get a JSON 404, never the SPA.
@@ -68,6 +74,8 @@ export function createApp(deps: AppDeps): Hono {
   app.onError((err, c) => {
     // bodyLimit throws a 413 HTTPException when it meets an oversized chunked body.
     if (err instanceof HTTPException && err.status === 413) return c.json({ error: 'payload_too_large' }, 413)
+    const mapped = mapDomainError(err, c)
+    if (mapped) return mapped
     // Log a sanitized summary only: Drizzle messages embed the query parameters (password
     // hashes, tokens) and request data carries passwords and cookies.
     console.error('request failed', sanitizeError(err))

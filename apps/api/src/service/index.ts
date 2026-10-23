@@ -1,4 +1,4 @@
-import type { ExportData, Repo } from '@workout/shared'
+import type { ExportData, PlanItem, Repo } from '@workout/shared'
 import type { Db } from '../db/types.js'
 import { deleteExercise, exerciseUsage, listExercises, saveExercise } from './exercises.js'
 import { deleteGear, listGear, saveGear } from './gear.js'
@@ -27,9 +27,15 @@ import {
   updateSessionNote,
   updateSet,
 } from './sessions.js'
+import { owns, type OwnedKind } from './ownership.js'
 import { exportAll, importAll } from './transfer.js'
 
-export type Service = Repo & { importAll(data: ExportData): Promise<void> }
+export type Service = Repo & {
+  importAll(data: ExportData): Promise<void>
+  addPlanItem(planDayId: string, exerciseId: string, id?: string): Promise<PlanItem>
+  /** True when `id` is a live row of this kind owned by the user (used for 404 on deletes). */
+  owns(kind: OwnedKind, id: string): Promise<boolean>
+}
 
 export function createService(db: Db, userId: string): Service {
   return {
@@ -52,7 +58,7 @@ export function createService(db: Db, userId: string): Service {
     deletePlan: (id) => deletePlan(db, userId, id),
     savePlanDay: (input) => savePlanDay(db, userId, input),
     deletePlanDay: (id) => deletePlanDay(db, userId, id),
-    addPlanItem: (dayId, exerciseId) => addPlanItem(db, userId, dayId, exerciseId),
+    addPlanItem: (dayId: string, exerciseId: string, id?: string) => addPlanItem(db, userId, dayId, exerciseId, id),
     updatePlanItem: (id, patch) => updatePlanItem(db, userId, id, patch),
     deletePlanItem: (id) => deletePlanItem(db, userId, id),
     setRule: (itemId, rule) => setRule(db, userId, itemId, rule),
@@ -70,5 +76,6 @@ export function createService(db: Db, userId: string): Service {
     getSession: (id) => getSession(db, userId, id),
     exportAll: () => exportAll(db, userId),
     importAll: (data) => importAll(db, userId, data),
+    owns: (kind, id) => owns(db, userId, kind, id),
   }
 }
