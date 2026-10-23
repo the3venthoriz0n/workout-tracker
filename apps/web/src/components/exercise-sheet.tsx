@@ -1,5 +1,5 @@
 import { exerciseInputSchema, type Exercise } from '@workout/shared'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { notifyError } from '@/lib/notify'
 import { NumberField } from '@/components/number-field'
@@ -16,8 +16,7 @@ import {
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { useDeleteExercise, useGear, useProfile, useSaveExercise } from '@/repo/hooks'
-import { ExerciseInUseError } from '@/repo/types'
+import { useGear, useProfile, useSaveExercise } from '@/repo/hooks'
 
 type Props = {
   exercise?: Exercise
@@ -39,7 +38,7 @@ function ExerciseForm({ exercise, onDone }: { exercise?: Exercise; onDone: () =>
   const gear = useGear().data ?? []
   const units = useProfile().data?.units ?? 'lb'
   const save = useSaveExercise()
-  const remove = useDeleteExercise()
+  const submitted = useRef(false)
 
   const [name, setName] = useState(exercise?.name ?? '')
   const [notes, setNotes] = useState(exercise?.notes ?? '')
@@ -50,8 +49,6 @@ function ExerciseForm({ exercise, onDone }: { exercise?: Exercise; onDone: () =>
   const [reps, setReps] = useState<number | null>(exercise?.default_reps ?? 5)
   const [weight, setWeight] = useState<number | null>(exercise?.default_weight ?? 0)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const sortedGear = [...gear].sort((a, b) => a.name.localeCompare(b.name))
 
@@ -61,6 +58,7 @@ function ExerciseForm({ exercise, onDone }: { exercise?: Exercise; onDone: () =>
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
+    if (submitted.current) return
     const parsed = exerciseInputSchema.safeParse({
       ...(exercise ? { id: exercise.id } : {}),
       name,
@@ -82,30 +80,15 @@ function ExerciseForm({ exercise, onDone }: { exercise?: Exercise; onDone: () =>
       return
     }
     setErrors({})
+    submitted.current = true
     save.mutate(parsed.data, {
       onSuccess: () => {
         toast.success(exercise ? 'Exercise saved' : 'Exercise added')
         onDone()
       },
-      onError: (err) => notifyError(err, "Couldn't save the exercise"),
-    })
-  }
-
-  function doDelete() {
-    if (!exercise) return
-    remove.mutate(exercise.id, {
-      onSuccess: () => {
-        toast.success('Exercise deleted')
-        onDone()
-      },
       onError: (err) => {
-        setConfirmDelete(false)
-        if (err instanceof ExerciseInUseError) {
-          setDeleteError('Used in a plan. Deactivate it instead.')
-        } else {
-          console.error(err)
-          setDeleteError("Couldn't delete that exercise")
-        }
+        submitted.current = false
+        notifyError(err, "Couldn't save the exercise")
       },
     })
   }
@@ -179,50 +162,10 @@ function ExerciseForm({ exercise, onDone }: { exercise?: Exercise; onDone: () =>
         <Switch checked={active} onCheckedChange={setActive} aria-label="Active" />
       </label>
 
-      {deleteError && (
-        <p role="alert" className="text-destructive text-sm">
-          {deleteError}
-        </p>
-      )}
-
       <SheetFooter className="flex-row flex-wrap gap-2 p-0">
         <Button type="submit" className="min-h-11 flex-1" disabled={save.isPending}>
           Save
         </Button>
-        {exercise &&
-          (confirmDelete ? (
-            <>
-              <Button
-                type="button"
-                variant="destructive"
-                className="min-h-11"
-                onClick={doDelete}
-                disabled={remove.isPending}
-              >
-                Confirm delete
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11"
-                onClick={() => setConfirmDelete(false)}
-              >
-                Cancel
-              </Button>
-            </>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11"
-              onClick={() => {
-                setDeleteError(null)
-                setConfirmDelete(true)
-              }}
-            >
-              Delete
-            </Button>
-          ))}
       </SheetFooter>
     </form>
   )

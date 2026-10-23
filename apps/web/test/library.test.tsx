@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
-import { expect, test } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import { routes } from '../src/app/router'
 import { AppDb } from '../src/repo/db'
 import { LocalRepo } from '../src/repo/local-repo'
@@ -68,51 +68,6 @@ test('rejects a non-http video link inline', async () => {
   expect(await within(dialog).findByText('Enter a valid http(s) link.')).toBeTruthy()
 })
 
-const sample = {
-  name: 'Zercher Squat',
-  notes: '',
-  video_url: null,
-  required_gear_ids: [],
-  active: true,
-  default_sets: 3,
-  default_reps: 5,
-  default_weight: 45,
-}
-
-test('deleting an exercise used in a plan shows the in-use message', async () => {
-  const user = userEvent.setup()
-  const repo = new LocalRepo(new AppDb(`lib-${crypto.randomUUID()}`))
-  await repo.init()
-  const ex = await repo.saveExercise(sample)
-  const plan = await repo.savePlan({ name: 'P' })
-  const day = await repo.savePlanDay({ plan_id: plan.id, name: 'D' })
-  await repo.addPlanItem(day.id, ex.id)
-  renderLibrary(repo)
-
-  await user.click(await screen.findByRole('button', { name: /Zercher Squat/ }))
-  const dialog = await screen.findByRole('dialog')
-  await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
-  await user.click(within(dialog).getByRole('button', { name: 'Confirm delete' }))
-  expect(await within(dialog).findByText('Used in a plan. Deactivate it instead.')).toBeTruthy()
-  expect((await repo.listExercises()).some((e) => e.id === ex.id)).toBe(true)
-})
-
-test('deleting an unused exercise removes it and closes the sheet', async () => {
-  const user = userEvent.setup()
-  const repo = new LocalRepo(new AppDb(`lib-${crypto.randomUUID()}`))
-  await repo.init()
-  const ex = await repo.saveExercise(sample)
-  renderLibrary(repo)
-  await user.click(await screen.findByRole('button', { name: /Zercher Squat/ }))
-  const dialog = await screen.findByRole('dialog')
-  await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
-  await user.click(within(dialog).getByRole('button', { name: 'Confirm delete' }))
-  await waitFor(async () => {
-    expect((await repo.listExercises()).some((e) => e.id === ex.id)).toBe(false)
-  })
-  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-})
-
 test('Enter in a number field inside the sheet does not save or close it', async () => {
   const user = userEvent.setup()
   const repo = renderLibrary()
@@ -146,6 +101,7 @@ test('defaults to Exercises; the Gear tab shows sorted gear and updates the URL'
     screen.getByRole('tab', { name: 'Gear' }).id,
   )
   expect(screen.queryByRole('button', { name: /add exercise/i })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Add gear' })).toBeTruthy()
   expect(
     screen.getByText('Gear you own decides which exercises appear when you build a plan.'),
   ).toBeTruthy()
@@ -171,7 +127,7 @@ test('switching sections replaces history and keeps the Library nav highlighted'
 
 test('deep link opens Gear', async () => {
   renderLibrary(undefined, '/library?section=gear')
-  expect(await screen.findByLabelText('Custom gear name')).toBeTruthy()
+  expect(await screen.findByRole('button', { name: 'Add gear' })).toBeTruthy()
   expect(selected('Gear')).toBe('true')
 })
 
@@ -184,7 +140,7 @@ test('unknown section falls back to Exercises', async () => {
 test('switching tabs preserves other query params', async () => {
   const user = userEvent.setup()
   const repo = renderLibrary(undefined, '/library?foo=1&section=gear')
-  await screen.findByLabelText('Custom gear name')
+  await screen.findByRole('button', { name: 'Add gear' })
   await user.click(screen.getByRole('tab', { name: 'Exercises' }))
   expect(repo.router.state.location.search).toBe('?foo=1')
   await user.click(screen.getByRole('tab', { name: 'Gear' }))
@@ -214,8 +170,10 @@ test('toggling gear persists and custom gear is added in sorted position', async
   await waitFor(async () => {
     expect((await repo.listGear()).find((g) => g.name === 'Barbell')?.owned).toBe(false)
   })
-  await user.type(screen.getByLabelText('Custom gear name'), 'Aardvark Sled')
-  await user.click(screen.getByRole('button', { name: 'Add custom gear' }))
+  await user.click(screen.getByRole('button', { name: 'Add gear' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.type(within(dialog).getByLabelText('Name'), 'Aardvark Sled')
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }))
   await waitFor(async () => {
     expect((await repo.listGear()).some((g) => g.name === 'Aardvark Sled' && g.owned)).toBe(true)
   })
@@ -235,4 +193,272 @@ test('each gear row shows how many active exercises require it', async () => {
   renderLibrary(repo, '/library?section=gear')
   const row = (await screen.findByRole('switch', { name: 'Barbell' })).closest('li')!
   expect(within(row).getByText(`${expected} ${expected === 1 ? 'exercise' : 'exercises'}`)).toBeTruthy()
+})
+
+const sample = {
+  name: 'Zercher Squat',
+  notes: '',
+  video_url: null,
+  required_gear_ids: [],
+  active: true,
+  default_sets: 3,
+  default_reps: 5,
+  default_weight: 45,
+}
+
+async function seeded() {
+  const repo = new LocalRepo(new AppDb(`lib-${crypto.randomUUID()}`))
+  await repo.init()
+  return repo
+}
+
+test('one header Add button per section, same place, with a section-specific accessible name', async () => {
+  const user = userEvent.setup()
+  renderLibrary()
+  const heading = await screen.findByRole('heading', { name: 'Library' })
+  const adds = screen.getAllByRole('button', { name: /^add/i })
+  expect(adds).toHaveLength(1)
+  expect(adds[0]!.getAttribute('aria-label')).toBe('Add exercise')
+  expect(adds[0]!.textContent?.trim()).toBe('Add')
+  expect(heading.parentElement!.contains(adds[0]!)).toBe(true)
+  await user.click(screen.getByRole('tab', { name: 'Gear' }))
+  const gearAdds = screen.getAllByRole('button', { name: /^add/i })
+  expect(gearAdds).toHaveLength(1)
+  expect(gearAdds[0]!.getAttribute('aria-label')).toBe('Add gear')
+  expect(heading.parentElement!.contains(gearAdds[0]!)).toBe(true)
+  expect(screen.queryByLabelText('Custom gear name')).toBeNull()
+})
+
+test('Add opens the matching sheet', async () => {
+  const user = userEvent.setup()
+  renderLibrary()
+  await user.click(await screen.findByRole('button', { name: 'Add exercise' }))
+  expect(within(await screen.findByRole('dialog')).getByText('Add exercise')).toBeTruthy()
+  await user.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  await user.click(screen.getByRole('tab', { name: 'Gear' }))
+  await user.click(screen.getByRole('button', { name: 'Add gear' }))
+  const dialog = await screen.findByRole('dialog')
+  expect(within(dialog).getByText('Add gear')).toBeTruthy()
+  expect(
+    within(dialog).getByRole('switch', { name: 'I own this' }).getAttribute('aria-checked'),
+  ).toBe('true')
+  expect(screen.getAllByRole('dialog')).toHaveLength(1)
+})
+
+test('gear sheet validates the name, creates unowned gear, and Enter does not double-submit', async () => {
+  const user = userEvent.setup()
+  const repo = renderLibrary(undefined, '/library?section=gear')
+  await user.click(await screen.findByRole('button', { name: 'Add gear' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+  expect(await within(dialog).findByText('Name is required.')).toBeTruthy()
+  await user.type(within(dialog).getByLabelText('Name'), 'Yoke')
+  await user.click(within(dialog).getByRole('switch', { name: 'I own this' }))
+  await user.type(within(dialog).getByLabelText('Name'), '{Enter}{Enter}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  const yokes = (await repo.listGear()).filter((g) => g.name === 'Yoke')
+  expect(yokes).toHaveLength(1)
+  expect(yokes[0]!.owned).toBe(false)
+})
+
+test('pencil renames gear and changes ownership', async () => {
+  const user = userEvent.setup()
+  const repo = renderLibrary(undefined, '/library?section=gear')
+  await user.click(await screen.findByRole('button', { name: 'Edit Barbell' }))
+  const dialog = await screen.findByRole('dialog')
+  const name = within(dialog).getByLabelText('Name') as HTMLInputElement
+  expect(name.value).toBe('Barbell')
+  await user.clear(name)
+  await user.type(name, 'Olympic Barbell')
+  await user.click(within(dialog).getByRole('switch', { name: 'I own this' }))
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+  await waitFor(async () => {
+    const g = (await repo.listGear()).find((x) => x.name === 'Olympic Barbell')
+    expect(g?.owned).toBe(false)
+  })
+  expect((await repo.listGear()).some((x) => x.name === 'Barbell')).toBe(false)
+})
+
+test('pencil edits an exercise pre-filled; the sheet has no delete button', async () => {
+  const user = userEvent.setup()
+  const repo = renderLibrary(await seeded())
+  const first = (await repo.listExercises())[0]!
+  await user.click(await screen.findByRole('button', { name: `Edit ${first.name}` }))
+  const dialog = await screen.findByRole('dialog')
+  expect((within(dialog).getByLabelText('Name') as HTMLInputElement).value).toBe(first.name)
+  expect(within(dialog).queryByRole('button', { name: /delete/i })).toBeNull()
+})
+
+test('every row in both lists has 44px edit and delete buttons', async () => {
+  const user = userEvent.setup()
+  renderLibrary()
+  const edits = await screen.findAllByRole('button', { name: /^Edit / })
+  const deletes = screen.getAllByRole('button', { name: /^Delete / })
+  expect(edits.length).toBeGreaterThan(0)
+  expect(deletes).toHaveLength(edits.length)
+  for (const b of [...edits, ...deletes]) expect(b.className).toContain('size-11')
+  await user.click(screen.getByRole('tab', { name: 'Gear' }))
+  const gearEdits = await screen.findAllByRole('button', { name: /^Edit / })
+  expect(screen.getAllByRole('button', { name: /^Delete / })).toHaveLength(gearEdits.length)
+})
+
+test('deleting an exercise used in plans shows the impact, then cascades', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  const ex = await repo.saveExercise(sample)
+  for (const name of ['Plan B', 'Plan A']) {
+    const plan = await repo.savePlan({ name })
+    const day = await repo.savePlanDay({ plan_id: plan.id, name: 'D' })
+    await repo.addPlanItem(day.id, ex.id)
+  }
+  renderLibrary(repo)
+  await user.click(await screen.findByRole('button', { name: 'Delete Zercher Squat' }))
+  const confirm = await screen.findByRole('group', { name: 'Confirm delete Zercher Squat' })
+  expect(within(confirm).getByText('Delete Zercher Squat?')).toBeTruthy()
+  expect(
+    await within(confirm).findByText(
+      'Used in 2 plan items in: Plan A, Plan B. Deleting also removes it from those plans. Past workouts keep their records.',
+    ),
+  ).toBeTruthy()
+  expect(screen.queryByRole('dialog')).toBeNull()
+  await user.click(within(confirm).getByRole('button', { name: 'Delete' }))
+  await waitFor(async () => {
+    expect((await repo.listExercises()).some((e) => e.id === ex.id)).toBe(false)
+  })
+  expect((await repo.exerciseUsage(ex.id)).planItemCount).toBe(0)
+})
+
+test('deleting an unused exercise says it cannot be undone; Cancel keeps it', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  const ex = await repo.saveExercise(sample)
+  renderLibrary(repo)
+  await user.click(await screen.findByRole('button', { name: 'Delete Zercher Squat' }))
+  const confirm = await screen.findByRole('group', { name: 'Confirm delete Zercher Squat' })
+  expect(await within(confirm).findByText("This can't be undone.")).toBeTruthy()
+  await user.click(within(confirm).getByRole('button', { name: 'Cancel' }))
+  expect(screen.queryByRole('group', { name: /Confirm delete/ })).toBeNull()
+  expect((await repo.listExercises()).some((e) => e.id === ex.id)).toBe(true)
+  await user.click(screen.getByRole('button', { name: 'Delete Zercher Squat' }))
+  const again = await screen.findByRole('group', { name: /Confirm delete/ })
+  await user.click(within(again).getByRole('button', { name: 'Delete' }))
+  await waitFor(async () => {
+    expect((await repo.listExercises()).some((e) => e.id === ex.id)).toBe(false)
+  })
+})
+
+test('deleting gear states how many exercises need it and unlinks them', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  const sled = await repo.saveGear({ name: 'Zebra Sled', owned: true })
+  const spare = await repo.saveGear({ name: 'Zebra Spare', owned: true })
+  const ex = await repo.saveExercise({ ...sample, required_gear_ids: [sled.id], active: false })
+  renderLibrary(repo, '/library?section=gear')
+  await user.click(await screen.findByRole('button', { name: 'Delete Zebra Spare' }))
+  expect(await screen.findByText("This can't be undone.")).toBeTruthy()
+  await user.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect((await repo.listGear()).some((g) => g.id === spare.id)).toBe(true)
+
+  await user.click(screen.getByRole('button', { name: 'Delete Zebra Sled' }))
+  const confirm = await screen.findByRole('group', { name: 'Confirm delete Zebra Sled' })
+  expect(
+    within(confirm).getByText(
+      '1 exercise needs this gear. It stays in your library but will no longer require it.',
+    ),
+  ).toBeTruthy()
+  await user.click(within(confirm).getByRole('button', { name: 'Delete' }))
+  await waitFor(async () => {
+    expect((await repo.listGear()).some((g) => g.id === sled.id)).toBe(false)
+  })
+  const after = (await repo.listExercises()).find((e) => e.id === ex.id)!
+  expect(after.required_gear_ids).toEqual([])
+})
+
+afterEach(() => vi.restoreAllMocks())
+
+const deleteBtn = (scope: HTMLElement) =>
+  within(scope).getByRole('button', { name: 'Delete' }) as HTMLButtonElement
+
+test('gear confirm uses plural grammar for several exercises', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  const g = await repo.saveGear({ name: 'Zebra Sled', owned: true })
+  await repo.saveExercise({ ...sample, name: 'A1', required_gear_ids: [g.id] })
+  await repo.saveExercise({ ...sample, name: 'A2', required_gear_ids: [g.id] })
+  renderLibrary(repo, '/library?section=gear')
+  await user.click(await screen.findByRole('button', { name: 'Delete Zebra Sled' }))
+  expect(
+    await screen.findByText(
+      '2 exercises need this gear. They stay in your library but will no longer require it.',
+    ),
+  ).toBeTruthy()
+})
+
+test('exercise delete fails closed when the usage check errors, and Retry recovers', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  await repo.saveExercise(sample)
+  const spy = vi.spyOn(repo, 'exerciseUsage').mockRejectedValueOnce(new Error('boom'))
+  renderLibrary(repo)
+  await user.click(await screen.findByRole('button', { name: 'Delete Zercher Squat' }))
+  const confirm = await screen.findByRole('group', { name: 'Confirm delete Zercher Squat' })
+  expect(
+    await within(confirm).findByText(
+      "Couldn't check where this exercise is used. It may be in your plans.",
+    ),
+  ).toBeTruthy()
+  expect(deleteBtn(confirm).disabled).toBe(true)
+  await user.click(within(confirm).getByRole('button', { name: 'Retry' }))
+  expect(await within(confirm).findByText("This can't be undone.")).toBeTruthy()
+  expect(deleteBtn(confirm).disabled).toBe(false)
+  expect(spy).toHaveBeenCalledTimes(2)
+})
+
+test('exercise delete is disabled while the usage check is pending', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  await repo.saveExercise(sample)
+  let release!: (v: { planItemCount: number; plans: string[] }) => void
+  vi.spyOn(repo, 'exerciseUsage').mockReturnValue(new Promise((r) => (release = r)))
+  renderLibrary(repo)
+  await user.click(await screen.findByRole('button', { name: 'Delete Zercher Squat' }))
+  const confirm = await screen.findByRole('group', { name: 'Confirm delete Zercher Squat' })
+  expect(within(confirm).getByText('Checking where this is used…')).toBeTruthy()
+  expect(deleteBtn(confirm).disabled).toBe(true)
+  release({ planItemCount: 0, plans: [] })
+  await waitFor(() => expect(deleteBtn(confirm).disabled).toBe(false))
+})
+
+test('confirm focuses Cancel, Cancel returns focus to the trash button, delete parks focus on the panel', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  const ex = await repo.saveExercise(sample)
+  renderLibrary(repo)
+  await user.click(await screen.findByRole('button', { name: 'Delete Zercher Squat' }))
+  const confirm = await screen.findByRole('group', { name: 'Confirm delete Zercher Squat' })
+  const cancel = within(confirm).getByRole('button', { name: 'Cancel' })
+  expect(document.activeElement).toBe(cancel)
+  await user.click(cancel)
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Delete Zercher Squat' })),
+  )
+  await user.click(screen.getByRole('button', { name: 'Delete Zercher Squat' }))
+  const again = await screen.findByRole('group', { name: /Confirm delete/ })
+  await waitFor(() => expect(deleteBtn(again).disabled).toBe(false))
+  await user.click(deleteBtn(again))
+  await waitFor(async () => {
+    expect((await repo.listExercises()).some((e) => e.id === ex.id)).toBe(false)
+  })
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('tabpanel')))
+})
+
+test('two rapid Enters in the exercise sheet create one exercise', async () => {
+  const user = userEvent.setup()
+  const repo = renderLibrary()
+  await user.click(await screen.findByRole('button', { name: 'Add exercise' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.type(within(dialog).getByLabelText('Name'), 'Double Tap{Enter}{Enter}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect((await repo.listExercises()).filter((e) => e.name === 'Double Tap')).toHaveLength(1)
 })
