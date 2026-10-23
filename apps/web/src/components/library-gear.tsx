@@ -1,31 +1,23 @@
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { toast } from 'sonner'
+import { DeleteConfirm, RowActions } from '@/components/row-actions'
 import { Switch } from '@/components/ui/switch'
 import { pluralize } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
-import { useExercises, useGear, useSaveGear } from '@/repo/hooks'
+import { useDeleteGear, useExercises, useGear, useSaveGear } from '@/repo/hooks'
+import type { Gear } from '@workout/shared'
 
-export function LibraryGear() {
+export function LibraryGear({ onEdit }: { onEdit: (gear: Gear) => void }) {
   const gear = useGear().data ?? []
   const exercises = useExercises().data ?? []
-  const saveGear = useSaveGear()
-  const [newGear, setNewGear] = useState('')
 
   const counts = new Map<string, number>()
+  const needing = new Map<string, number>()
   for (const ex of exercises) {
-    if (!ex.active) continue
-    for (const id of ex.required_gear_ids) counts.set(id, (counts.get(id) ?? 0) + 1)
-  }
-
-  function addGear(e: React.FormEvent) {
-    e.preventDefault()
-    const name = newGear.trim()
-    if (!name) return
-    saveGear.mutate(
-      { name, owned: true },
-      { onSuccess: () => setNewGear(''), onError: (err) => notifyError(err) },
-    )
+    for (const id of ex.required_gear_ids) {
+      needing.set(id, (needing.get(id) ?? 0) + 1)
+      if (ex.active) counts.set(id, (counts.get(id) ?? 0) + 1)
+    }
   }
 
   return (
@@ -35,40 +27,81 @@ export function LibraryGear() {
       </p>
       <ul className="flex flex-col gap-2">
         {gear.map((g) => (
-          <li key={g.id} className="bg-card rounded-lg border px-3">
-            <label className="flex min-h-11 items-center justify-between gap-3 text-sm">
-              <span className="flex flex-col">
-                {g.name}
-                <span className="text-muted-foreground text-xs">
-                  {pluralize(counts.get(g.id) ?? 0, 'exercise')}
-                </span>
-              </span>
-              <Switch
-                checked={g.owned}
-                aria-label={g.name}
-                onCheckedChange={(owned) =>
-                  saveGear.mutate(
-                    { id: g.id, name: g.name, owned },
-                    { onError: (err) => notifyError(err) },
-                  )
-                }
-              />
-            </label>
-          </li>
+          <GearRow
+            key={g.id}
+            gear={g}
+            activeCount={counts.get(g.id) ?? 0}
+            needCount={needing.get(g.id) ?? 0}
+            onEdit={() => onEdit(g)}
+          />
         ))}
       </ul>
-      <form onSubmit={addGear} className="flex gap-2">
-        <Input
-          className="min-h-11"
-          aria-label="Custom gear name"
-          placeholder="Custom gear"
-          value={newGear}
-          onChange={(e) => setNewGear(e.target.value)}
-        />
-        <Button type="submit" className="min-h-11" disabled={!newGear.trim()}>
-          Add custom gear
-        </Button>
-      </form>
     </div>
+  )
+}
+
+function GearRow({
+  gear: g,
+  activeCount,
+  needCount,
+  onEdit,
+}: {
+  gear: Gear
+  activeCount: number
+  needCount: number
+  onEdit: () => void
+}) {
+  const saveGear = useSaveGear()
+  const remove = useDeleteGear()
+  const [confirming, setConfirming] = useState(false)
+
+  const impact =
+    needCount > 0
+      ? `${pluralize(needCount, 'exercise')} need this gear. They stay in your library but will no longer require it.`
+      : "This can't be undone."
+
+  return (
+    <li className="bg-card flex flex-col rounded-lg border px-3 py-1">
+      <div className="flex items-center gap-1">
+        <label className="flex min-h-11 flex-1 items-center justify-between gap-3 text-sm">
+          <span className="flex flex-col">
+            {g.name}
+            <span className="text-muted-foreground text-xs">
+              {pluralize(activeCount, 'exercise')}
+            </span>
+          </span>
+          <Switch
+            checked={g.owned}
+            aria-label={g.name}
+            onCheckedChange={(owned) =>
+              saveGear.mutate(
+                { id: g.id, name: g.name, owned },
+                { onError: (err) => notifyError(err) },
+              )
+            }
+          />
+        </label>
+        {!confirming && (
+          <RowActions name={g.name} onEdit={onEdit} onDelete={() => setConfirming(true)} />
+        )}
+      </div>
+      {confirming && (
+        <DeleteConfirm
+          name={g.name}
+          impact={impact}
+          pending={remove.isPending}
+          onCancel={() => setConfirming(false)}
+          onConfirm={() =>
+            remove.mutate(g.id, {
+              onSuccess: () => toast.success('Gear deleted'),
+              onError: (err) => {
+                setConfirming(false)
+                notifyError(err, "Couldn't delete that gear")
+              },
+            })
+          }
+        />
+      )}
+    </li>
   )
 }
