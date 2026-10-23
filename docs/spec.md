@@ -41,7 +41,7 @@ M1 is deliberately client-only: guest mode is a v1 requirement anyway, and it is
 | Plans | Named plans → ordered days → ordered items. Each item references an exercise, with optional overrides and a progression rule. | M1 |
 | Session logging | Pick a plan day, then mark sets done with one tap. Edit actual reps and weight in place. Per-set and per-session notes. Resumes if the app closes. | M1 |
 | Progression | Runs when a session is finished. See §6. | M1 |
-| History | Completed sessions by date, with the exact sets, reps and weights. | M1 |
+| History | Completed sessions by date, with the exact sets, reps and weights (skipped sets show their planned numbers, marked "skipped"). Past workouts are editable (sets, set notes, session note) without affecting plan targets or progression. | M1 |
 | Units | lb or kg, chosen in Settings; changing it converts stored weights. | M1 |
 | Export | Download all data as JSON. | M1 |
 | Accounts + sync | Email/password; guest data uploaded once on signup. | M2 |
@@ -148,7 +148,7 @@ Five tabs: a bottom nav on phones and a sidebar on desktop. **Today** is home. M
 | `/` | Today | No session: pick a plan day, then Start. In progress: exercises with their sets pre-filled from targets. Tap a set to mark it done; tap again to undo. Long-press (or an edit button) edits reps and weight. Each exercise has a video link and notes. Finish runs progression and shows a short summary of the new targets. |
 | `/plans`, `/plans/:id` | Plans | List and create plans; inside a plan, manage days and items. Inline edit of sets/reps/weight overrides and the progression rule per item. Reorder with up/down buttons. Add items via the exercise picker. |
 | `/library` | Library | Two sections: Exercises (list, active toggle, notes, video link, required gear, defaults — create/edit in a sheet; an exercise used in a plan can be deactivated but not deleted) and Gear (owned toggles + custom gear). Section is kept in `?section=gear`. |
-| `/history`, `/history/:id` | History | Completed sessions, newest first; tap one for exact sets, reps and weights. |
+| `/history`, `/history/:id` | History | Completed sessions, newest first; tap one for exact sets, reps and weights; skipped sets show planned numbers. An Edit toggle on finished workouts allows editing reps, weight, done/skipped, set notes and the session note (no date edit or delete); edits never change plan targets or progression. |
 | `/settings` | Settings | Units and increment, export JSON. Account section placeholder ("coming soon") until M2. |
 
 UX rules: tap targets at least 44 px; `inputmode="decimal"` for weight and `inputmode="numeric"` for reps; never more than one modal or sheet open; edit in place; works in light and dark mode.
