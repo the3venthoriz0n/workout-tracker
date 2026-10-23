@@ -43,18 +43,15 @@ export function HistoryDetailScreen() {
           <section key={ex.plan_item_id} className="bg-card rounded-lg border p-3">
             <h2 className="font-medium">{ex.exercise_name}</h2>
             <ul className="mt-2 flex flex-col gap-1">
-              {ex.sets.map((s) =>
-                s.done ? (
-                  <li key={s.id}>
+              {ex.sets.map((s) => (
+                <li key={s.id}>
+                  <span className={s.done ? undefined : 'text-muted-foreground opacity-60'}>
                     {s.set_no}. {s.actual_reps} × {formatWeight(s.weight)} {profile.units}
-                    {s.note && <p className="text-muted-foreground text-sm">{s.note}</p>}
-                  </li>
-                ) : (
-                  <li key={s.id} className="text-muted-foreground opacity-60">
-                    {s.set_no}. skipped
-                  </li>
-                ),
-              )}
+                    {!s.done && ' · skipped'}
+                  </span>
+                  {s.note && <p className="text-muted-foreground text-sm">{s.note}</p>}
+                </li>
+              ))}
             </ul>
           </section>
         ))}

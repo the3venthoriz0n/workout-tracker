@@ -96,7 +96,7 @@ test('list, detail with done/skipped sets, and name snapshot', async () => {
   expect(screen.queryByText('Renamed Lift')).toBeNull()
   expect(await screen.findByText(/1\. 5 × 62\.5 lb/)).toBeTruthy()
   expect(screen.getByText(/2\. 4 × 135 lb/)).toBeTruthy()
-  expect(screen.getByText('3. skipped')).toBeTruthy()
+  expect(screen.getByText(/3\. 5 × 62\.5 lb · skipped/)).toBeTruthy()
   expect(screen.getByText('felt strong')).toBeTruthy()
 })
 
@@ -117,4 +117,21 @@ test('detail shows a set note under its line, only when non-empty', async () => 
   const note = await screen.findByText('left shoulder twinge')
   expect(note.closest('li')?.textContent).toContain('1. 5 × 100 lb')
   expect(screen.getAllByRole('listitem').filter((l) => l.querySelector('p'))).toHaveLength(1)
+})
+
+test('skipped sets show their planned numbers, muted, with the skipped label', async () => {
+  const repo = new LocalRepo(new AppDb(`hist-${crypto.randomUUID()}`))
+  await repo.init()
+  const ex = (await repo.listExercises())[0]!
+  const plan = await repo.savePlan({ name: 'Plan' })
+  const day = await repo.savePlanDay({ plan_id: plan.id, name: 'Skip Day' })
+  const item = await repo.addPlanItem(day.id, ex.id)
+  await repo.updatePlanItem(item.id, { sets: 2, reps: 5, weight: 95 })
+  const session = await repo.startSession(day.id)
+  await repo.updateSet(session.exercises[0]!.sets[0]!.id, { done: true })
+  await repo.finishSession(session.id)
+  renderAt(repo, `/history/${session.id}`)
+  const skipped = await screen.findByText(/2\. 5 × 95 lb · skipped/)
+  expect(skipped.className).toContain('text-muted-foreground')
+  expect(screen.getByText(/1\. 5 × 95 lb$/)).toBeTruthy()
 })
