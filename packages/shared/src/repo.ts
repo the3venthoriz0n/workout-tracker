@@ -61,6 +61,13 @@ export type ProgressionRow = {
   rule: ProgressionRule | null
 }
 export class SessionInProgressError extends Error {}
+// Thrown by getProfile() when the account has no profile yet (init() has not run).
+export class ProfileNotFoundError extends Error {
+  constructor() {
+    super('Profile missing: init() has not run')
+    this.name = 'ProfileNotFoundError'
+  }
+}
 
 export interface Repo {
   init(): Promise<void> // idempotent: guest profile + seeds on first run
