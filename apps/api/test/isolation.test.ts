@@ -194,7 +194,31 @@ describe('authentication on every route', () => {
   })
 })
 
+describe('PUT upserts with another user\'s id create the caller\'s own row', () => {
+  const specs = ROUTES.filter((r) => r.foreign === 'upsert' || r.upsertWithOwnParents)
+  it('the table has upserts, including days', () => {
+    expect(specs.length).toBeGreaterThanOrEqual(4)
+    expect(specs.some((s) => s.path.includes('/days/'))).toBe(true)
+  })
+  it.each(specs.map((s) => [label(s), s] as const))('%s', async (_n, spec) => {
+    const beforeA = await snapshot(a)
+    // A's id in the path; B's OWN ids in the body (own parents), so only the path id is foreign.
+    const res = await b.call(spec.method, fill(spec, fa), spec.body?.(fb))
+    expect(res.status, res.text).toBe(200)
+    const row = res.json as { id: string; user_id?: string }
+    const bobUser = ((await b.call('GET', '/api/v1/me')).json as { user_id: string }).user_id
+    if (row.user_id) expect(row.user_id).toBe(bobUser)
+    const mine = (await b.call('GET', '/api/v1/export')).json as Record<string, { id?: string; user_id?: string }[]>
+    const kind = spec.path.split('/')[3]!
+    const table = { gear: 'gear', exercises: 'exercises', plans: 'plans', days: 'plan_days' }[kind]!
+    expect(mine[table]!.some((r) => r.id === Object.values(spec.params!).map((k) => fa[k])[0])).toBe(true)
+    expect(await snapshot(a), 'A is untouched').toBe(beforeA)
+  })
+})
+
 describe('route table completeness', () => {
+  const sample = (p: string) => p.replace(/:\w+/g, newId()).replace(/\*/g, 'x')
+
   it('every registered /api/v1 route is in ROUTES, and every ROUTES entry is registered', () => {
     const registered = h.app.routes
       .filter((r) => r.method !== 'ALL' && r.path.startsWith('/api/v1/'))
@@ -205,11 +229,41 @@ describe('route table completeness', () => {
     expect(new Set(known).size).toBe(known.length)
   })
 
-  it('every route whose path takes an id declares it, and declares how foreign ids behave', () => {
+  it('every other route under /api (ALL included) except /api/auth/* requires a session', async () => {
+    const extras = h.app.routes.filter(
+      (r) =>
+        r.path.startsWith('/api') &&
+        !r.path.startsWith('/api/auth/') &&
+        !ROUTES.some((t) => t.method === r.method && t.path === r.path),
+    )
+    expect(extras.length).toBeGreaterThan(0)
+    for (const r of extras) {
+      for (const method of r.method === 'ALL' ? ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] : [r.method]) {
+        const res = await a.call(method, sample(r.path), method === 'GET' ? undefined : {}, { cookie: null })
+        // The only unauthenticated answers allowed: 401, the guards that run before auth (403/413/415),
+        // and the data-free JSON 404 for paths outside /api/v1.
+        const ok =
+          res.status === 401 ||
+          [403, 413, 415].includes(res.status) ||
+          (res.status === 404 && res.text === '{"error":"not_found"}' && !sample(r.path).startsWith('/api/v1/'))
+        expect(ok, `${method} ${r.path} -> ${res.status} ${res.text}`).toBe(true)
+        expect(res.text).not.toMatch(/user|email|session/i)
+      }
+    }
+  })
+
+  it('every route that takes an id (path or body) declares how foreign ids behave', () => {
+    const probe: Fixture = {
+      gear: newId(), exercise: newId(), plan: newId(), day: newId(), item: newId(), session: newId(),
+      set: newId(), completedSession: newId(), export: {} as ExportData,
+    }
+    const ids = ['gear', 'exercise', 'plan', 'day', 'item', 'session', 'set'].map((k) => probe[k as keyof Fixture] as string)
     for (const spec of ROUTES) {
       const names = [...spec.path.matchAll(/:(\w+)/g)].map((m) => m[1]!)
       expect(Object.keys(spec.params ?? {}).sort(), label(spec)).toEqual(names.sort())
-      if (names.length > 0) expect(spec.foreign, label(spec)).not.toBe('none')
+      const bodyText = JSON.stringify(spec.body?.(probe) ?? null)
+      const bodyHasId = ids.some((id) => bodyText.includes(id))
+      if (names.length > 0 || bodyHasId) expect(spec.foreign, label(spec)).not.toBe('none')
     }
   })
 })

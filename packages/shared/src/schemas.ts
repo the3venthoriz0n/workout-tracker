@@ -29,6 +29,8 @@ const name = z.string().min(1).max(LIMITS.name)
 const weight = z.number().min(0).max(LIMITS.weight)
 const sets = z.number().int().min(1).max(LIMITS.sets)
 const reps = z.number().int().min(1).max(LIMITS.reps)
+// Stored as numeric(8,2): anything finer would round to 0.00 and break every read.
+export const stepAmount = z.number().min(0.01).max(LIMITS.weight).multipleOf(0.01)
 
 // Sync columns on every record; user-owned tables add user_id
 const base = {
@@ -42,20 +44,27 @@ export const unitsSchema = z.enum(['lb', 'kg'])
 export const planTierSchema = z.enum(['free', 'pro'])
 export const successActionSchema = z.enum(['add_weight', 'add_reps'])
 
-export const ruleInputSchema = z.object({
+const ruleFields = {
   success_action: successActionSchema,
-  success_amount: z.number().gt(0).max(LIMITS.weight),
+  success_amount: stepAmount,
   fail_streak_limit: z.number().int().min(1).max(LIMITS.failStreak),
   deload_pct: z.number().min(0).max(100),
   rep_ceiling: reps.nullable(),
-})
+}
+// add_reps adds whole reps, at most 1000
+const checkRule = (r: { success_action: string; success_amount: number }, ctx: z.RefinementCtx) => {
+  if (r.success_action === 'add_reps' && (!Number.isInteger(r.success_amount) || r.success_amount > LIMITS.reps)) {
+    ctx.addIssue({ code: 'custom', path: ['success_amount'], message: 'Must be a whole number of reps, at most 1000' })
+  }
+}
+export const ruleInputSchema = z.object(ruleFields).superRefine(checkRule)
 export type RuleInput = z.infer<typeof ruleInputSchema>
 
 export const profileSchema = z.object({
   user_id: userId,
   plan: planTierSchema,
   units: unitsSchema,
-  weight_increment: z.number().gt(0).max(LIMITS.weight),
+  weight_increment: stepAmount,
   // Rule new plan items start with; absent means defaultRule(weight_increment)
   default_rule: ruleInputSchema.optional(),
   ...base,
@@ -118,10 +127,13 @@ export const planItemSchema = z.object({
 export type PlanItem = z.infer<typeof planItemSchema>
 
 // Keyed by plan_item_id (at most one per item)
-export const progressionRuleSchema = ruleInputSchema.extend({
-  plan_item_id: id,
-  ...base,
-})
+export const progressionRuleSchema = z
+  .object({
+    ...ruleFields,
+    plan_item_id: id,
+    ...base,
+  })
+  .superRefine(checkRule)
 export type ProgressionRule = z.infer<typeof progressionRuleSchema>
 
 // Keyed by plan_item_id

@@ -11,7 +11,7 @@ import {
 import type { Plan, PlanDay, PlanItem, PlanTree, RuleInput } from '@workout/shared'
 import { exercise, itemState, plan, planDay, planItem, profile, progressionRule } from '../db/schema.js'
 import type { Db } from '../db/types.js'
-import { assertUuid, dec, isUuid, now, num, toExercise, toPlan, toPlanDay, toPlanItem, toRule } from './mappers.js'
+import { assertUuid, dec, isUuid, now, num, readRule, toExercise, toPlan, toPlanDay, toPlanItem, toRule } from './mappers.js'
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 
@@ -229,7 +229,7 @@ export async function addPlanItem(
       })
       .returning()
     const startRule: RuleInput = prof.defaultRule
-      ? ruleInputSchema.parse(prof.defaultRule)
+      ? readRule(prof.defaultRule)
       : defaultRule(num(prof.weightIncrement))
     await tx.insert(progressionRule).values({
       userId,

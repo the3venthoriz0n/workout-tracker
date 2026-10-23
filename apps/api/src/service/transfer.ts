@@ -172,7 +172,8 @@ export async function importAll(db: Db, userId: string, raw: ExportData): Promis
         .insert(profile)
         .values({
           userId,
-          plan: d.profile.plan,
+          // Only billing may set the tier (spec section 10); an uploaded file never can.
+          plan: 'free',
           units: d.profile.units,
           weightIncrement: dec(d.profile.weight_increment),
           defaultRule: d.profile.default_rule ?? null,

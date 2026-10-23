@@ -154,7 +154,7 @@ describe('service profile and isolation', () => {
     expect((await s.getProfile()).default_rule?.success_amount).toBe(2.5)
   })
 
-  it('a unit switch is atomic: a failure mid-way changes nothing', async () => {
+  it('a unit switch clamps values that would leave numeric(8,2) instead of failing', async () => {
     const userId = await makeUser()
     const s = createService(h.db, userId)
     await s.init()
@@ -164,21 +164,18 @@ describe('service profile and isolation', () => {
     await h.db.insert(t.plan).values({ id: plan, userId, name: 'P' })
     await h.db.insert(t.planDay).values({ id: day, userId, planId: plan, name: 'D', position: 0 })
     await h.db.insert(t.planItem).values({
-      id: item, userId, planDayId: day, exerciseId: ex.id, position: 0, weight: '60',
+      id: item, userId, planDayId: day, exerciseId: ex.id, position: 0, weight: '90000',
     })
-    // 500000 kg is ~1.1M lb: the conversion overflows numeric(8,2) after exercises/items were updated.
+    // 500000 kg is ~1.1M lb, which numeric(8,2) cannot hold: the conversion clamps to 100000.
     await h.db.insert(t.progressionRule).values({
       userId, planItemId: item, successAction: 'add_weight', successAmount: '500000',
       failStreakLimit: 3, deloadPct: '10',
     })
-    const before = {
-      profile: await s.getProfile(),
-      exercises: await s.listExercises(),
-      item: (await h.db.select().from(t.planItem).where(eq(t.planItem.id, item)))[0],
-    }
-    await expect(s.updateProfile({ units: 'lb' })).rejects.toThrow()
-    expect(await s.getProfile()).toEqual(before.profile)
-    expect(await s.listExercises()).toEqual(before.exercises)
-    expect((await h.db.select().from(t.planItem).where(eq(t.planItem.id, item)))[0]).toEqual(before.item)
+    await s.updateProfile({ units: 'lb' })
+    const [row] = await h.db.select().from(t.planItem).where(eq(t.planItem.id, item))
+    expect(Number(row!.weight)).toBe(100000)
+    const [rule] = await h.db.select().from(t.progressionRule).where(eq(t.progressionRule.planItemId, item))
+    expect(Number(rule!.successAmount)).toBeLessThanOrEqual(100000)
+    expect((await s.getProfile()).units).toBe('lb')
   })
 })

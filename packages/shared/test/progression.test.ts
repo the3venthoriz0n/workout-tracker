@@ -57,3 +57,14 @@ describe('defaultRule', () => {
     it('increment 2.5, amount 1 from 45.4 -> 47.5', () => expect(run(45.4, 1, 2.5)).toBe(47.5))
   })
 })
+
+describe('progress caps', () => {
+  it('never pushes target weight past 100000 or target reps past 1000', () => {
+    const heavy = { ...base, targetWeight: 99999 }
+    expect(progress(heavy, addW, 0, [{ ...hit, weight: 99999 }, { ...hit, weight: 99999 }, { ...hit, weight: 99999 }], 5).targetWeight).toBe(100000)
+    const reps = { success_action: 'add_reps' as const, success_amount: 5, fail_streak_limit: 3, deload_pct: 10, rep_ceiling: null }
+    const high = { ...base, targetReps: 998 }
+    const sets = [998, 998, 998].map((r) => ({ ...hit, actual_reps: r }))
+    expect(progress(high, reps, 0, sets, 5).targetReps).toBe(1000)
+  })
+})

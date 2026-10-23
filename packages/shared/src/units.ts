@@ -1,3 +1,5 @@
+import { LIMITS } from './schemas.js'
+
 export type Units = 'lb' | 'kg'
 
 export const DEFAULT_INCREMENT: Record<Units, number> = { lb: 5, kg: 2.5 }
@@ -12,7 +14,8 @@ export function roundToIncrement(weight: number, increment: number): number {
 export function convertWeight(weight: number, from: Units, to: Units): number {
   if (from === to) return weight
   const converted = from === 'lb' ? weight * KG_PER_LB : weight / KG_PER_LB
-  return Math.round(converted * 10) / 10
+  // Stay inside the storable range (LIMITS.weight) so a conversion can never lock an account.
+  return Math.min(LIMITS.weight, Math.round(converted * 10) / 10)
 }
 
 // null = empty input, undefined = invalid

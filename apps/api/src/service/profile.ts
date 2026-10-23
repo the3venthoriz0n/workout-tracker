@@ -3,6 +3,7 @@ import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import type { SQL } from 'drizzle-orm'
 import {
   DEFAULT_INCREMENT,
+  LIMITS,
   ProfileNotFoundError,
   SEED_GEAR,
   convertWeight,
@@ -86,7 +87,7 @@ async function convertUnits(tx: Parameters<Parameters<Db['transaction']>[0]>[0],
   const step = DEFAULT_INCREMENT[to]
   const conv = (w: number) => convertWeight(w, from, to)
   const convAmount = (amount: number) =>
-    amount === current.weight_increment ? step : Math.max(step, roundToIncrement(conv(amount), step))
+    Math.min(LIMITS.weight, amount === current.weight_increment ? step : Math.max(step, roundToIncrement(conv(amount), step)))
 
   const ex = await tx.select({ v: exercise.defaultWeight }).from(exercise).where(eq(exercise.userId, userId))
   const exMap = mapping(distinctNumbers(ex.map((r) => r.v)), conv)

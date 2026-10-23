@@ -77,3 +77,19 @@ describe('record schemas', () => {
     expect(ruleInputSchema.safeParse({ ...rule, deload_pct: 101 }).success).toBe(false)
   })
 })
+
+describe('rule and increment precision', () => {
+  const rule = { success_action: 'add_weight', success_amount: 5, fail_streak_limit: 3, deload_pct: 10, rep_ceiling: null } as const
+  it('requires amounts of at least 0.01 in 0.01 steps', () => {
+    expect(ruleInputSchema.safeParse({ ...rule, success_amount: 0.001 }).success).toBe(false)
+    expect(ruleInputSchema.safeParse({ ...rule, success_amount: 1.234 }).success).toBe(false)
+    expect(ruleInputSchema.safeParse({ ...rule, success_amount: 0.01 }).success).toBe(true)
+    expect(ruleInputSchema.safeParse({ ...rule, success_amount: 2.5 }).success).toBe(true)
+  })
+  it('add_reps needs a whole amount of at most 1000', () => {
+    const reps = { ...rule, success_action: 'add_reps' } as const
+    expect(ruleInputSchema.safeParse({ ...reps, success_amount: 1.5 }).success).toBe(false)
+    expect(ruleInputSchema.safeParse({ ...reps, success_amount: 1001 }).success).toBe(false)
+    expect(ruleInputSchema.safeParse({ ...reps, success_amount: 2 }).success).toBe(true)
+  })
+})

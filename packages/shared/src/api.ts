@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { exportDataSchema } from './export.js'
 import {
-  LIMITS,
+  stepAmount,
   exerciseInputSchema,
   gearSchema,
   idSchema,
@@ -18,6 +18,8 @@ import {
 // never echoed and never trusted: user_id, timestamps and the path's `:id` always win.
 // A body `id` is not accepted at all: the id is the path param.
 
+const MAX_CLOCK_SKEW_MS = 5 * 60_000
+
 export const IdParam = idSchema
 
 export const PutGearBody = gearSchema.pick({ name: true, owned: true })
@@ -26,7 +28,7 @@ export const PutPlanBody = planSchema.pick({ name: true })
 export const PutDayBody = planDaySchema.pick({ plan_id: true, name: true })
 export const PatchProfileBody = z.object({
   units: unitsSchema.optional(),
-  weight_increment: z.number().gt(0).max(LIMITS.weight).optional(),
+  weight_increment: stepAmount.optional(),
   default_rule: ruleInputSchema.optional(),
 })
 export const AddItemBody = z.object({ exercise_id: idSchema, id: idSchema.optional() })
@@ -45,6 +47,8 @@ export const PatchSetBody = setLogSchema
   .extend({ updated_at: z.iso
       .datetime({ offset: true })
       .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid timestamp')
+      // A client clock far ahead would make a stale edit win every later last-write-wins race.
+      .refine((v) => Date.parse(v) <= Date.now() + MAX_CLOCK_SKEW_MS, 'Timestamp is in the future')
       .optional() })
 export const ImportBody = exportDataSchema
 export const EmptyBody = z.object({})

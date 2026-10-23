@@ -48,6 +48,11 @@ export type RouteSpec = {
    *  - `none`: takes no ids; only the caller's own data is reachable.
    */
   foreign: 'not_found' | 'upsert' | 'none'
+  /**
+   * PUT whose foreign id with the CALLER's own parents creates the caller's own row (days:
+   * `PUT /days/<A's day>` with B's plan). `foreign` still describes A's parents (404).
+   */
+  upsertWithOwnParents?: true
   /** The happy path needs an account without a profile (import is first-time only). */
   freshAccount?: boolean
   /** The happy path needs the user to have no active session (starting one). */
@@ -167,6 +172,7 @@ export const ROUTES: RouteSpec[] = [
     status: 200,
     response: planDaySchema,
     foreign: 'not_found',
+    upsertWithOwnParents: true,
   },
   { method: 'DELETE', path: `${V1}/days/:id`, params: { id: 'day' }, status: 204, foreign: 'not_found' },
   {

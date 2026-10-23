@@ -1,4 +1,5 @@
 import type { RuleInput, SetLog } from './schemas.js'
+import { LIMITS } from './schemas.js'
 import { roundToIncrement } from './units.js'
 
 export type Outcome = 'skipped' | 'success' | 'miss' | 'deload'
@@ -7,7 +8,13 @@ export function defaultRule(increment: number): RuleInput {
   return { success_action: 'add_weight', success_amount: increment, fail_streak_limit: 3, deload_pct: 10, rep_ceiling: null }
 }
 
-export function progress(
+export function progress(...args: Parameters<typeof progressRaw>): ReturnType<typeof progressRaw> {
+  const r = progressRaw(...args)
+  // Targets stay inside the storable range.
+  return { ...r, targetReps: Math.min(r.targetReps, LIMITS.reps), targetWeight: Math.min(r.targetWeight, LIMITS.weight) }
+}
+
+function progressRaw(
   input: { targetReps: number; targetWeight: number; baseReps: number; plannedSets: number },
   rule: RuleInput | null,
   failStreak: number,

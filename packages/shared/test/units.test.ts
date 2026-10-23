@@ -35,3 +35,10 @@ describe('parsing', () => {
     expect(DEFAULT_INCREMENT).toEqual({ lb: 5, kg: 2.5 })
   })
 })
+
+describe('convertWeight cap', () => {
+  it('clamps to 100000 so a conversion cannot leave the valid range', () => {
+    expect(convertWeight(100000, 'kg', 'lb')).toBe(100000)
+    expect(convertWeight(60000, 'kg', 'lb')).toBe(100000)
+  })
+})

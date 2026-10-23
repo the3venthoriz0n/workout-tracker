@@ -1,6 +1,7 @@
 // Row -> shared record mappers. Postgres boundary rules: timestamps become ISO strings,
 // numeric columns (returned as strings by the driver) become numbers, jsonb is re-validated.
 import {
+  LIMITS,
   exerciseSchema,
   gearSchema,
   itemStateSchema,
@@ -15,6 +16,7 @@ import {
 } from '@workout/shared'
 import type {
   Exercise,
+  RuleInput,
   Gear,
   ItemState,
   Plan,
@@ -53,16 +55,29 @@ const iso = (d: Date): string => d.toISOString()
 const isoOrNull = (d: Date | null): string | null => (d === null ? null : d.toISOString())
 export const num = (n: string): number => Number(n)
 export const numOrNull = (n: string | null): number | null => (n === null ? null : Number(n))
+// Rows saved before the bounds existed (or by a conversion) may sit outside the valid range.
+// Clamp on read so the account stays usable and the next edit can fix the value.
+const clampWeight = (n: number): number => Math.min(LIMITS.weight, Math.max(0, n))
+const clampWeightOrNull = (n: string | null): number | null => (n === null ? null : clampWeight(Number(n)))
+const ruleAmount = (action: string, n: number): number =>
+  action === 'add_reps' ? Math.min(LIMITS.reps, Math.max(1, Math.round(n))) : clampStep(n)
+const clampStep = (n: number): number => Math.min(LIMITS.weight, Math.max(0.01, n))
 /** Numbers go to numeric columns as strings. */
 export const dec = (n: number): string => String(n)
+
+/** Reads the stored default rule, clamping an amount saved before the precision rules existed. */
+export function readRule(stored: unknown): RuleInput {
+  const r = stored as { success_action?: string; success_amount?: unknown }
+  return ruleInputSchema.parse({ ...r, success_amount: ruleAmount(String(r.success_action), Number(r.success_amount)) })
+}
 
 export function toProfile(row: typeof profile.$inferSelect): Profile {
   return profileSchema.parse({
     user_id: row.userId,
     plan: row.plan,
     units: row.units,
-    weight_increment: num(row.weightIncrement),
-    ...(row.defaultRule === null ? {} : { default_rule: ruleInputSchema.parse(row.defaultRule) }),
+    weight_increment: clampStep(num(row.weightIncrement)),
+    ...(row.defaultRule === null ? {} : { default_rule: readRule(row.defaultRule) }),
     created_at: iso(row.createdAt),
     updated_at: iso(row.updatedAt),
     deleted_at: isoOrNull(row.deletedAt),
@@ -91,7 +106,7 @@ export function toExercise(row: typeof exercise.$inferSelect): Exercise {
     active: row.active,
     default_sets: row.defaultSets,
     default_reps: row.defaultReps,
-    default_weight: num(row.defaultWeight),
+    default_weight: clampWeight(num(row.defaultWeight)),
     user_id: row.userId,
     created_at: iso(row.createdAt),
     updated_at: iso(row.updatedAt),
@@ -135,9 +150,9 @@ export function toPlanItem(row: typeof planItem.$inferSelect): PlanItem {
     position: row.position,
     sets: row.sets,
     reps: row.reps,
-    weight: numOrNull(row.weight),
+    weight: clampWeightOrNull(row.weight),
     target_reps: row.targetReps,
-    target_weight: numOrNull(row.targetWeight),
+    target_weight: clampWeightOrNull(row.targetWeight),
     ...syncOf(row),
   })
 }
@@ -146,7 +161,7 @@ export function toRule(row: typeof progressionRule.$inferSelect): ProgressionRul
   return progressionRuleSchema.parse({
     plan_item_id: row.planItemId,
     success_action: row.successAction,
-    success_amount: num(row.successAmount),
+    success_amount: ruleAmount(row.successAction, num(row.successAmount)),
     fail_streak_limit: row.failStreakLimit,
     deload_pct: num(row.deloadPct),
     rep_ceiling: row.repCeiling,
@@ -182,9 +197,9 @@ export function toSetLog(row: typeof setLog.$inferSelect): SetLog {
     set_no: row.setNo,
     position: row.position,
     target_reps: row.targetReps,
-    target_weight: num(row.targetWeight),
+    target_weight: clampWeight(num(row.targetWeight)),
     actual_reps: row.actualReps,
-    weight: num(row.weight),
+    weight: clampWeight(num(row.weight)),
     done: row.done,
     note: row.note,
     ...syncOf(row),
