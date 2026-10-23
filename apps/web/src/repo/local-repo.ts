@@ -36,7 +36,14 @@ import type {
 } from '@workout/shared'
 import type { AppDb } from './db'
 import { ExerciseInUseError, SessionInProgressError } from './types'
-import type { ExportData, FinishSummary, PlanTree, Repo, SessionDetail } from './types'
+import type {
+  ExportData,
+  FinishSummary,
+  PlanTree,
+  ProgressionRow,
+  Repo,
+  SessionDetail,
+} from './types'
 
 const now = () => new Date().toISOString()
 const nextPosition = (siblings: { position: number }[]) =>
@@ -166,7 +173,11 @@ export class LocalRepo implements Repo {
     })
   }
 
-  async updateProfile(patch: { units?: Units; weight_increment?: number }): Promise<Profile> {
+  async updateProfile(patch: {
+    units?: Units
+    weight_increment?: number
+    default_rule?: RuleInput
+  }): Promise<Profile> {
     if (patch.weight_increment !== undefined && !(patch.weight_increment > 0)) {
       throw new Error('weight_increment must be greater than 0')
     }
@@ -197,16 +208,24 @@ export class LocalRepo implements Repo {
           l.target_weight = conv(l.target_weight)
           l.updated_at = ts
         })
+        const convAmount = (amount: number) =>
+          amount === current.weight_increment
+            ? newIncrement
+            : Math.max(newIncrement, roundToIncrement(conv(amount), newIncrement))
         await d.rules.toCollection().modify((r) => {
           if (r.success_action !== 'add_weight') return
-          r.success_amount =
-            r.success_amount === current.weight_increment
-              ? newIncrement
-              : Math.max(newIncrement, roundToIncrement(conv(r.success_amount), newIncrement))
+          r.success_amount = convAmount(r.success_amount)
           r.updated_at = ts
         })
+        if (current.default_rule?.success_action === 'add_weight') {
+          next.default_rule = {
+            ...current.default_rule,
+            success_amount: convAmount(current.default_rule.success_amount),
+          }
+        }
       }
       if (patch.weight_increment !== undefined) next.weight_increment = patch.weight_increment
+      if (patch.default_rule !== undefined) next.default_rule = ruleInputSchema.parse(patch.default_rule)
       const profile = profileSchema.parse(next)
       await d.profile.put(profile)
       return profile
@@ -342,10 +361,11 @@ export class LocalRepo implements Repo {
         updated_at: ts,
         deleted_at: null,
       })
-      const increment = (await this.getProfile()).weight_increment
+      const prof = await this.getProfile()
+      const startRule = prof.default_rule ?? defaultRule(prof.weight_increment)
       const base = { plan_item_id: item.id, created_at: ts, updated_at: ts, deleted_at: null }
       await planItems.add(item)
-      await rules.add(progressionRuleSchema.parse({ ...defaultRule(increment), ...base }))
+      await rules.add(progressionRuleSchema.parse({ ...startRule, ...base }))
       await itemStates.add(itemStateSchema.parse({ ...base, fail_streak: 0 }))
       return item
     })
@@ -664,5 +684,37 @@ export class LocalRepo implements Repo {
       workout_sessions: await d.sessions.toArray(),
       set_logs: await d.setLogs.toArray(),
     }))
+  }
+
+  async listProgression(): Promise<ProgressionRow[]> {
+    const d = this.db
+    return d.transaction('r', [d.plans, d.planDays, d.planItems, d.exercises, d.rules], async () => {
+      const byPosition = <T extends { position: number }>(a: T, b: T) => a.position - b.position
+      const rows: ProgressionRow[] = []
+      for (const plan of await this.listPlans()) {
+        const days = (await d.planDays.where('plan_id').equals(plan.id).toArray())
+          .filter((x) => x.deleted_at === null)
+          .sort(byPosition)
+        for (const day of days) {
+          const items = (await d.planItems.where('plan_day_id').equals(day.id).toArray())
+            .filter((i) => i.deleted_at === null)
+            .sort(byPosition)
+          for (const item of items) {
+            const exercise = await d.exercises.get(item.exercise_id)
+            if (!exercise) continue
+            rows.push({
+              plan_id: plan.id,
+              plan_name: plan.name,
+              day_id: day.id,
+              day_name: day.name,
+              item_id: item.id,
+              exercise_name: exercise.name,
+              rule: (await d.rules.get(item.id)) ?? null,
+            })
+          }
+        }
+      }
+      return rows
+    })
   }
 }
