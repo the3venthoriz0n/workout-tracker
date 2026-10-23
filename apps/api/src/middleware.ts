@@ -19,7 +19,8 @@ export function requireUser(auth: Auth) {
   })
 }
 
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+// OPTIONS is guarded like any other method: the app is same-origin and never serves CORS.
+const SAFE_METHODS = new Set(['GET', 'HEAD'])
 
 function isJson(contentType: string | undefined): boolean {
   return (contentType?.split(';')[0] ?? '').trim().toLowerCase() === 'application/json'

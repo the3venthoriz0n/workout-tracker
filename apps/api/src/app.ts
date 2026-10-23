@@ -5,6 +5,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
 import type { Auth } from './auth.js'
+import { sanitizeError } from './logging.js'
 import type { Env } from './env.js'
 import { csrfGuard, requireUser, type AppEnv } from './middleware.js'
 import type { Service } from './service/index.js'
@@ -39,8 +40,8 @@ export function createApp(deps: AppDeps): Hono {
       },
     }),
   )
-  app.use('/api/*', bodyLimit({ maxSize: 1024 * 1024 }))
   app.use('/api/*', csrfGuard(env))
+  app.use('/api/*', bodyLimit({ maxSize: 1024 * 1024 }))
 
   app.get('/healthz', async (c) => {
     let ok = false
@@ -67,8 +68,9 @@ export function createApp(deps: AppDeps): Hono {
   app.onError((err, c) => {
     // bodyLimit throws a 413 HTTPException when it meets an oversized chunked body.
     if (err instanceof HTTPException && err.status === 413) return c.json({ error: 'payload_too_large' }, 413)
-    // Log the error only (no request data: bodies and headers carry passwords and cookies).
-    console.error(err)
+    // Log a sanitized summary only: Drizzle messages embed the query parameters (password
+    // hashes, tokens) and request data carries passwords and cookies.
+    console.error('request failed', sanitizeError(err))
     return c.json({ error: 'internal_error' }, 500)
   })
 

@@ -48,6 +48,8 @@ services:
     command: sh -c "pnpm install --frozen-lockfile && pnpm dev"
     environment:
       HOME: /tmp
+      # tsx watch does not set it; the API refuses to start without NODE_ENV.
+      NODE_ENV: development
       DATABASE_URL: *database-url
       DATABASE_URL_TEST: postgres://test:test@db-test:5432/test
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?run just setup}
@@ -72,6 +74,7 @@ services:
       context: .
       target: runtime
     environment:
+      NODE_ENV: production
       DATABASE_URL: *database-url
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?run just setup}
       BETTER_AUTH_URL: http://localhost:8080

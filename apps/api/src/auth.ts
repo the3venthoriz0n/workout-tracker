@@ -3,6 +3,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import type { Db } from './db/index.js'
 import { account, session, user, verification } from './db/schema.js'
 import type { Env } from './env.js'
+import { sanitizedLog } from './logging.js'
 import { configuredOrigins, isTrustedOrigin } from './origins.js'
 
 export type AuthEnv = Pick<Env, 'NODE_ENV' | 'BETTER_AUTH_URL' | 'BETTER_AUTH_SECRET' | 'TRUSTED_ORIGINS'>
@@ -15,19 +16,24 @@ export type AuthOptions = {
   clientIpHeader?: string
 }
 
+/**
+ * Request headers Better Auth may read the client IP from, for rate limiting.
+ * Production: the API sits behind Caddy, which discards any client-supplied X-Forwarded-For and
+ * sets it to the real peer address, so the header holds exactly one trustworthy value. Better
+ * Auth only accepts a single-valued header here (a multi-valued one is treated as untrusted and
+ * falls into one shared bucket). The API port must never be reachable except through the proxy.
+ * Development and test: no client-controlled header at all (dev is exposed on the LAN, spec
+ * section 11), otherwise anyone could pick a fresh "IP" per request and dodge the limits.
+ * Better Auth then uses one shared loopback bucket.
+ */
+export function rateLimitIpHeaders(env: Pick<Env, 'NODE_ENV'>): string[] {
+  return env.NODE_ENV === 'production' ? ['x-forwarded-for'] : []
+}
+
 export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions = {}) {
   const production = env.NODE_ENV === 'production'
 
-  // Client IP for rate limiting.
-  // Production: the API sits behind Caddy, which discards any client-supplied X-Forwarded-For and
-  // sets it to the real peer address, so the header holds exactly one trustworthy value. Better
-  // Auth only accepts a single-valued header here (a multi-valued one is treated as untrusted and
-  // falls into one shared bucket), which is what we want. The API port must never be reachable
-  // except through the proxy.
-  // Elsewhere (dev is exposed on the LAN, see spec section 11): do not read any client-controlled
-  // header, otherwise anyone could pick a fresh "IP" per request and dodge the limits. Better Auth
-  // then uses one shared loopback bucket in development.
-  const ipAddressHeaders = opts.clientIpHeader ? [opts.clientIpHeader] : production ? ['x-forwarded-for'] : ['x-no-trusted-ip-header']
+  const ipAddressHeaders = opts.clientIpHeader ? [opts.clientIpHeader] : rateLimitIpHeaders(env)
 
   return betterAuth({
     baseURL: env.BETTER_AUTH_URL,
@@ -42,6 +48,8 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions = {}) {
       const origin = request?.headers.get('origin') ?? undefined
       return [...configuredOrigins(env), ...(origin && isTrustedOrigin(origin, env) ? [origin] : [])]
     },
+    // Better Auth logs raw error objects (Drizzle errors carry query parameters); sanitize them.
+    logger: { log: sanitizedLog },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,

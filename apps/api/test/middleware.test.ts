@@ -91,9 +91,19 @@ describe('csrfGuard', () => {
     expect(ok.status).toBe(200)
   })
 
-  it('lets GET, HEAD and OPTIONS through without an Origin', async () => {
+  it('guards OPTIONS like any other method', async () => {
     h = await setupApp()
-    for (const method of ['GET', 'HEAD', 'OPTIONS']) {
+    const bare = await h.request('/api/nope', { method: 'OPTIONS', origin: null, contentType: null })
+    expect(bare.status).toBe(403)
+    const foreign = await h.request('/api/nope', { method: 'OPTIONS', origin: 'https://evil.example', contentType: null })
+    expect(foreign.status).toBe(403)
+    const trusted = await h.request('/api/nope', { method: 'OPTIONS', body: {} })
+    expect(trusted.status).toBe(404)
+  })
+
+  it('lets GET and HEAD through without an Origin', async () => {
+    h = await setupApp()
+    for (const method of ['GET', 'HEAD']) {
       const res = await h.request('/api/v1/nope', { method, origin: null })
       expect([403, 415], method).not.toContain(res.status)
     }

@@ -3,7 +3,9 @@ import { z } from 'zod'
 const isTest = process.env.NODE_ENV === 'test'
 
 const schema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  // Required, no default: a missing NODE_ENV must stop the process, never silently pick the
+  // permissive development origin policy.
+  NODE_ENV: z.enum(['development', 'test', 'production']),
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_URL: z.url(),
   // Better Auth. Required in production and development; tests fall back to dummy values.
