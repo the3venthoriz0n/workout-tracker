@@ -52,6 +52,16 @@ const nextPosition = (siblings: { position: number }[]) =>
 export class LocalRepo implements Repo {
   constructor(private readonly db: AppDb) {}
 
+  // Empty every table and re-seed: a fresh guest database. Used after a confirmed upload,
+  // a confirmed discard and sign-out, so no account data lingers on the device.
+  async reset(): Promise<void> {
+    const d = this.db
+    await d.transaction('rw', d.tables, async () => {
+      await Promise.all(d.tables.map((t) => t.clear()))
+    })
+    await this.init()
+  }
+
   async init(): Promise<void> {
     await this.db.transaction('rw', this.db.profile, this.db.gear, this.db.exercises, async () => {
       if ((await this.db.profile.count()) > 0) return

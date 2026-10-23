@@ -1,0 +1,59 @@
+import { AlreadyHasDataError, ProfileNotFoundError, type ExportData } from '@workout/shared'
+import { AuthError, type AuthClient } from './client'
+
+// Spec section 7. Pure sequencing over injected sides, so every path is unit-testable.
+export type LocalSide = { exportAll(): Promise<ExportData>; reset(): Promise<void> }
+export type ApiSide = { getProfile(): Promise<unknown>; importAll(data: ExportData): Promise<void> }
+export type FlowDeps = { auth: AuthClient; local: LocalSide; api: ApiSide }
+
+/**
+ * signed-in: the API repo is now authoritative. confirm-discard: signed in, account has data,
+ * waiting for the user to decide. upload-failed: signed in, guest data kept, retry available.
+ */
+export type FlowOutcome = 'signed-in' | 'confirm-discard' | 'upload-failed'
+
+// Upload guest data; clear it locally only after the server confirmed.
+async function upload({ local, api }: FlowDeps): Promise<FlowOutcome> {
+  try {
+    await api.importAll(await local.exportAll())
+  } catch (e) {
+    return e instanceof AlreadyHasDataError ? 'confirm-discard' : 'upload-failed'
+  }
+  await local.reset()
+  return 'signed-in'
+}
+
+export async function signUpFlow(deps: FlowDeps, email: string, password: string): Promise<FlowOutcome> {
+  await deps.auth.signUp(email, password)
+  return upload(deps)
+}
+
+export async function signInFlow(deps: FlowDeps, email: string, password: string): Promise<FlowOutcome> {
+  await deps.auth.signIn(email, password)
+  try {
+    await deps.api.getProfile()
+  } catch (e) {
+    if (e instanceof ProfileNotFoundError) return upload(deps) // new, empty account
+    // Fail closed: cannot tell whether the account has data, so keep the guest data and the guest session.
+    await deps.auth.signOut().catch(() => undefined)
+    throw new AuthError('check_failed')
+  }
+  return 'confirm-discard'
+}
+
+export const retryUpload = upload
+
+export async function confirmDiscard({ local }: FlowDeps): Promise<FlowOutcome> {
+  await local.reset()
+  return 'signed-in'
+}
+
+export async function cancelDiscard({ auth }: FlowDeps): Promise<void> {
+  await auth.signOut().catch(() => undefined)
+}
+
+// Server sign-out first; on failure nothing local changes and the error surfaces.
+export async function signOutFlow({ auth, local }: FlowDeps): Promise<void> {
+  await auth.signOut()
+  await local.reset()
+}

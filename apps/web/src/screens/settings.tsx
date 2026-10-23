@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useProfile, useUpdateProfile } from '@/repo/hooks'
 import { useRepo } from '@/repo/provider'
+import { AccountCard } from '@/components/account-card'
+import { downloadExport } from '@/lib/download-export'
 import { notifyError } from '@/lib/notify'
-import { cn } from '@/lib/utils'
 
 const UNITS: Units[] = ['lb', 'kg']
 
@@ -38,17 +39,7 @@ export function SettingsScreen() {
 
   async function exportData() {
     try {
-      const data = await repo.exportAll()
-      const url = URL.createObjectURL(
-        new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
-      )
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `workout-tracker-export-${new Date().toISOString().slice(0, 10)}.json`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 0)
+      await downloadExport(repo)
     } catch (err) {
       notifyError(err, 'Export failed')
     }
@@ -120,14 +111,7 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Account</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className={cn('text-muted-foreground text-sm')}>Accounts and sync are coming soon.</p>
-          </CardContent>
-        </Card>
+        <AccountCard />
       </div>
     </div>
   )

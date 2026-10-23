@@ -7,7 +7,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { routes } from '../src/app/router'
 import { AppDb } from '../src/repo/db'
 import { LocalRepo } from '../src/repo/local-repo'
-import { RepoProvider } from '../src/repo/provider'
+import { AuthProvider } from '../src/auth/auth-provider'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -18,9 +18,9 @@ function renderSettings() {
   const router = createMemoryRouter(routes, { initialEntries: ['/settings'] })
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <RepoProvider repo={repo}>
+      <AuthProvider auth={{ signUp: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), session: async () => null }} local={repo} createApi={() => ({}) as never}>
         <RouterProvider router={router} />
-      </RepoProvider>
+      </AuthProvider>
     </QueryClientProvider>,
   )
   return repo
@@ -28,7 +28,7 @@ function renderSettings() {
 
 test('Settings no longer shows gear, but keeps units, export and account', async () => {
   renderSettings()
-  expect(await screen.findByText('Accounts and sync are coming soon.')).toBeTruthy()
+  expect(await screen.findByText('Email')).toBeTruthy()
   expect(screen.queryAllByRole('switch')).toHaveLength(0)
   expect(screen.queryByRole('button', { name: 'Add custom gear' })).toBeNull()
   expect(screen.queryByLabelText('Custom gear name')).toBeNull()
@@ -39,7 +39,7 @@ test('Settings no longer shows gear, but keeps units, export and account', async
 test('changing units asks for confirmation then converts weights', async () => {
   const user = userEvent.setup()
   const repo = renderSettings()
-  await screen.findByText('Accounts and sync are coming soon.')
+  await screen.findByText('Email')
   const deadlift = (await repo.listExercises()).find((e) => e.name === 'Deadlift')!
   expect(deadlift.default_weight).toBe(135)
   await user.click(screen.getByRole('radio', { name: 'kg' }))
@@ -52,7 +52,7 @@ test('changing units asks for confirmation then converts weights', async () => {
 
 test('the progression step no longer lives in Settings', async () => {
   renderSettings()
-  await screen.findByText('Accounts and sync are coming soon.')
+  await screen.findByText('Email')
   expect(screen.queryByLabelText('Weight increment')).toBeNull()
   expect(screen.queryByLabelText('Progression step')).toBeNull()
   expect(screen.queryByText(/increment/i)).toBeNull()
