@@ -51,13 +51,26 @@ export type ExportData = {
   workout_sessions: WorkoutSession[]
   set_logs: SetLog[]
 }
+export type ProgressionRow = {
+  plan_id: string
+  plan_name: string
+  day_id: string
+  day_name: string
+  item_id: string
+  exercise_name: string
+  rule: ProgressionRule | null
+}
 export class ExerciseInUseError extends Error {}
 export class SessionInProgressError extends Error {}
 
 export interface Repo {
   init(): Promise<void> // idempotent: guest profile + seeds on first run
   getProfile(): Promise<Profile>
-  updateProfile(patch: { units?: Units; weight_increment?: number }): Promise<Profile>
+  updateProfile(patch: {
+    units?: Units
+    weight_increment?: number
+    default_rule?: RuleInput
+  }): Promise<Profile>
   listGear(): Promise<Gear[]>
   saveGear(input: { id?: string; name: string; owned: boolean }): Promise<Gear>
   listExercises(): Promise<Exercise[]> // sorted by name
@@ -69,7 +82,7 @@ export interface Repo {
   deletePlan(id: string): Promise<void> // soft-deletes days and items too
   savePlanDay(input: { id?: string; plan_id: string; name: string }): Promise<PlanDay>
   deletePlanDay(id: string): Promise<void>
-  addPlanItem(planDayId: string, exerciseId: string): Promise<PlanItem> // appends; creates defaultRule(increment)
+  addPlanItem(planDayId: string, exerciseId: string): Promise<PlanItem> // appends; rule = profile.default_rule if set, else defaultRule(progression step)
   updatePlanItem(
     id: string,
     patch: { sets?: number | null; reps?: number | null; weight?: number | null },
@@ -89,4 +102,5 @@ export interface Repo {
   listSessions(): Promise<WorkoutSession[]> // completed only, newest first
   getSession(id: string): Promise<SessionDetail | undefined>
   exportAll(): Promise<ExportData>
+  listProgression(): Promise<ProgressionRow[]> // live plan items with their rules, in plan/day/item order
 }

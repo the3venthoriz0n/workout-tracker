@@ -11,6 +11,7 @@ export const keys = {
   activeSession: ['session', 'active'] as const,
   sessions: ['sessions'] as const,
   session: (id: string) => ['session', id] as const,
+  progression: ['progression'] as const,
 }
 
 export const useProfile = () => {
@@ -48,6 +49,11 @@ export const useSessions = () => {
 export const useSession = (id: string) => {
   const repo = useRepo()
   return useQuery({ queryKey: keys.session(id), queryFn: async () => (await repo.getSession(id)) ?? null })
+}
+
+export const useProgression = () => {
+  const repo = useRepo()
+  return useQuery({ queryKey: keys.progression, queryFn: () => repo.listProgression() })
 }
 
 // Mutations touch many cached views (plan trees, effective targets, sessions), so each

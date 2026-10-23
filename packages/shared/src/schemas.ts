@@ -25,11 +25,22 @@ export const unitsSchema = z.enum(['lb', 'kg'])
 export const planTierSchema = z.enum(['free', 'pro'])
 export const successActionSchema = z.enum(['add_weight', 'add_reps'])
 
+export const ruleInputSchema = z.object({
+  success_action: successActionSchema,
+  success_amount: z.number().gt(0),
+  fail_streak_limit: z.number().int().min(1),
+  deload_pct: z.number().min(0).max(100),
+  rep_ceiling: reps.nullable(),
+})
+export type RuleInput = z.infer<typeof ruleInputSchema>
+
 export const profileSchema = z.object({
   user_id: id,
   plan: planTierSchema,
   units: unitsSchema,
   weight_increment: z.number().gt(0),
+  // Rule new plan items start with; absent means defaultRule(weight_increment)
+  default_rule: ruleInputSchema.optional(),
   ...base,
 })
 export type Profile = z.infer<typeof profileSchema>
@@ -88,15 +99,6 @@ export const planItemSchema = z.object({
   ...base,
 })
 export type PlanItem = z.infer<typeof planItemSchema>
-
-export const ruleInputSchema = z.object({
-  success_action: successActionSchema,
-  success_amount: z.number().gt(0),
-  fail_streak_limit: z.number().int().min(1),
-  deload_pct: z.number().min(0).max(100),
-  rep_ceiling: reps.nullable(),
-})
-export type RuleInput = z.infer<typeof ruleInputSchema>
 
 // Keyed by plan_item_id (at most one per item)
 export const progressionRuleSchema = ruleInputSchema.extend({

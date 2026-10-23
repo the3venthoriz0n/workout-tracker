@@ -1,10 +1,8 @@
-import { defaultRule, ruleInputSchema, type RuleInput } from '@workout/shared'
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { NumberField } from '@/components/number-field'
+import { RuleEditor } from '@/components/rule-editor'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import {
@@ -23,7 +21,6 @@ type Props = { item: Item; isFirst?: boolean; isLast?: boolean }
 export function PlanItemRow({ item, isFirst = false, isLast = false }: Props) {
   const profile = useProfile().data
   const units = profile?.units ?? 'lb'
-  const increment = profile?.weight_increment ?? 5
   const update = useUpdatePlanItem()
   const move = useMove()
   const remove = useDeletePlanItem()
@@ -48,22 +45,6 @@ export function PlanItemRow({ item, isFirst = false, isLast = false }: Props) {
     if (unchanged) return true
     try {
       await update.mutateAsync({ id: item.id, patch: p })
-      return true
-    } catch (err) {
-      fail(err)
-      return false
-    }
-  }
-
-  // Resolves false when the rule fails validation or the write fails, so NumberField reverts
-  async function saveRule(next: RuleInput | null): Promise<boolean> {
-    if (next !== null) {
-      const parsed = ruleInputSchema.safeParse(next)
-      if (!parsed.success) return false
-      next = parsed.data
-    }
-    try {
-      await setRule.mutateAsync({ planItemId: item.id, rule: next })
       return true
     } catch (err) {
       fail(err)
@@ -167,80 +148,13 @@ export function PlanItemRow({ item, isFirst = false, isLast = false }: Props) {
       </div>
 
       {expanded && (
-        <div className="flex flex-col gap-3 border-t pt-3">
-          <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
-            No progression
-            <Switch
-              checked={rule === null}
-              aria-label={`No progression for ${name}`}
-              onCheckedChange={(off) => void saveRule(off ? null : defaultRule(increment))}
-            />
-          </label>
-          {rule && (
-            <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor={`action-${item.id}`}>On success</Label>
-                <select
-                  id={`action-${item.id}`}
-                  className="border-input bg-background min-h-11 rounded-md border px-3 text-sm"
-                  value={rule.success_action}
-                  onChange={(e) => {
-                    const success_action = e.target.value as RuleInput['success_action']
-                    if (success_action === rule.success_action) return
-                    void saveRule({
-                      ...rule,
-                      success_action,
-                      success_amount: success_action === 'add_reps' ? 1 : increment,
-                    })
-                  }}
-                >
-                  <option value="add_weight">Add weight</option>
-                  <option value="add_reps">Add reps</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <NumberField
-                  label={rule.success_action === 'add_weight' ? `Add (${units})` : 'Add (reps)'}
-                  kind={rule.success_action === 'add_weight' ? 'weight' : 'reps'}
-                  value={rule.success_amount}
-                  onCommit={(v) =>
-                    v === null || v <= 0 ? false : saveRule({ ...rule, success_amount: v })
-                  }
-                />
-                {rule.success_action === 'add_weight' && (
-                  <p className="text-muted-foreground col-span-2 -mt-1 text-xs">
-                    Steps snap to your {formatWeight(increment)} {units} increment (change it in
-                    Settings).
-                  </p>
-                )}
-                <NumberField
-                  label="Fail streak limit"
-                  kind="reps"
-                  value={rule.fail_streak_limit}
-                  onCommit={(v) =>
-                    v === null || v < 1 ? false : saveRule({ ...rule, fail_streak_limit: v })
-                  }
-                />
-                <NumberField
-                  label="Deload %"
-                  kind="reps"
-                  value={rule.deload_pct}
-                  suffix="%"
-                  onCommit={(v) =>
-                    v === null || v < 1 || v > 100 ? false : saveRule({ ...rule, deload_pct: v })
-                  }
-                />
-                <NumberField
-                  label="Rep ceiling"
-                  kind="reps"
-                  allowEmpty
-                  value={rule.rep_ceiling}
-                  placeholder="None"
-                  onCommit={(v) => saveRule({ ...rule, rep_ceiling: v })}
-                />
-              </div>
-            </>
-          )}
+        <div className="border-t pt-3">
+          <RuleEditor
+            rule={rule}
+            itemName={name}
+            idPrefix={`rule-${item.id}`}
+            onSave={(next) => setRule.mutateAsync({ planItemId: item.id, rule: next })}
+          />
         </div>
       )}
     </li>

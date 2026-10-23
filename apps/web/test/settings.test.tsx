@@ -50,20 +50,12 @@ test('changing units asks for confirmation then converts weights', async () => {
   expect(after.default_weight).toBe(61.2)
 })
 
-test('increment must be greater than 0 and persists otherwise', async () => {
-  const user = userEvent.setup()
-  const repo = renderSettings()
-  const input = await screen.findByLabelText('Weight increment')
-  await user.clear(input)
-  await user.type(input, '0')
-  await user.tab()
-  expect(await screen.findByText('Increment must be greater than 0.')).toBeTruthy()
-  expect((await repo.getProfile()).weight_increment).toBe(5)
-  await waitFor(() => expect((input as HTMLInputElement).value).toBe('5'))
-  await user.clear(input)
-  await user.type(input, '2,5')
-  await user.tab()
-  await waitFor(async () => expect((await repo.getProfile()).weight_increment).toBe(2.5))
+test('the progression step no longer lives in Settings', async () => {
+  renderSettings()
+  await screen.findByText('Accounts and sync are coming soon.')
+  expect(screen.queryByLabelText('Weight increment')).toBeNull()
+  expect(screen.queryByLabelText('Progression step')).toBeNull()
+  expect(screen.queryByText(/increment/i)).toBeNull()
 })
 
 test('export calls exportAll and downloads a dated file', async () => {

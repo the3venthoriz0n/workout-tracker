@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { expect, test } from 'vitest'
@@ -33,7 +33,7 @@ test('nested paths highlight their tab', async () => {
   )
 })
 
-test('shell renders the Library route with all five tabs', async () => {
+test('shell renders the Library route with all six tabs', async () => {
   const repo = new LocalRepo(new AppDb(`shell-${crypto.randomUUID()}`))
   const router = createMemoryRouter(routes, { initialEntries: ['/library'] })
   render(
@@ -44,9 +44,26 @@ test('shell renders the Library route with all five tabs', async () => {
     </QueryClientProvider>,
   )
   expect(await screen.findByRole('heading', { name: 'Library' })).toBeTruthy()
-  for (const label of ['Today', 'Plans', 'Library', 'History', 'Settings']) {
+  for (const label of ['Today', 'Plans', 'Library', 'Progression', 'History', 'Settings']) {
     expect(screen.getByRole('link', { name: label })).toBeTruthy()
   }
+})
+
+test('Progression sits after Library and highlights on /progression', async () => {
+  renderAt('/progression')
+  expect(
+    (await screen.findByRole('link', { name: 'Progression' })).getAttribute('aria-current'),
+  ).toBe('page')
+  const nav = within(screen.getByRole('navigation', { name: 'Main' }))
+  expect(nav.getAllByRole('link').map((l) => l.textContent)).toEqual([
+    'Today',
+    'Plans',
+    'Library',
+    'Progression',
+    'History',
+    'Settings',
+  ])
+  expect(screen.getByRole('link', { name: 'Library' }).getAttribute('aria-current')).toBeNull()
 })
 
 test('Library stays highlighted on a section deep link', async () => {
