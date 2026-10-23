@@ -132,4 +132,19 @@ describe('listProgression', () => {
     await repo.deletePlan(p2.id)
     expect((await repo.listProgression()).map((r) => r.item_id)).toEqual([keep.id])
   })
+
+  it('does not list plan items removed by deleting their exercise (and ignores their orphaned rules)', async () => {
+    const { repo, db, ex1, ex2 } = await setup()
+    const plan = await repo.savePlan({ name: 'A' })
+    const day = await repo.savePlanDay({ plan_id: plan.id, name: 'D' })
+    const gone = await repo.addPlanItem(day.id, ex1.id)
+    const kept = await repo.addPlanItem(day.id, ex2.id)
+    expect((await repo.listProgression()).map((r) => r.item_id)).toEqual([gone.id, kept.id])
+
+    await repo.deleteExercise(ex1.id)
+
+    // The cascade leaves the removed item's rule row behind; the list must not surface it.
+    expect(await db.rules.get(gone.id)).toBeDefined()
+    expect((await repo.listProgression()).map((r) => r.item_id)).toEqual([kept.id])
+  })
 })

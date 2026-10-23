@@ -48,6 +48,8 @@ Rejected options: Supabase, Next.js/SSR, a separate frontend container (v1), App
 - Features are checked only through `can()` / `limit()` from `entitlements.ts`.
 - The API is versioned at `/api/v1`, and changes are additive only, because old mobile builds hit the new API.
 - Authorization checks live in the API layer. Don't rely on DB row-level security.
+- Deleting an exercise soft-deletes its live plan items; deleting gear removes it from live exercises' required gear. The UI always confirms first and states the impact; history keeps snapshotted names.
+- The "progression step" (smallest weight jump, `profile.weight_increment`) and new-item defaults (`profile.default_rule`) live in the Progression tab; never call it "weight increment" in the UI.
 
 ## Open questions (ask before assuming)
 
