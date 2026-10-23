@@ -122,6 +122,7 @@ function ExerciseRow({
       {confirming && (
         <DeleteConfirm
           name={ex.name}
+          subject="exercise"
           impact={impact}
           status={status}
           onRetry={() => void usage.refetch()}

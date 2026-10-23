@@ -1,3 +1,4 @@
+import type { UseQueryResult } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { DeleteConfirm, focusLibraryPanel, RowActions, useRestoreFocus } from '@/components/row-actions'
@@ -9,7 +10,8 @@ import type { Gear } from '@workout/shared'
 
 export function LibraryGear({ onEdit }: { onEdit: (gear: Gear) => void }) {
   const gear = useGear().data ?? []
-  const exercises = useExercises().data ?? []
+  const exercisesQuery = useExercises()
+  const exercises = exercisesQuery.data ?? []
 
   const counts = new Map<string, number>()
   const needing = new Map<string, number>()
@@ -30,8 +32,9 @@ export function LibraryGear({ onEdit }: { onEdit: (gear: Gear) => void }) {
           <GearRow
             key={g.id}
             gear={g}
-            activeCount={counts.get(g.id) ?? 0}
-            needCount={needing.get(g.id) ?? 0}
+            activeCount={exercisesQuery.isSuccess ? (counts.get(g.id) ?? 0) : null}
+            needCount={exercisesQuery.isSuccess ? (needing.get(g.id) ?? 0) : null}
+            exercisesQuery={exercisesQuery}
             onEdit={() => onEdit(g)}
           />
         ))}
@@ -44,11 +47,13 @@ function GearRow({
   gear: g,
   activeCount,
   needCount,
+  exercisesQuery,
   onEdit,
 }: {
   gear: Gear
-  activeCount: number
-  needCount: number
+  activeCount: number | null
+  needCount: number | null
+  exercisesQuery: Pick<UseQueryResult<unknown>, 'isFetching' | 'isSuccess' | 'refetch'>
   onEdit: () => void
 }) {
   const saveGear = useSaveGear()
@@ -56,8 +61,13 @@ function GearRow({
   const [confirming, setConfirming] = useState(false)
   const trashRef = useRestoreFocus(confirming)
 
+  const status: 'checking' | 'error' | 'ready' = exercisesQuery.isFetching
+    ? 'checking'
+    : exercisesQuery.isSuccess
+      ? 'ready'
+      : 'error'
   const impact =
-    needCount > 0
+    status === 'ready' && needCount !== null && needCount > 0
       ? `${pluralize(needCount, 'exercise')} ${needCount === 1 ? 'needs' : 'need'} this gear. ${needCount === 1 ? 'It stays' : 'They stay'} in your library but will no longer require it.`
       : "This can't be undone."
 
@@ -67,9 +77,11 @@ function GearRow({
         <label className="flex min-h-11 flex-1 items-center justify-between gap-3 text-sm">
           <span className="flex flex-col">
             {g.name}
-            <span className="text-muted-foreground text-xs">
-              {pluralize(activeCount, 'exercise')}
-            </span>
+            {activeCount !== null && (
+              <span className="text-muted-foreground text-xs">
+                {pluralize(activeCount, 'exercise')}
+              </span>
+            )}
           </span>
           <Switch
             checked={g.owned}
@@ -89,6 +101,9 @@ function GearRow({
       {confirming && (
         <DeleteConfirm
           name={g.name}
+          subject="gear"
+          status={status}
+          onRetry={() => void exercisesQuery.refetch()}
           impact={impact}
           pending={remove.isPending}
           onCancel={() => setConfirming(false)}

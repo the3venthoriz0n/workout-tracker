@@ -15,7 +15,7 @@ function renderLibrary(
 ) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <RepoProvider repo={repo}>
         <RouterProvider router={router} />
       </RepoProvider>
@@ -461,4 +461,50 @@ test('two rapid Enters in the exercise sheet create one exercise', async () => {
   await user.type(within(dialog).getByLabelText('Name'), 'Double Tap{Enter}{Enter}')
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   expect((await repo.listExercises()).filter((e) => e.name === 'Double Tap')).toHaveLength(1)
+})
+
+test('gear delete fails closed while the exercises query is pending', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  await repo.saveGear({ name: 'Zebra Sled', owned: true })
+  let release!: (v: Awaited<ReturnType<typeof repo.listExercises>>) => void
+  vi.spyOn(repo, 'listExercises').mockReturnValue(new Promise((r) => (release = r)))
+  renderLibrary(repo, '/library?section=gear')
+  await user.click(await screen.findByRole('button', { name: 'Delete Zebra Sled' }))
+  const confirm = await screen.findByRole('group', { name: 'Confirm delete Zebra Sled' })
+  expect(within(confirm).getByText('Checking which exercises need this gear…')).toBeTruthy()
+  expect(deleteBtn(confirm).disabled).toBe(true)
+  expect(within(confirm).queryByText(/can't be undone/)).toBeNull()
+  const row = screen.getByRole('switch', { name: 'Zebra Sled' }).closest('li')!
+  expect(within(row).queryByText(/0 exercises/)).toBeNull()
+  release([])
+  await waitFor(() => expect(deleteBtn(confirm).disabled).toBe(false))
+})
+
+test('gear delete fails closed when the exercises query errors, and Retry recovers', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  const g = await repo.saveGear({ name: 'Zebra Sled', owned: true })
+  await repo.saveExercise({ ...sample, required_gear_ids: [g.id] })
+  vi.spyOn(repo, 'listExercises').mockRejectedValue(new Error('boom'))
+  renderLibrary(repo, '/library?section=gear')
+  await user.click(await screen.findByRole('button', { name: 'Delete Zebra Sled' }))
+  const confirm = await screen.findByRole('group', { name: 'Confirm delete Zebra Sled' })
+  expect(
+    await within(confirm).findByText(
+      "Couldn't check which exercises need this gear. Some may depend on it.",
+    ),
+  ).toBeTruthy()
+  expect(deleteBtn(confirm).disabled).toBe(true)
+  expect(within(confirm).queryByText(/can't be undone/)).toBeNull()
+  const row = screen.getByRole('switch', { name: 'Zebra Sled' }).closest('li')!
+  expect(within(row).queryByText(/0 exercises/)).toBeNull()
+  vi.restoreAllMocks()
+  await user.click(within(confirm).getByRole('button', { name: 'Retry' }))
+  expect(
+    await within(confirm).findByText(
+      '1 exercise needs this gear. It stays in your library but will no longer require it.',
+    ),
+  ).toBeTruthy()
+  expect(deleteBtn(confirm).disabled).toBe(false)
 })

@@ -39,11 +39,23 @@ export function RowActions({
   )
 }
 
+const COPY = {
+  exercise: {
+    checking: 'Checking where this is used…',
+    error: "Couldn't check where this exercise is used. It may be in your plans.",
+  },
+  gear: {
+    checking: 'Checking which exercises need this gear…',
+    error: "Couldn't check which exercises need this gear. Some may depend on it.",
+  },
+} as const
+
 // Inline two-step confirmation shown inside the row (no second overlay). Fails closed:
 // Delete stays disabled until `status` is 'ready'. Focus starts on Cancel (safe default).
 export function DeleteConfirm({
   name,
-  status = 'ready',
+  subject,
+  status,
   impact,
   pending,
   onRetry,
@@ -51,7 +63,8 @@ export function DeleteConfirm({
   onCancel,
 }: {
   name: string
-  status?: 'checking' | 'error' | 'ready'
+  subject: 'exercise' | 'gear'
+  status: 'checking' | 'error' | 'ready'
   impact: string
   pending: boolean
   onRetry?: () => void
@@ -64,11 +77,11 @@ export function DeleteConfirm({
     <div role="group" aria-label={`Confirm delete ${name}`} className="flex flex-col gap-2 p-2">
       <p className="text-sm font-medium">Delete {name}?</p>
       {status === 'checking' && (
-        <p className="text-muted-foreground text-sm">Checking where this is used…</p>
+        <p className="text-muted-foreground text-sm">{COPY[subject].checking}</p>
       )}
       {status === 'error' && (
         <p role="alert" className="text-destructive text-sm">
-          Couldn&apos;t check where this exercise is used. It may be in your plans.
+          {COPY[subject].error}
         </p>
       )}
       {status === 'ready' && <p className="text-muted-foreground text-sm">{impact}</p>}
@@ -83,7 +96,11 @@ export function DeleteConfirm({
           Delete
         </Button>
         {status === 'error' && onRetry && (
-          <Button type="button" variant="outline" className="min-h-11 flex-1" onClick={onRetry}>
+          <Button type="button" variant="outline" className="min-h-11 flex-1" onClick={() => {
+              cancelRef.current?.focus()
+              onRetry()
+            }}
+          >
             Retry
           </Button>
         )}
