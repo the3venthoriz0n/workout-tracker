@@ -44,9 +44,12 @@ pnpm *args: setup
 install: (pnpm "install --frozen-lockfile")
 
 # Typecheck, test and build: the same checks CI runs
-check: (pnpm "install --frozen-lockfile") (pnpm "typecheck") (pnpm "test") (pnpm "build")
+check: (pnpm "install --frozen-lockfile") (pnpm "typecheck") test (pnpm "build")
 
-test: (pnpm "test")
+# API tests need the throwaway db-test service (tmpfs, no published port); starting it is a no-op when it is already up
+test: setup
+    docker compose up --detach --wait db-test
+    docker compose run --rm --no-deps dev pnpm test
 
 typecheck: (pnpm "typecheck")
 

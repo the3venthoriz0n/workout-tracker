@@ -13,6 +13,23 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    services:
+      # Throwaway database for the API tests; same image as compose.yaml's db-test.
+      postgres:
+        image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL_TEST: postgres://test:test@localhost:5432/test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
