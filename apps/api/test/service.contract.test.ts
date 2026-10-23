@@ -6,23 +6,14 @@ import { withTestDb } from './harness.js'
 
 runRepoContract(
   'Service (Postgres)',
-  async () => {
+  async (opts) => {
     const { db, cleanup } = await withTestDb()
     const userId = `u_${randomUUID()}`
     await db.insert(user).values({ id: userId, name: userId, email: `${userId}@example.test` })
     const repo = createService(db, userId)
-    await repo.init()
-    return { repo, cleanup }
+    // An empty account is the import target: it must have no profile yet.
+    if (!opts?.empty) await repo.init()
+    return { repo, cleanup, importAll: (data) => repo.importAll(data) }
   },
-  // Sessions and import arrive in Task 2c; those groups are added there.
-  {
-    groups: ['profile', 'gear', 'exercises', 'plans', 'progression'],
-    // These cases drive startSession/finishSession/exportAll, which arrive in Task 2c (remove then).
-    pending: [
-      'unit switch converts exercise defaults, item weights/targets, set-log weights and add_weight rule amounts, and resets the step',
-      'deleteExercise cascades to its live plan items and keeps history names',
-      'addPlanItem uses default_rule when set, else the default rule',
-      "editing an item's reps or weight clears targets and the fail streak",
-    ],
-  },
+  { groups: ['profile', 'gear', 'exercises', 'plans', 'progression', 'sessions', 'transfer'] },
 )

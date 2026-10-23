@@ -3,15 +3,40 @@
 import {
   exerciseSchema,
   gearSchema,
+  itemStateSchema,
   planDaySchema,
   planItemSchema,
   planSchema,
   profileSchema,
   progressionRuleSchema,
   ruleInputSchema,
+  setLogSchema,
+  workoutSessionSchema,
 } from '@workout/shared'
-import type { Exercise, Gear, Plan, PlanDay, PlanItem, Profile, ProgressionRule } from '@workout/shared'
-import type { exercise, gear, plan, planDay, planItem, profile, progressionRule } from '../db/schema.js'
+import type {
+  Exercise,
+  Gear,
+  ItemState,
+  Plan,
+  PlanDay,
+  PlanItem,
+  Profile,
+  ProgressionRule,
+  SetLog,
+  WorkoutSession,
+} from '@workout/shared'
+import type {
+  exercise,
+  gear,
+  itemState,
+  plan,
+  planDay,
+  planItem,
+  profile,
+  progressionRule,
+  setLog,
+  workoutSession,
+} from '../db/schema.js'
 
 export const now = (): Date => new Date()
 
@@ -125,6 +150,43 @@ export function toRule(row: typeof progressionRule.$inferSelect): ProgressionRul
     fail_streak_limit: row.failStreakLimit,
     deload_pct: num(row.deloadPct),
     rep_ceiling: row.repCeiling,
+    ...syncOf(row),
+  })
+}
+
+export function toItemState(row: typeof itemState.$inferSelect): ItemState {
+  return itemStateSchema.parse({ plan_item_id: row.planItemId, fail_streak: row.failStreak, ...syncOf(row) })
+}
+
+export function toSession(row: typeof workoutSession.$inferSelect): WorkoutSession {
+  return workoutSessionSchema.parse({
+    id: row.id,
+    plan_day_id: row.planDayId,
+    plan_name: row.planName,
+    day_name: row.dayName,
+    started_at: iso(row.startedAt),
+    completed_at: isoOrNull(row.completedAt),
+    note: row.note,
+    user_id: row.userId,
+    ...syncOf(row),
+  })
+}
+
+export function toSetLog(row: typeof setLog.$inferSelect): SetLog {
+  return setLogSchema.parse({
+    id: row.id,
+    session_id: row.sessionId,
+    plan_item_id: row.planItemId,
+    exercise_id: row.exerciseId,
+    exercise_name: row.exerciseName,
+    set_no: row.setNo,
+    position: row.position,
+    target_reps: row.targetReps,
+    target_weight: num(row.targetWeight),
+    actual_reps: row.actualReps,
+    weight: num(row.weight),
+    done: row.done,
+    note: row.note,
     ...syncOf(row),
   })
 }

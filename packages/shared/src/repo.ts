@@ -61,6 +61,20 @@ export type ProgressionRow = {
   rule: ProgressionRule | null
 }
 export class SessionInProgressError extends Error {}
+// Thrown by importAll() when the account already has a profile (import is first-time only).
+export class AlreadyHasDataError extends Error {
+  constructor() {
+    super('Account already has data')
+    this.name = 'AlreadyHasDataError'
+  }
+}
+// Thrown by importAll() when the file is malformed or references rows that are not in it.
+export class ImportInvalidError extends Error {
+  constructor(message = 'Invalid import file') {
+    super(message)
+    this.name = 'ImportInvalidError'
+  }
+}
 // Thrown when an id does not resolve to a live row owned by the caller (missing, deleted or foreign).
 export class NotFoundError extends Error {
   constructor(what = 'Resource') {
@@ -109,7 +123,7 @@ export interface Repo {
   startSession(planDayId: string): Promise<SessionDetail> // throws SessionInProgressError
   updateSet(
     id: string,
-    patch: { done?: boolean; actual_reps?: number; weight?: number; note?: string },
+    patch: { done?: boolean; actual_reps?: number; weight?: number; note?: string; updated_at?: string },
   ): Promise<SetLog>
   updateSessionNote(id: string, note: string): Promise<void>
   finishSession(id: string): Promise<FinishSummary>

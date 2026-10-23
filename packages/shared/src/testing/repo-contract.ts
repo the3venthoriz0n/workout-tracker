@@ -28,7 +28,10 @@ export type ContractGroup =
   | 'sessions'
   | 'transfer'
 
-type Ctx = { repo: Repo; h: RepoHarness; make: () => Promise<RepoHarness>; skip: () => void }
+/** `empty`: the account must NOT be initialised (no profile, no seeds); used for the import target. */
+export type MakeOptions = { empty?: boolean }
+
+type Ctx = { repo: Repo; h: RepoHarness; make: (opts?: MakeOptions) => Promise<RepoHarness>; skip: () => void }
 
 function must<T>(value: T | undefined | null, what: string): T {
   if (value === undefined || value === null) throw new Error(`contract setup: ${what} missing`)
@@ -103,7 +106,7 @@ function normalise(data: ExportData) {
 
 export function runRepoContract(
   label: string,
-  make: () => Promise<RepoHarness>,
+  make: (opts?: MakeOptions) => Promise<RepoHarness>,
   // `pending`: exact titles of cases that need methods the harness has not implemented yet
   // (reported as skipped, not silently dropped). Remove entries as the methods land.
   opts?: { groups?: ContractGroup[]; pending?: string[] },
@@ -115,8 +118,8 @@ export function runRepoContract(
 
   describe(label, () => {
     const live: RepoHarness[] = []
-    const fresh = async () => {
-      const h = await make()
+    const fresh = async (opts?: MakeOptions) => {
+      const h = await make(opts)
       live.push(h)
       return h
     }
@@ -787,7 +790,7 @@ export function runRepoContract(
         await repo.startSession(day.id) // left in progress
 
         const data = await repo.exportAll()
-        const other = await makeAnother()
+        const other = await makeAnother({ empty: true })
         const importAll = must(other.importAll, 'importAll')
         await importAll(data)
 

@@ -17,12 +17,19 @@ import {
 } from './plans.js'
 import { listProgression } from './progression.js'
 import { getProfile, init, updateProfile } from './profile.js'
+import {
+  discardSession,
+  finishSession,
+  getActiveSession,
+  getSession,
+  listSessions,
+  startSession,
+  updateSessionNote,
+  updateSet,
+} from './sessions.js'
+import { exportAll, importAll } from './transfer.js'
 
 export type Service = Repo & { importAll(data: ExportData): Promise<void> }
-
-const notImplemented = async (): Promise<never> => {
-  throw new Error('not implemented')
-}
 
 export function createService(db: Db, userId: string): Service {
   return {
@@ -52,16 +59,16 @@ export function createService(db: Db, userId: string): Service {
     move: (kind, id, direction) => move(db, userId, kind, id, direction),
     listProgression: () => listProgression(db, userId),
 
-    // STUBS until Task 2c (sessions, export, import)
-    getActiveSession: notImplemented,
-    startSession: notImplemented,
-    updateSet: notImplemented,
-    updateSessionNote: notImplemented,
-    finishSession: notImplemented,
-    discardSession: notImplemented,
-    listSessions: notImplemented,
-    getSession: notImplemented,
-    exportAll: notImplemented,
-    importAll: notImplemented,
+    // sessions, export, import (Task 2c)
+    getActiveSession: () => getActiveSession(db, userId),
+    startSession: (planDayId) => startSession(db, userId, planDayId),
+    updateSet: (id, patch) => updateSet(db, userId, id, patch),
+    updateSessionNote: (id, note) => updateSessionNote(db, userId, id, note),
+    finishSession: (id) => finishSession(db, userId, id),
+    discardSession: (id) => discardSession(db, userId, id),
+    listSessions: () => listSessions(db, userId),
+    getSession: (id) => getSession(db, userId, id),
+    exportAll: () => exportAll(db, userId),
+    importAll: (data) => importAll(db, userId, data),
   }
 }
