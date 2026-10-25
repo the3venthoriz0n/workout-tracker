@@ -71,6 +71,12 @@ export function AccountCard() {
                 ? "Your guest data hasn't been uploaded. Signing out deletes it from this device."
                 : 'Sign out? This device returns to an empty guest profile. Your data stays in your account.'}
             </p>
+            {a.pendingChanges > 0 && (
+              <p role="alert" className="text-destructive text-sm">
+                You have {a.pendingChanges} {a.pendingChanges === 1 ? 'change' : 'changes'} that haven&apos;t reached the
+                server yet. Signing out discards {a.pendingChanges === 1 ? 'it' : 'them'}.
+              </p>
+            )}
             {a.pendingUpload && (
               <Button variant="outline" className="min-h-11" onClick={() => void exportGuest()}>
                 Export guest data first
@@ -81,7 +87,7 @@ export function AccountCard() {
                 variant="destructive"
                 className="min-h-11"
                 disabled={a.busy}
-                onClick={() => void a.signOut().then(() => setConfirmingSignOut(false))}
+                onClick={() => void a.signOut({ discardPending: true }).then(() => setConfirmingSignOut(false))}
               >
                 Confirm sign out
               </Button>

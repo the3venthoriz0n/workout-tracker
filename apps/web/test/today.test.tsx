@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
+import { OfflineError } from '@workout/shared'
 import { toast } from 'sonner'
 import { afterEach, expect, test, vi } from 'vitest'
 import { routes } from '../src/app/router'
@@ -341,4 +342,19 @@ test('deload summary shows the reps reset', async () => {
   await waitFor(() => expect(pressed(1)).toBe('true'))
   await user.click(screen.getByRole('button', { name: 'Finish workout' }))
   expect(await screen.findByText(`${ex.name}: deload 135 → 120 lb · reps reset to 5`)).toBeTruthy()
+})
+
+test('finishing while offline says to reconnect and keeps the workout', async () => {
+  const { repo } = await seed()
+  const day = (await repo.getPlan((await repo.listPlans())[0]!.id))!.days[0]!
+  await repo.startSession(day.id)
+  vi.spyOn(repo, 'finishSession').mockRejectedValue(new OfflineError())
+  const err = vi.spyOn(toast, 'error').mockImplementation(() => 'x')
+  vi.spyOn(console, 'error').mockImplementation(() => undefined)
+  renderApp(repo)
+  const user = userEvent.setup()
+  await user.click(await screen.findByRole('button', { name: /^Set 1:/ }))
+  await user.click(screen.getByRole('button', { name: 'Finish workout' }))
+  await waitFor(() => expect(err).toHaveBeenCalledWith(expect.stringMatching(/^Reconnect to finish/)))
+  expect(screen.getByRole('button', { name: 'Finish workout' })).toBeTruthy()
 })

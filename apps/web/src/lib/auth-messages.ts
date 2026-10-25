@@ -7,6 +7,7 @@ export const AUTH_ERROR_TEXT: Record<AuthErrorKind, string> = {
   email_taken: "That email can't be used for a new account. Try signing in instead.",
   invalid_input: 'Check the email and password and try again.',
   server: 'Something went wrong on our side. Try again in a moment.',
+  unsynced_changes: "Some changes haven't reached the server yet. Reconnect and try again, or sign out and discard them.",
   check_failed: "Couldn't check your account, so nothing was changed. Try again.",
 }
 

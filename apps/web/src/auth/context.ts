@@ -10,11 +10,14 @@ export type AuthState = {
   pendingUpload: boolean
   /** Signed in to an account that has data; waiting for the user to confirm discarding guest data. */
   confirmingDiscard: boolean
+  /** Set edits queued while offline that have not reached the server (0 in guest mode). */
+  pendingChanges: number
   busy: boolean
   error: AuthErrorKind | null
   signUp(email: string, password: string): Promise<void>
   signIn(email: string, password: string): Promise<void>
-  signOut(): Promise<void>
+  /** With unsent edits this refuses (error 'unsynced_changes') unless `discardPending` says the user confirmed. */
+  signOut(opts?: { discardPending?: boolean }): Promise<void>
   retryUpload(): Promise<void>
   confirmDiscard(): Promise<void>
   cancelDiscard(): Promise<void>

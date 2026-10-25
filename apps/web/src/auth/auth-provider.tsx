@@ -4,6 +4,7 @@ import { ProfileNotFoundError } from '@workout/shared'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { SessionPrompt } from '@/components/session-prompt'
+import { isOfflineRepo, type OfflineRepo } from '@/repo/offline'
 import { RepoProvider } from '@/repo/provider'
 import { AuthError, type AuthClient, type AuthErrorKind } from './client'
 import { AuthContext, type AuthState } from './context'
@@ -31,19 +32,30 @@ type S =
 type LocalWithReset = Repo & { reset(): Promise<void> }
 
 const HINT = 'wt-account-hint'
-function setHint(on: boolean) {
+type Hint = { id: string; email: string }
+// The hint remembers that this device was signed in (and as whom) so a cold start without a
+// connection can open the account's offline mirror instead of guest data.
+function setHint(h: Hint | null) {
   try {
-    if (on) localStorage.setItem(HINT, '1')
+    if (h) localStorage.setItem(HINT, h.id ? JSON.stringify(h) : '1')
     else localStorage.removeItem(HINT)
   } catch {
     // storage may be blocked; the hint is only a convenience
   }
 }
-function hasHint(): boolean {
+function readHint(): { present: boolean; id?: string; email?: string } {
   try {
-    return localStorage.getItem(HINT) === '1'
+    const raw = localStorage.getItem(HINT)
+    if (!raw) return { present: false }
+    try {
+      const v = JSON.parse(raw) as Partial<Hint> | null
+      if (v && typeof v.id === 'string' && v.id && typeof v.email === 'string') return { present: true, id: v.id, email: v.email }
+    } catch {
+      // legacy hint ('1')
+    }
+    return { present: true }
   } catch {
-    return false
+    return { present: false }
   }
 }
 
@@ -57,7 +69,8 @@ export function AuthProvider({
 }: {
   auth: AuthClient
   local: LocalWithReset
-  createApi: () => ApiRepo
+  /** Receives the signed-in account id so a queue and mirror can be kept per account. */
+  createApi: (accountId: string) => ApiRepo
   children: ReactNode
 }) {
   const queryClient = useQueryClient()
@@ -67,20 +80,59 @@ export function AuthProvider({
   const busyRef = useRef(false)
   const sRef = useRef(s)
   sRef.current = s
+  const [pendingChanges, setPendingChanges] = useState(0)
   const apiRef = useRef<ApiRepo | null>(null)
-  const getApi = () => (apiRef.current ??= createApi())
+  const apiAccount = useRef('')
+  const unsubApi = useRef<(() => void) | null>(null)
+  const accountRef = useRef('') // id of the account this device is (becoming) signed in as
+  const goRef = useRef<(next: S) => void>(() => undefined)
+  const lastVersion = useRef(0)
+
+  const dropApi = () => {
+    unsubApi.current?.()
+    unsubApi.current = null
+    const old = apiRef.current
+    apiRef.current = null
+    if (isOfflineRepo(old)) old.dispose()
+    setPendingChanges(0)
+  }
+  // One API repo per account id: switching accounts disposes the old one (and its replay timers).
+  const getApi = (): ApiRepo => {
+    if (apiRef.current && apiAccount.current === accountRef.current) return apiRef.current
+    dropApi()
+    const api = createApi(accountRef.current)
+    apiRef.current = api
+    apiAccount.current = accountRef.current
+    if (isOfflineRepo(api)) {
+      lastVersion.current = 0
+      setPendingChanges(api.pending())
+      unsubApi.current = api.subscribe((st) => {
+        setPendingChanges(st.pending)
+        const cur = sRef.current
+        const live = cur.kind === 'signed-in' && cur.phase === 'ready'
+        if (st.paused && live) queueMicrotask(() => goRef.current({ kind: 'expired' }))
+        else if (st.version !== lastVersion.current) {
+          lastVersion.current = st.version
+          if (live) void queryClient.invalidateQueries() // replay changed server state: refresh what is on screen
+        }
+      })
+    }
+    return api
+  }
+  const offlineApi = (): OfflineRepo | null => (isOfflineRepo(apiRef.current) ? apiRef.current : null)
   const [attempt, setAttempt] = useState(0)
 
   // Every state change can swap the repo, so every one drops all cached query data first.
   const go = useCallback(
     (next: S) => {
       queryClient.clear()
-      if (next.kind === 'signed-in') setHint(true)
-      else if (next.kind === 'guest') setHint(false)
+      if (next.kind === 'signed-in') setHint({ id: accountRef.current, email: next.email })
+      else if (next.kind === 'guest') setHint(null)
       setS(next)
     },
     [queryClient],
   )
+  goRef.current = go
 
   // Startup (and Retry): who am I?
   useEffect(() => {
@@ -90,11 +142,23 @@ export function AuthProvider({
       try {
         user = await auth.session()
       } catch {
-        if (!cancelled) go(hasHint() ? { kind: 'unreachable' } : { kind: 'guest' })
-        return
+        if (cancelled) return
+        const hint = readHint()
+        if (!hint.present) return go({ kind: 'guest' })
+        // Offline cold start: if this account's active workout (or unsent edits) is on the device, open on it.
+        if (hint.id && hint.email) {
+          accountRef.current = hint.id
+          const api = getApi()
+          if (isOfflineRepo(api) && (await api.hasOfflineData().catch(() => false))) {
+            if (!cancelled) go({ kind: 'signed-in', email: hint.email, phase: 'ready' })
+            return
+          }
+        }
+        return go({ kind: 'unreachable' })
       }
       if (cancelled) return
       if (!user) return go({ kind: 'guest' })
+      accountRef.current = user.userId
       try {
         await getApi().getProfile()
         if (!cancelled) go({ kind: 'signed-in', email: user.email, phase: 'ready' })
@@ -130,7 +194,25 @@ export function AuthProvider({
     }
   }, [queryClient, go])
 
-  const deps = (): FlowDeps => ({ auth, local, api: getApi() })
+  // Sign-in/up flows learn the account id from the auth reply; the API repo is built for that id afterwards.
+  const learn = async (u: Promise<{ userId: string; email: string }>) => {
+    const r = await u
+    accountRef.current = r.userId
+    return r
+  }
+  const flowAuth: AuthClient = {
+    ...auth,
+    signIn: (e, p) => learn(auth.signIn(e, p)),
+    signUp: (e, p) => learn(auth.signUp(e, p)),
+  }
+  const deps = (): FlowDeps => ({
+    auth: flowAuth,
+    local,
+    api: {
+      getProfile: () => getApi().getProfile(),
+      importAll: (d) => (getApi() as ApiRepo).importAll(d),
+    },
+  })
 
   const applyOutcome = useCallback(
     (o: FlowOutcome, email: string) => {
@@ -166,6 +248,7 @@ export function AuthProvider({
     email: s.kind === 'signed-in' ? s.email : undefined,
     pendingUpload: s.kind === 'signed-in' && s.phase === 'pending-upload',
     confirmingDiscard: s.kind === 'signed-in' && s.phase === 'confirm-discard',
+    pendingChanges: s.kind === 'signed-in' || s.kind === 'expired' ? pendingChanges : 0,
     busy,
     error,
     signUp: (email, password) =>
@@ -175,18 +258,32 @@ export function AuthProvider({
         if (sRef.current.kind === 'expired') {
           // Re-authenticating: the local DB was already reset, so there is nothing to confirm or upload.
           const u = await auth.signIn(email, password)
+          // Same account: its paused queue carries on. Another account: getApi() builds a fresh repo for the
+          // new id and drops the old one, so the previous account's queued edits are never replayed here.
+          const same = !!u.userId && u.userId === accountRef.current
+          accountRef.current = u.userId
+          if (same) offlineApi()?.resume()
           return go({ kind: 'signed-in', email: u.email || email, phase: 'ready' })
         }
         applyOutcome(await signInFlow(deps(), email, password), email)
       }),
-    signOut: () =>
+    signOut: (opts) =>
       run(async () => {
+        const off = offlineApi()
+        if (off && !opts?.discardPending) {
+          if (sRef.current.kind === 'signed-in' && off.pending() > 0) await off.flush() // try to send them first
+          if (off.pending() > 0) throw new AuthError('unsynced_changes')
+        }
         if (sRef.current.kind === 'expired') {
           await auth.signOut().catch(() => undefined) // session is already gone
           await local.reset()
         } else {
           await signOutFlow(deps())
         }
+        // Signed out for real (and, if there were unsent edits, the user said to drop them).
+        await off?.clear().catch(() => undefined)
+        dropApi()
+        accountRef.current = ''
         go({ kind: 'guest' })
       }),
     retryUpload: () =>
@@ -199,6 +296,8 @@ export function AuthProvider({
     cancelDiscard: () =>
       run(async () => {
         await cancelDiscardFlow(deps())
+        dropApi() // nothing of this account is kept on the device; any queue it has stays keyed to it
+        accountRef.current = ''
         go({ kind: 'guest' })
       }),
     retrySession: () => {

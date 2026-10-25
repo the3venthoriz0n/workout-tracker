@@ -6,6 +6,7 @@ export type AuthErrorKind =
   | 'invalid_input'
   | 'server'
   | 'check_failed'
+  | 'unsynced_changes'
 
 // Typed, body-free error: the server's response text is never kept or shown.
 export class AuthError extends Error {

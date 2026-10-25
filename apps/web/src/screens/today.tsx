@@ -1,6 +1,7 @@
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router'
+import { OfflineError } from '@workout/shared'
 import { toast } from 'sonner'
 import { Screen } from '@/app/screen'
 import { SetRow } from '@/components/set-row'
@@ -180,7 +181,12 @@ function ActiveSession({
   })
 
   function doFinish() {
-    finish.mutateAsync(session.id).then(onFinished, (err: unknown) => notifyError(err, "Couldn't finish the workout"))
+    finish.mutateAsync(session.id).then(onFinished, (err: unknown) => {
+      if (err instanceof OfflineError) {
+        console.error(err)
+        toast.error('Reconnect to finish. Your sets are saved on this device.')
+      } else notifyError(err, "Couldn't finish the workout")
+    })
   }
 
   function save(id: string, patch: Parameters<typeof updateSet.mutateAsync>[0]['patch']) {
