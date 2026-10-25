@@ -41,7 +41,7 @@ packages/
   shared/         zod schemas, types and logic shared by api and web
 deploy/           production compose stack, Caddyfile, deploy script (runs on the server)
 infra/terraform/  DigitalOcean Droplet, firewall and reserved IP
-docs/             spec, plans, release checklist
+docs/             spec, architecture diagrams (docs/architecture.md), plans, release checklist
 .github/          CI, release/deploy, CodeQL, Dependabot
 ```
 

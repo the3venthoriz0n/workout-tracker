@@ -6,6 +6,8 @@ A free, very simple lifting tracker: exercise library, gear, plans with per-plan
 
 [docs/spec.md](docs/spec.md) covers the data model, core logic, API, screens and deploy, plus a decisions log, open questions and unverified facts. Read it before making design decisions.
 
+Diagrams of the system, repo layout, Repo contract and sign-in flow: [docs/architecture.md](docs/architecture.md).
+
 When a decision changes, update the spec. Don't leave it only in chat.
 
 ## Working style
