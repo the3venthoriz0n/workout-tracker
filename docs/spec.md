@@ -26,7 +26,8 @@ A free, very simple lifting tracker. You build your own exercise library, pick t
 | --- | --- | --- |
 | **M1: Local MVP (guest mode)** ✅ done | Gear (a section of Library), exercise library, plans, progression rules, Today logging, progression engine, history, settings and export. Everything runs on-device through `LocalRepo`. | `just dev`, `just preview` |
 | **M2: Accounts and sync** ✅ done | Postgres schema (Drizzle), Better Auth email + password, the REST API in §9, `ApiRepo`, guest-data import on signup, offline set-log queue. Plan: `docs/superpowers/plans/2026-10-22-m2-accounts-and-sync.md`. | `just dev`, `just preview` |
-| M3: Production | Droplet via Terraform, GitHub production environment, first `v*` release, nightly `pg_dump` backups | DigitalOcean |
+| **M2b: Email verification and password reset** (planned) | Resend in production, console mailer in development; verify before first sign-in; forgot-password flow. Plan: `docs/superpowers/plans/2026-10-25-m2b-email-auth.md`. | `just dev` |
+| M3: Production (on hold) | Droplet via Terraform behind Cloudflare (proxy, Full (strict), origin firewall limited to Cloudflare), scripted secret seeding, GitHub production environment, first `v*` release, nightly `pg_dump` backups. Plan: `docs/superpowers/plans/2026-10-25-m3-production-cloudflare.md`. | DigitalOcean + Cloudflare |
 | M4: Mobile | Capacitor wrap, bearer auth, store builds | iOS / Android |
 | Later | Google/Apple sign-in, charts/PRs, AI plan helper, Pro gating, frontend/backend container split | |
 
@@ -145,7 +146,7 @@ Sessions pre-fill from `targetReps` and `targetWeight`. Overriding a plan item n
   - **Log in**: if the account already has data, local guest data is discarded after an explicit confirmation that offers a JSON export first; there is no merge, because seed data would duplicate. If the account is new and empty, the guest data is imported as in sign up.
   - **Sign out**: clears the session and local caches and returns to a fresh guest database; the account's data stays on the server.
   - **Offline while signed in**: only set logs are queued. `ApiRepo` mirrors the active session locally; set toggles and edits update the mirror immediately and are queued as `PATCH /sets/:id` calls carrying the client `updated_at`, replayed in order when the connection returns (on the `online` event, at app start, and every 30 s while the queue is non-empty). The server applies a set update only if its `updated_at` is newer than the stored one (last write wins). A replayed update the server rejects with a 4xx other than 401 is dropped and the user is told; a 401 pauses the queue until the user signs in again. Starting or finishing a workout needs a connection.
-- **Web auth (M2)**: Better Auth email + password with HttpOnly, SameSite=Lax session cookies (Secure in production), same origin so no CORS. Passwords are 10-128 characters. Better Auth's rate limiting is on for sign in and sign up. No email verification or password reset yet.
+- **Web auth (M2)**: Better Auth email + password with HttpOnly, SameSite=Lax session cookies (Secure in production), same origin so no CORS. Passwords are 10-128 characters. Better Auth's rate limiting is on for sign in and sign up. Email verification before first sign-in and password reset by email are planned in M2b (Resend); until then a forgotten password means a lost account.
 - **Mobile auth (M4)**: Better Auth bearer plugin; token in Capacitor Preferences, sent as `Authorization: Bearer`. Capacitor origins are added to CORS and `trustedOrigins` (exact strings unverified).
 - **Social login (later)**: Google blocks OAuth in WebViews (`disallowed_useragent`), so mobile needs a native plugin (`@capgo/capacitor-social-login`, which handles both Google and Apple), with the ID token verified server-side. Offering Google means also offering Sign in with Apple (App Store Guideline 4.8), so ship both together.
   - Apple setup: enable Sign in with Apple on the App ID that matches the Capacitor `appId`, then regenerate its provisioning profiles. iOS uses the native sheet. Android and web need a Services ID plus an HTTPS return URL on the API (Apple rejects `localhost`).
@@ -153,18 +154,20 @@ Sessions pre-fill from `targetReps` and `targetWeight`. Overriding a plan item n
 
 ## 8. Screens
 
-Six tabs (Today, Plans, Library, Progression, History, Settings): a bottom nav on phones and a sidebar on desktop. **Today** is home. Mobile-first, one column.
+Five tabs (Today, Plans, Library, Progress for `/progression`, History): a bottom nav on phones and a sidebar on desktop. Settings is a gear button in every screen header. **Today** is home. Mobile-first, one column.
 
 | Route | Screen | What it does |
 | --- | --- | --- |
 | `/` | Today | No session: pick a plan day, then Start. In progress: exercises with their sets pre-filled from targets. Tap a set to mark it done; tap again to undo. Long-press (or an edit button) edits reps and weight. Each exercise has a video link and notes. Finish runs progression and shows a short summary of the new targets. |
 | `/plans`, `/plans/:id` | Plans | List and create plans; inside a plan, manage days and items. Inline edit of sets/reps/weight overrides and the progression rule per item. Reorder with up/down buttons. Add items via the exercise picker. |
 | `/library` | Library | One Add button in the header (same place and look for both sections; opens an exercise or gear sheet). Two sections: Exercises (list, active toggle, notes, video link, required gear, defaults) and Gear (owned toggles). Every row has pencil (edit in the sheet; gear can be renamed) and trash row actions. Delete asks for inline confirmation that states the impact and cascades: deleting an exercise also removes it from plans (past workouts keep their records); deleting gear unlinks it from exercises that required it. Section is kept in `?section=gear`. |
-| `/progression` | Progression | Three cards: the progression step (smallest weight change you can load; steps and deloads snap to it), defaults for new plan items (the `default_rule`, which only affects items added afterwards), and every live plan item's rule grouped by plan and day, each editable in place. |
+| `/progression` | Progression (tab label "Progress") | Three cards: the progression step (smallest weight change you can load; steps and deloads snap to it), defaults for new plan items (the `default_rule`, which only affects items added afterwards), and every live plan item's rule grouped by plan and day, each editable in place. |
 | `/history`, `/history/:id` | History | Completed sessions, newest first; tap one for exact sets, reps and weights; skipped sets show planned numbers. An Edit toggle on finished workouts allows editing reps, weight, done/skipped, set notes and the session note (no date edit or delete); edits never change plan targets or progression. |
 | `/settings` | Settings | Units, export JSON, and an Account card: sign up, log in, log out, and (after a failed upload) retry the guest-data upload. Signed out, the app is in guest mode. |
 
-UX rules: tap targets at least 44 px; `inputmode="decimal"` for weight and `inputmode="numeric"` for reps; never more than one modal or sheet open; edit in place; works in light and dark mode.
+UX rules: tap targets at least 44 px; `inputmode="decimal"` for weight and `inputmode="numeric"` for reps; never more than one modal or sheet open; edit in place; follows the system light/dark mode (CSS media query, no toggle); inputs at least 16 px text (no iOS zoom); the Start/Finish button is docked above the tab bar; the screen stays awake during a workout (Wake Lock, best effort); a short vibration when a set is marked done unless reduced motion is on.
+
+Visual direction: "gym signage, not SaaS". Chalk background, iron text, competition-plate colours (blue primary, red destructive, green success), Barlow for body and Barlow Condensed for titles and numbers (self-hosted via @fontsource, so it works offline). Text colour pairs meet WCAG AA. Small 6 px radius for rows and inputs; the large radius only for sheets and primary buttons. The bold element is the Today set row; everything else is plain rows with dividers. PWA basics: a web manifest and icons (no service worker yet).
 
 ## 9. API surface (M2)
 
@@ -257,7 +260,12 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | No ad-hoc exercises or per-set schemes in v1 | Keeps logging and progression simple |
 | IDs via `newId()` | `crypto.randomUUID` needs a secure context; LAN phone testing over http would otherwise fail at startup |
 | REST resources for the M2 API (owner's choice) | Conventional and easy to inspect; costs about 30 routes, so a shared contract test suite guards against drift between `LocalRepo`, the server and `ApiRepo` |
-| Email + password only in M2, no email sending (owner's choice) | Verification and password reset need an email provider; deferred |
+| Email + password only in M2, no email sending (owner's choice) | Verification and password reset need an email provider; deferred to M2b |
+| Verify the email before the first sign-in (owner's choice, M2b) | Stops typo'd and fake addresses, and makes password reset safe because every address was proven. Guest data stays on the device until the first successful sign-in, which already uploads it for a new account |
+| Resend for email, console mailer in development (owner's choice) | No domain or account needed to build and test; production refuses to start without `RESEND_API_KEY` and `MAIL_FROM` |
+| Cloudflare proxy in front of the Droplet, Full (strict), origin firewall limited to Cloudflare's ranges (owner's choice) | Hides the origin and absorbs abuse. Caddy keeps its own Let's Encrypt certificate (HTTP-01 works through the proxy), so no origin certificate secret is needed |
+| Keep the API's own auth rate limits on in production, with a development-only off switch | Second layer if the origin is ever reached directly; Caddy forwards the real client IP so limits are per user, not per Cloudflare node |
+| Account responses never reveal whether an email exists (M2b) | Uniform wording for sign-up, resend and reset |
 | Composite primary keys `(user_id, id)` | Client-generated ids can't collide across accounts or reveal another user's rows |
 | 404 (not 403) for ids owned by someone else | Doesn't leak which ids exist |
 | Guest import only into an account with no profile; logging into an existing account discards local guest data after confirmation | Seed data would duplicate on merge; a JSON export is offered first |
@@ -269,8 +277,8 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 
 None block M3, but resolve these before opening sign-up to real users (sign-up is open, with rate limiting only):
 
-- Email verification and password reset (need an email provider; until then a forgotten password means a lost account), account deletion and per-account data export endpoints, off-box database backups, CSV export.
-- M3: Domain name, and the DigitalOcean region (`sfo2` in Terraform may not accept new Droplets; `just infra-plan` will tell).
+- Account deletion and per-account data export endpoints, off-box database backups, CSV export.
+- M3: Domain name (not yet bought; Cloudflare Registrar sells at cost), the Resend sending subdomain, and the DigitalOcean region (`sfo2` in Terraform may not accept new Droplets; `just infra-plan` will tell).
 
 **Unverified; check before building the part that depends on them**: Capacitor origin strings for CORS and `trustedOrigins`; Apple's in-app payment rules; App Store stance on web wrappers; Gemini free-tier terms and limits; Capacitor live-update terms; whether Dependabot supports the pnpm 12 lockfile; whether new GHCR packages default to private.
 
