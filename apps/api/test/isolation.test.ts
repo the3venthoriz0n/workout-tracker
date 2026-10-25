@@ -179,7 +179,8 @@ describe('authentication on every route', () => {
   it('no cookie, a tampered cookie, a garbage cookie and a signed-out cookie are all 401', async () => {
     const d = await signUpClient(h, 'dave@example.com')
     const real = a.cookie
-    const tampered = real.replace(/(=[^;]{4})[^;]/, (_m, p: string) => `${p}${real.includes('Z') ? 'Y' : 'Z'}`)
+    // Replace one character with a different one, whatever it was (a fixed letter collides ~1 in 60 runs).
+    const tampered = real.replace(/(=[^;]{4})([^;])/, (_m, p: string, c: string) => `${p}${c === 'Z' ? 'Y' : 'Z'}`)
     expect(tampered).not.toBe(real)
     const forged = real.split(';').map((kv) => kv.replace(/=.*/, '=forged-token.forged-signature')).join('; ')
     const out = await h.request('/api/auth/sign-out', { method: 'POST', body: {}, cookie: d.cookie })
