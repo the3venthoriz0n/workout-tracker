@@ -15,7 +15,15 @@ just preview    # run the production image locally: http://localhost:8080
 just            # list all recipes
 ```
 
-The first run creates `.env` with random local-only secrets. It is gitignored.
+The first run creates `.env` with random local-only secrets (database password, `BETTER_AUTH_SECRET`). It is gitignored. The API applies the database migrations itself on every start and exits if they fail.
+
+### Accounts and sync
+
+The app works as a guest with all data on the device. Signing up (email + password, 10-128 characters) creates an account, uploads the guest data once, and from then on the data lives in Postgres behind the REST API (`/api/v1`) and is the same on every device you sign in on. While signed in, set logging keeps working offline: set edits are queued on the device and replayed when the connection returns (last write wins). Starting or finishing a workout needs a connection. Signing out returns to a fresh guest database; the account's data stays on the server.
+
+There is no email verification or password reset yet (both need an email provider), so there is no account recovery.
+
+State-changing API requests must come from a trusted origin: the origin of `BETTER_AUTH_URL`, plus `TRUSTED_ORIGINS` (comma separated) if set. In development, `localhost` and private-network addresses on the Vite port are also accepted so a phone on the same Wi-Fi can sign up.
 
 ### Testing on a phone (same Wi-Fi)
 
@@ -33,7 +41,7 @@ packages/
   shared/         zod schemas, types and logic shared by api and web
 deploy/           production compose stack, Caddyfile, deploy script (runs on the server)
 infra/terraform/  DigitalOcean Droplet, firewall and reserved IP
-docs/             spec
+docs/             spec, plans, release checklist
 .github/          CI, release/deploy, CodeQL, Dependabot
 ```
 
@@ -63,7 +71,7 @@ just github-setup example.com   # production environment, deploy key, host, doma
 
 Before the first release, work through [docs/release-checklist.md](docs/release-checklist.md) (tag ruleset, environment reviewers, GHCR visibility, DNS, backups, rollback).
 
-Production secrets (database password, auth secret) are generated on the server during the first deploy and never leave it. Terraform state is local and gitignored, so back up `infra/terraform/terraform.tfstate`. The Droplet ignores later changes to its SSH keys and cloud-init (`ignore_changes`), so rotating the admin or deploy key is a manual step on the server.
+Production secrets (database password, `BETTER_AUTH_SECRET`) and `BETTER_AUTH_URL` (`https://<domain>`) are generated on the server during the first deploy and never leave it. Terraform state is local and gitignored, so back up `infra/terraform/terraform.tfstate`. The Droplet ignores later changes to its SSH keys and cloud-init (`ignore_changes`), so rotating the admin or deploy key is a manual step on the server.
 
 ## Security
 

@@ -50,6 +50,9 @@ Rejected options: Supabase, Next.js/SSR, a separate frontend container (v1), App
 - Authorization checks live in the API layer. Don't rely on DB row-level security.
 - Deleting an exercise soft-deletes its live plan items; deleting gear removes it from live exercises' required gear. The UI always confirms first and states the impact; history keeps snapshotted names.
 - The "progression step" (smallest weight jump, `profile.weight_increment`) and new-item defaults (`profile.default_rule`) live in the Progression tab; never call it "weight increment" in the UI.
+- REST/isolation (M2): every `/api/v1/*` route needs a session and scopes every query by the session user id; a missing or foreign id is `404 {"error":"not_found"}`, never 403. Primary keys are `(user_id, id)` and foreign keys `(user_id, parent_id)`. Creates are idempotent `PUT /resource/:id` upserts. State-changing requests need a trusted Origin and `application/json`. One origin policy (`apps/api/src/origins.ts`) serves both Better Auth and the CSRF guard; the API refuses to start without `NODE_ENV`. Errors never leak internals (`500 {"error":"internal_error"}`).
+- Migrations: the committed `apps/api/drizzle/` folder is applied by the API on boot (and by `migrate.js` in the deploy script); both are idempotent and a failure stops the process. Migrations must stay backward compatible with the previous release.
+- Outbox (M2): only set edits are queued while offline (`PATCH /sets/:id` with the client `updated_at`); replay is in order, the server applies a set update only if it is newer, a 4xx other than 401 drops the item and tells the user, a 401 pauses the queue. Never queue starting or finishing a workout.
 
 ## Open questions (ask before assuming)
 
@@ -57,6 +60,6 @@ See the spec's "Open questions" section. The exercise library is decided: each u
 
 ## Status
 
-The scaffold (Docker, compose, CI, infra) and M1, the local guest-mode MVP, are done (plan: [docs/superpowers/plans/2026-10-22-m1-local-mvp.md](docs/superpowers/plans/2026-10-22-m1-local-mvp.md)). Next is whatever the owner picks; M2 (accounts, sync, Drizzle schema, Better Auth) is the planned follow-up.
+The scaffold (Docker, compose, CI, infra), M1 (local guest-mode MVP) and M2 (accounts, REST API, `ApiRepo`, guest import, offline set-log outbox) are done (plans: [M1](docs/superpowers/plans/2026-10-22-m1-local-mvp.md), [M2](docs/superpowers/plans/2026-10-22-m2-accounts-and-sync.md)). Next is M3 (production) or whatever the owner picks.
 
 Production is still on hold: don't run `infra-*` or `github-setup`, and don't push `v*` tags. Work through [docs/release-checklist.md](docs/release-checklist.md) before the first release. Verify features with `just dev` / `just preview`.

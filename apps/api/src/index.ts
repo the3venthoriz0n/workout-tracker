@@ -3,7 +3,17 @@ import { createApp } from './app.js'
 import { createAuth } from './auth.js'
 import { db, sql } from './db/index.js'
 import { env } from './env.js'
+import { runMigrations } from './migrations.js'
 import { createService } from './service/index.js'
+
+// Fail loudly: if migrations cannot be applied the process exits and never serves.
+try {
+  await runMigrations(db)
+  console.log('Migrations applied.')
+} catch (err) {
+  console.error('Migration failed:', err)
+  process.exit(1)
+}
 
 const app = createApp({
   auth: createAuth(db, env),

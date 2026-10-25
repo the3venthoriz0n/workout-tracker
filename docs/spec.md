@@ -20,17 +20,17 @@ A free, very simple lifting tracker. You build your own exercise library, pick t
 
 ## 2. Milestones
 
-**M1 is done** (completed 2026-10-22: built, reviewed task by task and as a whole branch, and exercised in a real browser against both the dev server and the production image). Production deploy (M3) stays on hold until the owner decides to ship it.
+**M1 and M2 are done** (M1 completed 2026-10-22: built, reviewed task by task and as a whole branch, and exercised in a real browser against both the dev server and the production image; M2: the API is verified against the production image in an isolated compose project). Production deploy (M3) stays on hold until the owner decides to ship it.
 
 | Milestone | Contents | Runs |
 | --- | --- | --- |
 | **M1: Local MVP (guest mode)** ✅ done | Gear (a section of Library), exercise library, plans, progression rules, Today logging, progression engine, history, settings and export. Everything runs on-device through `LocalRepo`. | `just dev`, `just preview` |
-| **M2: Accounts and sync** (in progress) | Postgres schema (Drizzle), Better Auth email + password, the REST API in §9, `ApiRepo`, guest-data import on signup, offline set-log queue. Plan: `docs/superpowers/plans/2026-10-22-m2-accounts-and-sync.md`. | locally (`just dev`) |
+| **M2: Accounts and sync** ✅ done | Postgres schema (Drizzle), Better Auth email + password, the REST API in §9, `ApiRepo`, guest-data import on signup, offline set-log queue. Plan: `docs/superpowers/plans/2026-10-22-m2-accounts-and-sync.md`. | `just dev`, `just preview` |
 | M3: Production | Droplet via Terraform, GitHub production environment, first `v*` release, nightly `pg_dump` backups | DigitalOcean |
 | M4: Mobile | Capacitor wrap, bearer auth, store builds | iOS / Android |
 | Later | Google/Apple sign-in, charts/PRs, AI plan helper, Pro gating, frontend/backend container split | |
 
-M1 is deliberately client-only: guest mode is a v1 requirement anyway, and it is the fastest path to something usable in the gym. The API stays as scaffolded (`/healthz`, empty `/api/v1`) until M2.
+M1 is deliberately client-only: guest mode is a v1 requirement anyway, and it is the fastest path to something usable in the gym. The API stayed as scaffolded (`/healthz`, empty `/api/v1`) until M2.
 
 M2 scope decisions (owner): REST resources as in §9 (not a single RPC endpoint); email + password only, with no email verification or password reset yet (both need an email provider).
 
@@ -267,9 +267,9 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 
 ## 14. Open questions
 
-None block M2.
+None block M3, but resolve these before opening sign-up to real users (sign-up is open, with rate limiting only):
 
-- After M2: email verification and password reset (needs an email provider), account deletion and per-account data export endpoints (needed before real users), CSV export.
+- Email verification and password reset (need an email provider; until then a forgotten password means a lost account), account deletion and per-account data export endpoints, off-box database backups, CSV export.
 - M3: Domain name, and the DigitalOcean region (`sfo2` in Terraform may not accept new Droplets; `just infra-plan` will tell).
 
 **Unverified; check before building the part that depends on them**: Capacitor origin strings for CORS and `trustedOrigins`; Apple's in-app payment rules; App Store stance on web wrappers; Gemini free-tier terms and limits; Capacitor live-update terms; whether Dependabot supports the pnpm 12 lockfile; whether new GHCR packages default to private.

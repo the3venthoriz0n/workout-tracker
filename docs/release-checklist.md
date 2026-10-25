@@ -13,6 +13,13 @@ Nothing here is automated: do it in the GitHub and DigitalOcean UIs. Deploy acce
 - [ ] **Security settings**: secret scanning and push protection on; private vulnerability reporting on; Dependabot alerts and security updates on. Leave CodeQL "default setup" off, because `.github/workflows/codeql.yml` already runs it.
 - [ ] **GHCR package**: after the first image push the package is private and the first deploy's pull is denied. Make it public (Package settings, Danger zone; this is one-way) and link it to the repository. Then re-run the failed deploy job.
 
+### Accounts and migrations (M2)
+
+- [ ] **Sign-up is open to anyone** who can reach the site: no email verification, no password reset, only Better Auth's rate limiting. Decide whether that is acceptable for the first release, and do the off-box backups below first, because the database now holds real accounts.
+- [ ] **`BETTER_AUTH_SECRET` and `BETTER_AUTH_URL`** are generated into `/opt/workout-tracker/.env` on the first deploy (`BETTER_AUTH_URL` is `https://<DOMAIN>`). The compose file refuses to start without them. After a domain change edit both `DOMAIN` and `BETTER_AUTH_URL` in that file. Rotating the secret signs every user out.
+- [ ] **`TRUSTED_ORIGINS`** (optional, comma separated, exact origins such as `https://example.com`): leave unset for the web app, which is the `BETTER_AUTH_URL` origin. Add the Capacitor origins only when the mobile builds ship, after verifying their exact strings.
+- [ ] **Migrations** run twice per deploy by design: `deploy.sh` runs `migrate.js` after the pre-migration dump (the old app keeps serving), and the new app runs them again on boot (a no-op). A failing migration aborts the deploy before anything changes. Keep migrations backward compatible.
+
 ### DigitalOcean
 
 - [ ] API token with custom scopes and an expiry; 2FA on the account.
@@ -48,5 +55,5 @@ A rollback does not undo migrations. Restore from a pre-deploy dump only if a mi
 ## Backups
 
 - `deploy.sh` takes a `pg_dump -Fc` into `/opt/workout-tracker/backups/` before each migration (newest 5 kept). That lives on the same disk as the database, so it protects against bad migrations only.
-- **TODO before real users:** nightly `pg_dump` to DigitalOcean Spaces (or another off-box location) with a restore test.
+- **TODO before real users (accounts are live in M2):** nightly `pg_dump` to DigitalOcean Spaces (or another off-box location) with a restore test.
 - **Back up `/opt/workout-tracker/.env` off the server** (password manager or encrypted storage). Losing the Droplet loses `BETTER_AUTH_SECRET`, which invalidates all sessions, and the database password.
