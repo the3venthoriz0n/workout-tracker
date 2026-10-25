@@ -339,3 +339,119 @@ test('re-enabling progression restores the profile default rule', async () => {
     expect((await repo.getPlan(plan.id))?.days[0]?.items[0]?.rule).toMatchObject(dflt),
   )
 })
+
+async function openPicker(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: /Add exercise to Day A/ }))
+  return screen.findByRole('dialog')
+}
+
+test('picker offers a Create row that prefills the sheet and adds the new exercise to the day', async () => {
+  const user = userEvent.setup()
+  const ok = vi.spyOn(toast, 'success')
+  const { repo, plan, view } = await setup()
+  await repo.savePlanDay({ plan_id: plan.id, name: 'Day A' })
+  view()
+  const picker = await openPicker(user)
+  await user.type(await within(picker).findByLabelText('Search exercises'), 'Zercher Squat')
+  const create = within(picker).getByRole('button', { name: 'Create "Zercher Squat"' })
+  // the create row sits at the top of the list
+  expect(within(picker).getAllByRole('button').filter((b) => b.closest('li'))[0]).toBe(create)
+  await user.click(create)
+
+  const sheet = await screen.findByRole('dialog', { name: 'Add exercise' })
+  expect((within(sheet).getByLabelText('Name') as HTMLInputElement).value).toBe('Zercher Squat')
+  await user.click(within(sheet).getByRole('button', { name: 'Save and add to Day A' }))
+
+  await waitFor(async () => {
+    expect((await repo.getPlan(plan.id))!.days[0]!.items).toHaveLength(1)
+  })
+  const created = (await repo.listExercises()).filter((e) => e.name === 'Zercher Squat')
+  expect(created).toHaveLength(1)
+  expect((await repo.getPlan(plan.id))!.days[0]!.items[0]!.exercise_id).toBe(created[0]!.id)
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(await screen.findByRole('listitem', { name: 'Zercher Squat' })).toBeTruthy()
+  expect(ok).toHaveBeenCalledWith('Added Zercher Squat to Day A')
+})
+
+test('no Create row without a query or when the name already exists', async () => {
+  const user = userEvent.setup()
+  const { repo, plan, view } = await setup()
+  await repo.savePlanDay({ plan_id: plan.id, name: 'Day A' })
+  view()
+  const picker = await openPicker(user)
+  await within(picker).findByRole('button', { name: 'Bench Press' })
+  expect(within(picker).queryByRole('button', { name: /^Create/ })).toBeNull()
+  await user.type(within(picker).getByLabelText('Search exercises'), 'bench press')
+  expect(within(picker).queryByRole('button', { name: /^Create/ })).toBeNull()
+})
+
+test('no match shows one clear action: create the typed name', async () => {
+  const user = userEvent.setup()
+  const { repo, plan, view } = await setup()
+  await repo.savePlanDay({ plan_id: plan.id, name: 'Day A' })
+  view()
+  const picker = await openPicker(user)
+  await user.type(await within(picker).findByLabelText('Search exercises'), 'zzz')
+  expect(within(picker).getByText('No exercises match your search.')).toBeTruthy()
+  expect(within(picker).getAllByRole('button', { name: /^Create/ })).toHaveLength(1)
+})
+
+test('keeps the new exercise and tells the user when adding it to the day fails', async () => {
+  const user = userEvent.setup()
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  const err = vi.spyOn(toast, 'error')
+  const { repo, plan, view } = await setup()
+  await repo.savePlanDay({ plan_id: plan.id, name: 'Day A' })
+  vi.spyOn(repo, 'addPlanItem').mockRejectedValue(new Error('disk exploded'))
+  view()
+  const picker = await openPicker(user)
+  await user.type(await within(picker).findByLabelText('Search exercises'), 'Zercher Squat')
+  await user.click(within(picker).getByRole('button', { name: 'Create "Zercher Squat"' }))
+  const sheet = await screen.findByRole('dialog', { name: 'Add exercise' })
+  await user.click(within(sheet).getByRole('button', { name: 'Save and add to Day A' }))
+
+  await waitFor(() =>
+    expect(err).toHaveBeenCalledWith("Saved Zercher Squat, but couldn't add it to Day A. Add it from the picker."),
+  )
+  expect((await repo.listExercises()).some((e) => e.name === 'Zercher Squat')).toBe(true)
+  expect((await repo.getPlan(plan.id))!.days[0]!.items).toHaveLength(0)
+})
+
+test('does not add anything and keeps the sheet open when creating the exercise fails', async () => {
+  const user = userEvent.setup()
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  const err = vi.spyOn(toast, 'error')
+  const { repo, plan, view } = await setup()
+  await repo.savePlanDay({ plan_id: plan.id, name: 'Day A' })
+  const add = vi.spyOn(repo, 'addPlanItem')
+  vi.spyOn(repo, 'saveExercise').mockRejectedValue(new Error('nope'))
+  view()
+  const picker = await openPicker(user)
+  await user.type(await within(picker).findByLabelText('Search exercises'), 'Zercher Squat')
+  await user.click(within(picker).getByRole('button', { name: 'Create "Zercher Squat"' }))
+  const sheet = await screen.findByRole('dialog', { name: 'Add exercise' })
+  await user.click(within(sheet).getByRole('button', { name: 'Save and add to Day A' }))
+  await waitFor(() => expect(err).toHaveBeenCalledWith("Couldn't save the exercise"))
+  expect(add).not.toHaveBeenCalled()
+  expect(screen.getByRole('dialog', { name: 'Add exercise' })).toBeTruthy()
+})
+
+test('picker rows show a muted defaults line; search autofocuses only on desktop widths', async () => {
+  const user = userEvent.setup()
+  const original = window.matchMedia
+  const media = (matches: boolean) =>
+    (window.matchMedia = ((q: string) => ({ matches, media: q, addEventListener() {}, removeEventListener() {} })) as never)
+  try {
+    media(false)
+    const { repo, plan, view } = await setup()
+    await repo.savePlanDay({ plan_id: plan.id, name: 'Day A' })
+    view()
+    const picker = await openPicker(user)
+    const row = await within(picker).findByRole('button', { name: 'Bench Press' })
+    expect(row.getAttribute('aria-describedby')).toBeTruthy()
+    expect(document.getElementById(row.getAttribute('aria-describedby')!)!.textContent).toMatch(/3×5 @ 95 lb/)
+    expect(document.activeElement).not.toBe(within(picker).getByLabelText('Search exercises'))
+  } finally {
+    window.matchMedia = original
+  }
+})

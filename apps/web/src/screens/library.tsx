@@ -63,7 +63,10 @@ export function LibraryScreen() {
         {active === 'gear' ? (
           <LibraryGear onEdit={(item) => setEditing({ kind: 'gear', item })} />
         ) : (
-          <LibraryExercises onEdit={(item) => setEditing({ kind: 'exercise', item })} />
+          <LibraryExercises
+            onEdit={(item) => setEditing({ kind: 'exercise', item })}
+            onAdd={() => setEditing({ kind: 'exercise' })}
+          />
         )}
       </div>
       <ExerciseSheet

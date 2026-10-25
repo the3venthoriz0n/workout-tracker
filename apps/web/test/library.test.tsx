@@ -46,6 +46,7 @@ test('creates an exercise through the sheet with a safe video link', async () =>
   expect(await within(dialog).findByText('Name is required.')).toBeTruthy()
 
   await user.type(within(dialog).getByLabelText('Name'), 'Zercher Squat')
+  await user.click(within(dialog).getByRole('button', { name: 'Optional details' }))
   await user.type(within(dialog).getByLabelText('Video link'), 'https://example.com/v')
   await user.click(within(dialog).getByRole('button', { name: 'Save' }))
 
@@ -63,6 +64,7 @@ test('rejects a non-http video link inline', async () => {
   await user.click(await screen.findByRole('button', { name: /add exercise/i }))
   const dialog = await screen.findByRole('dialog')
   await user.type(within(dialog).getByLabelText('Name'), 'X')
+  await user.click(within(dialog).getByRole('button', { name: 'Optional details' }))
   await user.type(within(dialog).getByLabelText('Video link'), 'javascript:alert(1)')
   await user.click(within(dialog).getByRole('button', { name: 'Save' }))
   expect(await within(dialog).findByText('Enter a valid http(s) link.')).toBeTruthy()
@@ -79,6 +81,48 @@ test('Enter in a number field inside the sheet does not save or close it', async
   await user.type(reps, '8{Enter}')
   expect(screen.getByRole('dialog')).toBeTruthy()
   expect((await repo.listExercises()).some((e) => e.name === 'Enter Test')).toBe(false)
+})
+
+test('sheet puts name first, sets/reps/weight in one row, and hides optional details until opened by keyboard', async () => {
+  const user = userEvent.setup()
+  renderLibrary()
+  await user.click(await screen.findByRole('button', { name: /add exercise/i }))
+  const dialog = await screen.findByRole('dialog')
+  const name = within(dialog).getByLabelText('Name')
+  const sets = within(dialog).getByLabelText('Sets')
+  const weight = within(dialog).getByLabelText(/^Weight/)
+  expect(name.compareDocumentPosition(sets) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(sets.closest('.grid')).toBe(weight.closest('.grid'))
+  expect(sets.closest('.grid')!.className).toMatch(/grid-cols-3/)
+
+  const toggle = within(dialog).getByRole('button', { name: 'Optional details' })
+  expect(toggle.getAttribute('aria-expanded')).toBe('false')
+  for (const label of ['Notes', 'Video link']) expect(within(dialog).queryByLabelText(label)).toBeNull()
+  expect(within(dialog).queryByText('Required gear')).toBeNull()
+
+  weight.focus()
+  await user.tab()
+  expect(document.activeElement).toBe(toggle)
+  await user.keyboard('{Enter}')
+  expect(toggle.getAttribute('aria-expanded')).toBe('true')
+  expect(within(dialog).getByLabelText('Notes')).toBeTruthy()
+  expect(within(dialog).getByLabelText('Video link')).toBeTruthy()
+  expect(within(dialog).getByText('Required gear')).toBeTruthy()
+})
+
+test('an invalid video link re-opens the collapsed details', async () => {
+  const user = userEvent.setup()
+  renderLibrary()
+  await user.click(await screen.findByRole('button', { name: /add exercise/i }))
+  const dialog = await screen.findByRole('dialog')
+  await user.type(within(dialog).getByLabelText('Name'), 'X')
+  await user.click(within(dialog).getByRole('button', { name: 'Optional details' }))
+  await user.type(within(dialog).getByLabelText('Video link'), 'ftp://nope')
+  await user.click(within(dialog).getByRole('button', { name: 'Optional details' }))
+  expect(within(dialog).queryByLabelText('Video link')).toBeNull()
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+  expect(await within(dialog).findByText('Enter a valid http(s) link.')).toBeTruthy()
+  expect(within(dialog).getByLabelText('Video link')).toBeTruthy()
 })
 
 const selected = (name: string) =>

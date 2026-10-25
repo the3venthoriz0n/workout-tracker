@@ -1,4 +1,5 @@
-import { Video } from 'lucide-react'
+import { Plus, Video } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -18,7 +19,13 @@ import {
 } from '@/repo/hooks'
 import type { Exercise } from '@workout/shared'
 
-export function LibraryExercises({ onEdit }: { onEdit: (exercise: Exercise) => void }) {
+export function LibraryExercises({
+  onEdit,
+  onAdd,
+}: {
+  onEdit: (exercise: Exercise) => void
+  onAdd?: () => void
+}) {
   const exercises = useExercises()
   const gear = useGear()
   const units = useProfile().data?.units ?? 'lb'
@@ -30,9 +37,16 @@ export function LibraryExercises({ onEdit }: { onEdit: (exercise: Exercise) => v
     <div className="flex flex-col gap-3 px-4 pb-4">
       {exercises.isPending && <SkeletonRows />}
       {exercises.isSuccess && list.length === 0 && (
-        <p className="text-muted-foreground text-sm">
-          No exercises yet. Add your first exercise to get started.
-        </p>
+        <div className="flex flex-col items-start gap-3">
+          <p className="text-muted-foreground text-sm">
+            No exercises yet. Add your first exercise to get started.
+          </p>
+          {onAdd && (
+            <Button type="button" className="min-h-11" onClick={onAdd}>
+              <Plus aria-hidden /> Create exercise
+            </Button>
+          )}
+        </div>
       )}
 
       <ul className="divide-y border-y">

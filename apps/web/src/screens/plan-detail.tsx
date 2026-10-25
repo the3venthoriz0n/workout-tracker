@@ -1,8 +1,10 @@
 import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Link, useParams } from 'react-router'
 import { SettingsLink } from '@/app/screen'
 import { ExercisePicker } from '@/components/exercise-picker'
+import { ExerciseSheet } from '@/components/exercise-sheet'
 import { PlanItemRow } from '@/components/plan-item-row'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -69,6 +71,7 @@ export function PlanDetailScreen() {
   const moveDay = useMove()
   const addItem = useAddPlanItem()
   const [pickerDay, setPickerDay] = useState<string | null>(null)
+  const [creating, setCreating] = useState<{ dayId: string; name: string } | null>(null)
   const [confirmDay, setConfirmDay] = useState<string | null>(null)
 
   if (plan.isPending) return <div className="p-4" aria-busy="true" />
@@ -83,6 +86,8 @@ export function PlanDetailScreen() {
       </div>
     )
   }
+
+  const creatingDay = tree.days.find((d) => d.id === creating?.dayId)
 
   return (
     <div className="flex flex-col gap-3 px-4 pb-4">
@@ -218,6 +223,24 @@ export function PlanDetailScreen() {
         onOpenChange={(open) => !open && setPickerDay(null)}
         onPick={(exerciseId) => {
           if (pickerDay) addItem.mutate({ planDayId: pickerDay, exerciseId }, { onError: (e) => notifyError(e) })
+        }}
+        onCreate={(name) => pickerDay && setCreating({ dayId: pickerDay, name })}
+      />
+      <ExerciseSheet
+        open={creating !== null}
+        onOpenChange={(open) => !open && setCreating(null)}
+        initialName={creating?.name}
+        submitLabel={`Save and add to ${creatingDay?.name ?? 'day'}`}
+        onSaved={async (exercise) => {
+          if (!creating) return
+          const dayName = creatingDay?.name ?? 'the day'
+          try {
+            await addItem.mutateAsync({ planDayId: creating.dayId, exerciseId: exercise.id })
+            toast.success(`Added ${exercise.name} to ${dayName}`)
+          } catch (e) {
+            // The exercise exists now; only the plan item is missing
+            notifyError(e, `Saved ${exercise.name}, but couldn't add it to ${dayName}. Add it from the picker.`)
+          }
         }}
       />
     </div>
