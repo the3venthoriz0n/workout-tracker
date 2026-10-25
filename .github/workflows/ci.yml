@@ -106,6 +106,16 @@ jobs:
           published=$(jq -c '[.services[].ports[]?]' config.json)
           echo "published ports: $published"
           test "$published" = "[]"
+          jq -e '.services.app.networks.tunnel.aliases | index("workout-tracker-app")' config.json
+      - name: Self-hosted compose refuses a missing SIGNUP_ALLOWLIST
+        env:
+          IMAGE_REF: ghcr.io/example/app@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        run: |
+          grep -v '^SIGNUP_ALLOWLIST=' deploy/self-hosted/.env.example > no-allowlist.env
+          if docker compose -f deploy/self-hosted/compose.yaml --env-file no-allowlist.env config > /dev/null 2>&1; then
+            echo "compose accepted a missing SIGNUP_ALLOWLIST" >&2
+            exit 1
+          fi
 
   deploy-script:
     runs-on: ubuntu-24.04
@@ -119,7 +129,7 @@ jobs:
       - name: deploy.sh tests (stubbed docker)
         run: sh deploy/test/deploy.test.sh
       - name: update.sh tests (stubbed docker and deploy.sh)
-        run: sh deploy/test/update.test.sh
+        run: sh deploy/test/update.test.sh scripts/check-public-safe.sh scripts/test/check-public-safe.test.sh
 
   public-safe:
     runs-on: ubuntu-24.04

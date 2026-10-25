@@ -10,6 +10,10 @@
 # runs everything in that file's directory (its .env, backups/). There the .env is written by
 # hand (the tunnel network and sign-up list are site specific), never generated, and DOMAIN
 # is optional.
+# A failed deploy renames that attempt's pre-migration dump to backups/*.dump.keep, which
+# rotation never touches (update.sh also stops retrying a failed digest), so the last known-good
+# data survives repeated failures. Restore: pg_restore into an empty database (see the
+# self-hosted README); clean up with rm backups/*.keep once the deploy is fixed or abandoned.
 # Manual rollback: sh deploy.sh <previous image@sha256:...>   (see PREVIOUS_IMAGE_REF in .env)
 set -eu
 
@@ -27,7 +31,13 @@ if [ "${#DIGEST}" -ne 64 ]; then
   exit 1
 fi
 
+# grep works per line, so a value with a newline ("ok.com\nBETTER_AUTH_SECRET=x") would pass
+# on its first line; reject newlines and carriage returns before grep sees the value.
+CR=$(printf '\r')
+NL='
+'
 valid_domain() {
+  case "$1" in *"$NL"* | *"$CR"*) return 1 ;; esac
   printf '%s\n' "$1" | grep -Eq '^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$'
 }
 if [ -n "${DOMAIN:-}" ] && ! valid_domain "$DOMAIN"; then
@@ -96,6 +106,21 @@ if ! docker compose pull app; then
   exit 1
 fi
 
+# Keeps this attempt's dump out of rotation after a failure (no-op without a dump).
+DUMP=
+keep_dump() {
+  if [ -n "$DUMP" ] && [ -f "$DUMP" ]; then
+    dest="$DUMP.keep"
+    i=1
+    while [ -e "$dest" ]; do
+      i=$((i + 1))
+      dest="$DUMP.$i.keep"
+    done
+    mv "$DUMP" "$dest"
+    echo "Kept the pre-migration backup as $dest (not rotated). Restore with pg_restore; delete it when no longer needed." >&2
+  fi
+}
+
 # Pre-migration backup, only when a database is already running.
 if [ -n "$(docker compose ps --status running --quiet db)" ]; then
   DB_USER=$(envval POSTGRES_USER)
@@ -129,12 +154,14 @@ docker compose up --detach --wait db
 echo "==> Running migrations (the current app keeps serving)"
 if ! docker compose run --rm --no-deps app node migrate.js; then
   echo "Migration failed. Nothing was changed: .env and the running app are untouched." >&2
+  keep_dump
   exit 1
 fi
 
 echo "==> Bringing up the new version"
 if ! docker compose up --detach --wait --wait-timeout 120 --remove-orphans; then
   echo "Bring-up failed." >&2
+  keep_dump
   if [ -n "$PREV" ]; then
     echo "==> Rolling back app to $PREV" >&2
     IMAGE_REF="$PREV" docker compose up --detach --wait --wait-timeout 120 app \
@@ -163,5 +190,16 @@ fi
 } >> .env.new
 mv .env.new .env
 
-docker image prune --force || echo "image prune failed (ignored)" >&2
+# Remove only this app's old images (same repository, any digest other than the two we keep).
+# Never a host-wide prune: other stacks' images are untouched, and without --force docker
+# refuses to remove an image a container still uses.
+APP_REPO="${NEW%@*}"
+for ref in $(docker image ls --digests --no-trunc --format '{{.Repository}}@{{.Digest}}' "$APP_REPO"); do
+  case "$ref" in
+    "$APP_REPO"@sha256:*) ;;
+    *) continue ;;
+  esac
+  [ "$ref" != "$NEW" ] && [ "$ref" != "$PREV" ] || continue
+  docker image rm "$ref" >/dev/null 2>&1 || echo "could not remove old image $ref (ignored)" >&2
+done
 echo "Deployed $NEW"

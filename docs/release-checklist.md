@@ -69,6 +69,13 @@ Staging runs on a self-hosted Docker host behind an existing Cloudflare Tunnel; 
 - [ ] **Scheduler** runs `update.sh` with `REPO=<owner>/<repo>`; check its log after the first merge to `main`.
 - [ ] **Backups**: copy a `pg_dump` off the host before trusting staging with data you care about.
 
+## Known limits (staging)
+
+- The sign-up allowlist checks an address, not a person: anyone who knows a listed address can claim it before its owner does. Email verification (M2b) closes this.
+- The sign-up response can reveal whether a listed address is already registered.
+- Other containers on the shared tunnel network can bypass per-IP rate limits; only put trusted containers on that network.
+
 ## Later
 
 - [ ] **Decide whether `TRUSTED_ORIGINS` should be required** in `deploy/compose.yaml` (currently optional, `${TRUSTED_ORIGINS:-}`, because `deploy.sh` does not generate it). Revisit when the Capacitor mobile builds ship and need extra origins.
+- [ ] **Verify attestations in `update.sh`**: the staging image is built with provenance and an attestation, but the self-hosted updater does not verify them yet (e.g. `gh attestation verify` against the repository) before deploying a digest.

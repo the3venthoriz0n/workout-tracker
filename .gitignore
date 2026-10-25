@@ -72,3 +72,8 @@ Thumbs.db
 
 # Agent work reports (kept outside the repo)
 /task-*-report.md
+
+# Self-hosted updater state
+.failed-digest
+.update.flock
+.update.lock/

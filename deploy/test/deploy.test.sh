@@ -25,6 +25,7 @@ case "$*" in
     echo "PGDMP-stub" ;;
   "compose run"*migrate.js) [ -z "${FAIL_MIGRATE:-}" ] || exit 1 ;;
   "compose up"*--remove-orphans*) [ -z "${FAIL_UP:-}" ] || exit 1 ;;
+  "image ls"*) [ -z "${STUB_IMAGES:-}" ] || printf '%s\n' "$STUB_IMAGES" ;;
 esac
 exit 0
 STUB
@@ -63,7 +64,7 @@ new_case() {
   STUB_LOG="$W/docker.log"
   : > "$STUB_LOG"
   export STUB_LOG
-  unset FAIL_PULL FAIL_MIGRATE FAIL_UP FAIL_DUMP DB_RUNNING FAIL_GREP
+  unset FAIL_PULL FAIL_MIGRATE FAIL_UP FAIL_DUMP DB_RUNNING FAIL_GREP STUB_IMAGES
 }
 run() { # run <DOMAIN or ""> <ref>; output in $W/out, status in $RC
   ( cd "$W" && DOMAIN="$1" PATH="$STUBS:$PATH" sh deploy.sh "$2" ) > "$W/out" 2>&1
@@ -132,6 +133,16 @@ for d in 'Example.com' '-bad.com' 'bad.com-' 'a b.com' 'a;b.com' 'a/b.com' "a\$(
   run "$d" "$REF_A"
   check "bad DOMAIN refused: $d" [ "$RC" -ne 0 ]
   check "bad DOMAIN: docker never called: $d" [ ! -s "$STUB_LOG" ]
+done
+NL='
+'
+CRC=$(printf '\r')
+for d in "ok.com${NL}BETTER_AUTH_SECRET=x" "ok.com${CRC}" "${NL}ok.com"; do
+  new_case
+  run "$d" "$REF_A"
+  check "DOMAIN with a newline or CR refused" [ "$RC" -ne 0 ]
+  check "DOMAIN with a newline: docker never called" [ ! -s "$STUB_LOG" ]
+  check "DOMAIN with a newline: no .env created" [ ! -e "$W/.env" ]
 done
 new_case
 run "" "$REF_A"
@@ -226,6 +237,60 @@ new_case
 seed_env "$REF_A"
 run example.com "$REF_B"
 check "no pg_dump when db is not running" hasnt 'pg_dump' "$STUB_LOG"
+
+echo "# (f2) a failed deploy keeps its pre-migration dump out of rotation"
+new_case
+seed_env "$REF_A"
+mkdir "$W/backups"
+for i in 1 2 3 4 5; do : > "$W/backups/pre-2026010${i}T000000Z-old.dump"; done
+DB_RUNNING=1 FAIL_MIGRATE=1 run example.com "$REF_B"
+check "failed migration exits non-zero" [ "$RC" -ne 0 ]
+keep1=$(find "$W/backups" -name '*.dump.keep' | head -n 1)
+check "failed migration: the new dump is renamed to .keep" [ "$(find "$W/backups" -name '*.dump.keep' | wc -l)" -eq 1 ]
+check "failed migration: the kept dump is the fresh one" sh -c "echo '$keep1' | grep -q 'bbbbbbbbbbbb.dump.keep\$'"
+check "failed migration: kept dump has content" [ -s "$keep1" ]
+check "failed migration: its name is logged" has "$(basename "$keep1")" "$W/out"
+check "failed migration: no un-kept copy remains" [ ! -e "${keep1%.keep}" ]
+# A retry of the same digest fails again: the first kept dump must survive rotation.
+for i in 1 2 3 4 5 6; do : > "$W/backups/pre-2026020${i}T000000Z-more.dump"; done
+DB_RUNNING=1 FAIL_MIGRATE=1 run example.com "$REF_B"
+check "retry: the first kept dump survives rotation" [ -s "$keep1" ]
+check "retry: two kept dumps now" [ "$(find "$W/backups" -name '*.keep' | wc -l)" -eq 2 ]
+check "retry: rotation still limits plain dumps to 5" [ "$(find "$W/backups" -name '*.dump' | wc -l)" -le 5 ]
+new_case
+seed_env "$REF_A"
+DB_RUNNING=1 FAIL_UP=1 run example.com "$REF_B"
+check "failed bring-up: the dump is renamed to .keep" [ "$(find "$W/backups" -name '*.dump.keep' | wc -l)" -eq 1 ]
+check "failed bring-up: no plain dump left" [ "$(find "$W/backups" -name '*.dump' | wc -l)" -eq 0 ]
+new_case
+seed_env "$REF_A"
+mkdir "$W/backups"
+: > "$W/backups/pre-20250101T000000Z-aaaaaaaaaaaa.dump.keep"
+for i in 1 2 3 4 5 6; do : > "$W/backups/pre-2026010${i}T000000Z-old.dump"; done
+DB_RUNNING=1 run example.com "$REF_B"
+check "success: existing .keep dumps are never rotated" [ -e "$W/backups/pre-20250101T000000Z-aaaaaaaaaaaa.dump.keep" ]
+check "success: no new .keep" [ "$(find "$W/backups" -name '*.keep' | wc -l)" -eq 1 ]
+check "success: plain dumps still rotated to 5" [ "$(find "$W/backups" -name '*.dump' | wc -l)" -eq 5 ]
+
+echo "# (f3) image cleanup touches only this app's old images"
+REF_C="ghcr.io/example/app@sha256:$(printf 'c%.0s' $(seq 1 64))"
+OTHER="ghcr.io/other/stack@sha256:$(printf 'e%.0s' $(seq 1 64))"
+new_case
+seed_env "$REF_A"
+STUB_IMAGES="$REF_A
+$REF_B
+$REF_C
+$OTHER
+ghcr.io/example/app@<none>" run example.com "$REF_B"
+check "cleanup run succeeds" [ "$RC" -eq 0 ]
+check "no host-wide image prune" hasnt 'image prune' "$STUB_LOG"
+check "lists only this app's repository" has 'image ls .*ghcr.io/example/app \[' "$STUB_LOG"
+check "removes the stale image" has "^docker image rm $REF_C" "$STUB_LOG"
+check "keeps the new image" hasnt "image rm $REF_B" "$STUB_LOG"
+check "keeps the previous image" hasnt "image rm $REF_A" "$STUB_LOG"
+check "never removes another stack's image" hasnt "$OTHER" "$STUB_LOG"
+check "never removes untagged non-digest entries" hasnt '<none>' "$STUB_LOG"
+check "only one image removed" [ "$("$REAL_GREP" -c '^docker image rm' "$STUB_LOG")" -eq 1 ]
 
 echo "# (g) call order"
 new_case

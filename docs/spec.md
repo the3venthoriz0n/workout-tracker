@@ -293,6 +293,8 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 
 ## 14. Open questions
 
+**Known limits (staging, invite-only sign-up)**: the allowlist checks an email address, not a person, so anyone who knows a listed address can register it before its owner does (email verification in the M2b plan closes this); the sign-up response can reveal whether a listed address is already registered; other containers on the shared tunnel network can reach the app directly and bypass per-IP rate limits, so only trusted containers belong on that network.
+
 None block M3, but resolve these before opening sign-up to real users (sign-up is open, with rate limiting only):
 
 - Account deletion and per-account data export endpoints, off-box database backups, CSV export.

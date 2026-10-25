@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2016  # fixtures deliberately contain unexpanded ${VAR} and $(cmd) text
 # Tests scripts/check-public-safe.sh against throwaway git repos. Run: sh scripts/test/check-public-safe.test.sh
 # Fixtures are written at run time; this file and the script are excluded from the scan by path.
 set -u
@@ -70,7 +71,12 @@ must_fail "a real-looking address" e.txt "mail someone@gmail.com"
 must_fail "a custom domain" e.txt "mail me@mydomain.dev"
 must_pass "example domains" e.txt "a@example.com b@example.org c@sub.example.net"
 must_pass "the .invalid and .example TLDs" e.txt "a@host.invalid b@evil.example"
-must_pass "noreply addresses" e.txt "noreply@anthropic.com 123+bot@users.noreply.github.com"
+must_pass "the GitHub noreply address" e.txt "123+bot@users.noreply.github.com"
+must_fail "a noreply local part on an arbitrary domain" e.txt "mail noreply@mydomain.dev"
+must_fail "a +noreply local part on an arbitrary domain" e.txt "mail me+noreply@mydomain.dev"
+must_fail "a fake users.noreply look-alike domain" e.txt "me@users.noreply.mydomain.dev"
+must_pass "the commit trailer address in the M2 plan" docs/superpowers/plans/2026-10-22-m2-accounts-and-sync.md "Co-Authored-By: Claude <noreply@anthropic.com>"
+must_fail "the commit trailer address elsewhere" docs/other.md "Co-Authored-By: Claude <noreply@anthropic.com>"
 must_pass "package versions and scopes" e.txt "pnpm@10.1.0 esbuild@0.25.0 @scope/pkg image@sha256:abc"
 must_pass "URL userinfo fixtures in the origin policy test" apps/api/test/origins.test.ts "'http://localhost@evil.com'"
 
@@ -78,6 +84,67 @@ echo "# personal paths"
 must_fail "a /home path" p.txt "cd /home/someone/project"
 must_fail "a /root path" p.txt "cp x /root/_dev/y"
 must_pass "URLs and relative paths that contain home" p.txt "https://example.com/home/ and ./home/x and src/root/y"
+
+echo "# Windows and WSL home paths"
+must_fail "a Windows profile path" w.txt 'open C:\Users\someone\Documents'
+must_fail "a doubled-backslash Windows path" w.txt '"C:\\Users\\someone\\x"'
+must_fail "a forward-slash Windows path" w.txt 'D:/Users/someone/x'
+must_fail "a WSL mount path" w.txt 'cd /mnt/c/Users/someone/code'
+must_pass "placeholder <name>" w.txt 'C:\Users\<name>\x and /mnt/c/Users/<name>/y'
+must_pass "placeholder USER and username" w.txt 'C:\Users\USER\x /mnt/c/Users/username/y C:\Users\%USERNAME%\z'
+must_pass "a shell variable" w.txt '/mnt/c/Users/$USER/x'
+must_pass "Users in an unrelated path" w.txt 'src/Users/list.ts and /srv/Users/x'
+
+echo "# secret assignments"
+LONG="Zx9qLm4Tt7Rv2Wk8Pa3Nc6Yd1Hb5Je0F"
+must_fail "BETTER_AUTH_SECRET with a real value" s.env "BETTER_AUTH_SECRET=$LONG" "$LONG"
+must_fail "POSTGRES_PASSWORD with a real value" s.env "POSTGRES_PASSWORD=$LONG" "$LONG"
+must_fail "RESEND_API_KEY with a real value" s.env "RESEND_API_KEY=$LONG" "$LONG"
+must_fail "a *_TOKEN assignment" s.env "DEPLOY_TOKEN=$LONG" "$LONG"
+must_fail "a quoted *_SECRET in TypeScript" s.ts "const x = { SESSION_SECRET: '$LONG' }" "$LONG"
+must_fail "a YAML *_PASSWORD" s.yaml "  DB_PASSWORD: $LONG" "$LONG"
+must_pass "a short value" s.env "POSTGRES_PASSWORD=short"
+must_pass "the .env.example placeholders" deploy/self-hosted/.env.example "POSTGRES_PASSWORD=replace-with-random-hex
+BETTER_AUTH_SECRET=replace-with-random-hex"
+must_pass "compose variable references" c.yaml 'BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?run just setup}'
+must_pass "shell command substitutions" c.sh 'POSTGRES_PASSWORD=$(openssl rand -hex 24)'
+must_pass "a password reference inside a URL" c.yaml 'DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}'
+must_pass "a sed expression that rewrites the variable" j.txt 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=x/'
+must_pass "angle-bracket placeholders" c.md "BETTER_AUTH_SECRET=<generate with openssl rand -hex 32>"
+must_pass "the dummy API test secret" apps/api/test/helpers.ts "BETTER_AUTH_SECRET: 'test-secret-test-secret-test-secret-0000'"
+must_fail "the dummy test secret anywhere else" other.ts "BETTER_AUTH_SECRET: 'test-secret-test-secret-test-secret-0000'"
+must_pass "the fake session token in the hardening test" apps/api/test/hardening.test.ts "const TOKEN = 'FAKE-SESSION-TOKEN-77d0e5b4'"
+
+echo "# fail closed"
+n=$((n + 1))
+R="$ROOT/r$n"
+mkdir -p "$R"
+printf '%s\n' "fine" > "$R/a.txt"
+scan
+if [ "$RC" -ne 0 ] && grep -qi 'git' "$R.out"; then ok "fails with a message outside a work tree"; else bad "fails outside a work tree (rc=$RC)"; fi
+if [ "$RC" -ne 0 ] && ! grep -q 'passed' "$R.out"; then ok "does not report success outside a work tree"; else bad "reported success outside a work tree"; fi
+
+echo "# optional denylist"
+DENY="$ROOT/deny.txt"
+printf '%s\n' 'Secret Name' '' 'another-term' > "$DENY"
+deny_scan() { PUBLIC_SAFE_DENYLIST="$DENY" sh "$SCRIPT" "$R" > "$R.out" 2>&1; RC=$?; }
+repo_with d.txt "met someone called secret NAME yesterday"
+deny_scan
+if [ "$RC" -ne 0 ] && grep -q 'd.txt' "$R.out"; then ok "flags a denylisted term (case-insensitive)"; else bad "flags a denylisted term (rc=$RC)"; fi
+if grep -qi -e 'secret name' -e 'another-term' "$R.out"; then bad "denylist: output must not echo the term"; else ok "denylist: the term is never printed"; fi
+repo_with d.txt "an unrelated sentence"
+deny_scan
+if [ "$RC" -eq 0 ]; then ok "denylist: clean repo passes"; else bad "denylist: clean repo passes (rc=$RC)"; fi
+repo_with d.txt "contains another-term here"
+scan
+if [ "$RC" -eq 0 ]; then ok "denylist is off when the variable is unset"; else bad "denylist is off when the variable is unset"; fi
+repo_with d.txt "fine"
+PUBLIC_SAFE_DENYLIST="$ROOT/missing.txt" sh "$SCRIPT" "$R" > "$R.out" 2>&1; RC=$?
+if [ "$RC" -ne 0 ]; then ok "an unreadable denylist fails closed"; else bad "an unreadable denylist fails closed"; fi
+printf '\n\n' > "$DENY"
+repo_with d.txt "anything"
+deny_scan
+if [ "$RC" -eq 0 ]; then ok "blank lines in the denylist do not match everything"; else bad "blank denylist lines match everything"; fi
 
 echo "# the word unraid"
 must_fail "unraid in lowercase" w.txt "runs on unraid"

@@ -2,7 +2,9 @@ name: Staging image
 
 # Every push to main (after CI passes) publishes ghcr.io/<repo>:staging and :sha-<commit>.
 # There is no deploy step and no secret beyond GITHUB_TOKEN: the staging host pulls the image
-# itself (deploy/self-hosted/update.sh).
+# itself (deploy/self-hosted/update.sh). Only refs/heads/main publishes, also for
+# workflow_dispatch. update.sh does not verify the build attestation yet (follow-up in
+# docs/release-checklist.md).
 on:
   push:
     branches: [main]
@@ -25,6 +27,7 @@ jobs:
 
   image:
     needs: ci
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:

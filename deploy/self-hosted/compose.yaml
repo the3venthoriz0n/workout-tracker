@@ -1,6 +1,7 @@
 # Self-hosted stack for any Linux Docker host that already runs a Cloudflare Tunnel (cloudflared)
 # in its own container. cloudflared is NOT part of this stack: it reaches the app over an
-# existing, external Docker network (TUNNEL_NETWORK) at http://app:3000. Nothing is published
+# existing, external Docker network (TUNNEL_NETWORK) at http://workout-tracker-app:3000 (a unique
+# alias: plain `app` could also be another stack's service on that shared network). Nothing is published
 # on the host. Setup: deploy/self-hosted/README.md.
 name: workout-tracker-selfhosted
 
@@ -24,8 +25,10 @@ services:
       # The tunnel sets cf-connecting-ip and the app is reachable only through it (no published
       # ports), so this header is safe to trust for per-client rate limits.
       CLIENT_IP_HEADER: cf-connecting-ip
-      # Comma separated emails allowed to create an account; empty means open sign-up.
-      SIGNUP_ALLOWLIST: ${SIGNUP_ALLOWLIST:-}
+      # Comma separated emails allowed to create an account; an empty value means open sign-up.
+      # Required to be present (no colon in the expansion) so a misspelled name in .env fails
+      # loudly instead of silently opening sign-up.
+      SIGNUP_ALLOWLIST: ${SIGNUP_ALLOWLIST?set SIGNUP_ALLOWLIST in .env (empty means open sign-up)}
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
     healthcheck:
       test: [CMD, wget, -qO-, 'http://127.0.0.1:3000/healthz']
@@ -36,7 +39,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    networks: [default, tunnel]
+    networks:
+      default: {}
+      tunnel:
+        # Point the tunnel's public hostname at http://workout-tracker-app:3000, not http://app:3000.
+        aliases: [workout-tracker-app]
 
   db:
     <<: *hardening

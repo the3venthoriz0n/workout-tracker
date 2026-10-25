@@ -19,11 +19,16 @@ cd deploy/self-hosted
 cp .env.example .env && chmod 600 .env
 ```
 
-Edit `.env`: `DOMAIN`, `TUNNEL_NETWORK`, the database password and `BETTER_AUTH_SECRET` (`openssl rand -hex 32` for each), and `SIGNUP_ALLOWLIST` (comma separated emails that may create an account; empty means open sign-up). `.env` never leaves the host, and is gitignored. Back it up somewhere private: losing the secret signs everyone out.
+Edit `.env`: `DOMAIN`, `TUNNEL_NETWORK`, the database password and `BETTER_AUTH_SECRET` (`openssl rand -hex 32` for each), and `SIGNUP_ALLOWLIST` (comma separated emails that may create an account; the line is required, and an explicitly empty value means open sign-up; compose refuses to start when it is missing). `.env` never leaves the host, and is gitignored. Back it up somewhere private: losing the secret signs everyone out.
 
 ## 3. Tunnel public hostname
 
-In the Cloudflare dashboard (Zero Trust, Networks, Tunnels, your tunnel, Public Hostname) add a hostname for `DOMAIN` with service `http://app:3000`. `app` resolves because the app container joins the tunnel's network. Cloudflare terminates TLS; the app trusts `cf-connecting-ip` for per-client rate limits only because nothing else can reach it.
+In the Cloudflare dashboard (Zero Trust, Networks, Tunnels, your tunnel, Public Hostname) add a hostname for `DOMAIN` with service `http://workout-tracker-app:3000`. That name is a network alias the app container gets on the tunnel's network; use it instead of `app`, which any other stack on that network could also claim. Cloudflare terminates TLS; the app trusts `cf-connecting-ip` for per-client rate limits only because nothing else can reach it.
+
+Known limits (also in the spec):
+- Any other container on the tunnel network can reach the app directly and send its own `cf-connecting-ip`, bypassing per-IP rate limits. Put only trusted containers on that network.
+- The allowlist checks an email address, not a person: anyone who knows a listed address can register it before its owner does. Email verification (planned in M2b) closes this.
+- The sign-up response can reveal whether a listed address is already registered.
 
 ## 4. First deploy
 
@@ -43,18 +48,20 @@ Schedule `update.sh` every few minutes (cron, or any scheduler on the host):
 */5 * * * * REPO=<owner>/<repo> sh /path/to/deploy/self-hosted/update.sh >> /path/to/update.log 2>&1
 ```
 
-It resolves the digest of `ghcr.io/$REPO:staging`, exits silently when that is already deployed, otherwise runs `deploy.sh` with `repo@digest`. A lock stops runs overlapping. It logs timestamps and digests only. To pin staging to an older build, stop the schedule and run `deploy.sh` by hand with that digest.
+It resolves the digest of `ghcr.io/$REPO:staging`, exits silently when that is already deployed, otherwise runs `deploy.sh` with `repo@digest`. A lock (`flock`, or a lock directory where `flock` is missing) stops runs overlapping. It logs timestamps and digests only.
+
+If a deploy fails, `update.sh` writes the digest to `.failed-digest` next to `.env` and does not retry it on later runs (it logs one reminder line and exits 0). It deploys again when a different digest is published, or after you delete `.failed-digest`. Fix the cause first: a retry would take another pre-migration dump. To pin staging to an older build, stop the schedule and run `deploy.sh` by hand with that digest.
 
 ## 6. Backups
 
-`deploy.sh` keeps the newest 5 pre-migration dumps in `deploy/self-hosted/backups/` (same disk as the database, so this only guards bad migrations). For a real backup schedule something like this and copy the file off the host:
+`deploy.sh` keeps the newest 5 pre-migration dumps in `deploy/self-hosted/backups/` (same disk as the database, so this only guards bad migrations). When a deploy fails, that attempt's dump is renamed to `pre-<time>-<digest>.dump.keep` (the name is logged) and is never rotated, so repeated failures cannot delete the last good copy. To restore it, create an empty database and run `pg_restore` on it (for example `docker compose exec -T db pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists < backups/<file>.keep`). Delete `*.keep` files by hand once they are no longer needed. For a real backup schedule something like this and copy the file off the host:
 
 ```sh
 cd /path/to/deploy/self-hosted
 docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "backup-$(date -u +%Y%m%d).dump"
 ```
 
-Restore into an empty database with `pg_restore`. Database files live in the named volume `pgdata`.
+Restore into an empty database with `pg_restore`. After a deploy, `update.sh`/`deploy.sh` remove only this app's older images (same repository, other digests); other stacks' images are never touched. Database files live in the named volume `pgdata`.
 
 ## 7. Logs and status
 
