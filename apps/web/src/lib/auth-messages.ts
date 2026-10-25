@@ -5,6 +5,7 @@ export const AUTH_ERROR_TEXT: Record<AuthErrorKind, string> = {
   rate_limited: 'Too many attempts. Wait a minute and try again.',
   offline: "Can't reach the server. Check your connection and try again.",
   email_taken: "That email can't be used for a new account. Try signing in instead.",
+  signup_closed: 'Sign-up is invite-only. Ask the owner to add your email.',
   invalid_input: 'Check the email and password and try again.',
   server: 'Something went wrong on our side. Try again in a moment.',
   unsynced_changes: "Some changes haven't reached the server yet. Reconnect and try again, or sign out and discard them.",

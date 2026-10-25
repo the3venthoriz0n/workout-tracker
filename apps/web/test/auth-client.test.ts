@@ -51,6 +51,14 @@ test('sign-up 422 means the email is unusable; network failure means offline', a
   expect((e2 as AuthError).kind).toBe('offline')
 })
 
+test('sign-up 403 means sign-ups are closed; sign-in 403 stays a server error', async () => {
+  const body = { code: 'SIGNUP_CLOSED', message: 'signup_closed' }
+  const e1 = await createAuthClient({ fetch: stub(json(403, body)) }).signUp('a@b.co', 'longenough1').catch((e: unknown) => e)
+  expect((e1 as AuthError).kind).toBe('signup_closed')
+  const e2 = await createAuthClient({ fetch: stub(json(403, body)) }).signIn('a@b.co', 'longenough1').catch((e: unknown) => e)
+  expect((e2 as AuthError).kind).toBe('server')
+})
+
 test('session returns user or null, and throws offline/server', async () => {
   expect(await createAuthClient({ fetch: stub(json(200, null)) }).session()).toBeNull()
   expect(await createAuthClient({ fetch: stub(json(401, {})) }).session()).toBeNull()

@@ -93,6 +93,83 @@ describe('sign up', () => {
   })
 })
 
+describe('sign-up allowlist', () => {
+  const allow = ['alice@example.com', 'bob@example.org']
+
+  async function counts(db: Harness['db']) {
+    const { user, session } = await import('../src/db/schema.js')
+    return { users: (await db.select().from(user)).length, sessions: (await db.select().from(session)).length }
+  }
+
+  it('lets a listed email sign up, in any letter case, and sign in', async () => {
+    h = await setupApp({ SIGNUP_ALLOWLIST: allow })
+    const up = await h.signUp('ALICE@Example.COM')
+    expect(up.status).toBe(200)
+    expect((await h.signIn('alice@example.com', GOOD_PASSWORD)).status).toBe(200)
+  })
+
+  it('refuses an unlisted email with a uniform 403 signup_closed and creates no user or session', async () => {
+    h = await setupApp({ SIGNUP_ALLOWLIST: allow })
+    const res = await h.signUp('mallory@example.com')
+    expect(res.status).toBe(403)
+    expect(res.headers.getSetCookie().length).toBe(0)
+    expect(await res.json()).toEqual({ code: 'SIGNUP_CLOSED', message: 'signup_closed' })
+    expect(await counts(h.db)).toEqual({ users: 0, sessions: 0 })
+    expect((await h.signIn('mallory@example.com', GOOD_PASSWORD)).status).toBe(401)
+  })
+
+  it('matches exactly after lowercasing: plus-addressing and lookalikes are refused', async () => {
+    h = await setupApp({ SIGNUP_ALLOWLIST: allow })
+    for (const email of [
+      'alice+x@example.com',
+      'alice@example.com.evil.example',
+      'a.lice@example.com',
+      'alice@example.org',
+      'xalice@example.com',
+    ]) {
+      const res = await h.signUp(email)
+      expect(res.status, email).toBe(403)
+      expect(res.headers.getSetCookie().length, email).toBe(0)
+    }
+    expect(await counts(h.db)).toEqual({ users: 0, sessions: 0 })
+  })
+
+  it('answers a blocked email the same way every time', async () => {
+    h = await setupApp({ SIGNUP_ALLOWLIST: allow })
+    const a = await h.signUp('mallory@example.com')
+    const b = await h.signUp('mallory@example.com')
+    expect(b.status).toBe(a.status)
+    expect(await b.json()).toEqual(await a.json())
+  })
+
+  it('does not affect sign-in of accounts that already exist', async () => {
+    h = await setupApp()
+    expect((await h.signUp('legacy@example.com')).status).toBe(200)
+    const { createAuth } = await import('../src/auth.js')
+    const { createApp } = await import('../src/app.js')
+    const env = { ...h.env, SIGNUP_ALLOWLIST: allow }
+    const auth = createAuth(h.db, env, { clientIpHeader: 'x-test-client-ip' })
+    const app = createApp({
+      auth,
+      env,
+      getService: () => {
+        throw new Error('unused')
+      },
+    })
+    const res = await app.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: { origin: h.origin, 'content-type': 'application/json', 'x-test-client-ip': '203.0.113.50' },
+      body: JSON.stringify({ email: 'legacy@example.com', password: GOOD_PASSWORD }),
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it('an empty allowlist keeps sign-up open', async () => {
+    h = await setupApp({ SIGNUP_ALLOWLIST: [] })
+    expect((await h.signUp('anyone@example.com')).status).toBe(200)
+  })
+})
+
 describe('sign in and out', () => {
   it('a wrong password and an unknown email give the same generic failure', async () => {
     h = await setupApp()

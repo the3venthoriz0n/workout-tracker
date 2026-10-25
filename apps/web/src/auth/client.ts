@@ -3,6 +3,7 @@ export type AuthErrorKind =
   | 'rate_limited'
   | 'offline'
   | 'email_taken'
+  | 'signup_closed'
   | 'invalid_input'
   | 'server'
   | 'check_failed'
@@ -30,6 +31,7 @@ type Opts = { fetch?: typeof fetch; baseUrl?: string }
 function kindForStatus(status: number, signUp: boolean): AuthErrorKind {
   if (status === 429) return 'rate_limited'
   if (signUp && status === 422) return 'email_taken'
+  if (signUp && status === 403) return 'signup_closed'
   if (status === 401) return 'invalid_credentials'
   if (status === 400) return 'invalid_input'
   return 'server'

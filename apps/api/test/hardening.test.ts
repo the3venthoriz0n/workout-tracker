@@ -74,6 +74,11 @@ describe('rateLimitIpHeaders', () => {
   it('production reads only x-forwarded-for', () => {
     expect(rateLimitIpHeaders({ NODE_ENV: 'production' })).toEqual(['x-forwarded-for'])
   })
+  it('CLIENT_IP_HEADER replaces the default in every environment', () => {
+    for (const NODE_ENV of ['production', 'development', 'test'] as const) {
+      expect(rateLimitIpHeaders({ NODE_ENV, CLIENT_IP_HEADER: 'cf-connecting-ip' })).toEqual(['cf-connecting-ip'])
+    }
+  })
   it('development and test read no client-controlled header', () => {
     for (const NODE_ENV of ['development', 'test'] as const) {
       expect(rateLimitIpHeaders({ NODE_ENV })).toEqual([])

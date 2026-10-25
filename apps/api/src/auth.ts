@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth'
+import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import type { Db } from './db/index.js'
 import { account, session, user, verification } from './db/schema.js'
@@ -6,7 +7,8 @@ import type { Env } from './env.js'
 import { sanitizedLog } from './logging.js'
 import { configuredOrigins, isTrustedOrigin } from './origins.js'
 
-export type AuthEnv = Pick<Env, 'NODE_ENV' | 'BETTER_AUTH_URL' | 'BETTER_AUTH_SECRET' | 'TRUSTED_ORIGINS'>
+export type AuthEnv = Pick<Env, 'NODE_ENV' | 'BETTER_AUTH_URL' | 'BETTER_AUTH_SECRET' | 'TRUSTED_ORIGINS'> &
+  Partial<Pick<Env, 'CLIENT_IP_HEADER' | 'SIGNUP_ALLOWLIST'>>
 
 export type AuthOptions = {
   /**
@@ -25,8 +27,12 @@ export type AuthOptions = {
  * Development and test: no client-controlled header at all (dev is exposed on the LAN, spec
  * section 11), otherwise anyone could pick a fresh "IP" per request and dodge the limits.
  * Better Auth then uses one shared loopback bucket.
+ * CLIENT_IP_HEADER replaces the default in every environment. Set it only when the app is
+ * reachable solely through a trusted proxy that sets that header and drops client copies (a
+ * Cloudflare Tunnel sets cf-connecting-ip).
  */
-export function rateLimitIpHeaders(env: Pick<Env, 'NODE_ENV'>): string[] {
+export function rateLimitIpHeaders(env: Pick<Env, 'NODE_ENV'> & Partial<Pick<Env, 'CLIENT_IP_HEADER'>>): string[] {
+  if (env.CLIENT_IP_HEADER) return [env.CLIENT_IP_HEADER]
   return env.NODE_ENV === 'production' ? ['x-forwarded-for'] : []
 }
 
@@ -34,6 +40,8 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions = {}) {
   const production = env.NODE_ENV === 'production'
 
   const ipAddressHeaders = opts.clientIpHeader ? [opts.clientIpHeader] : rateLimitIpHeaders(env)
+
+  const allowlist = new Set(env.SIGNUP_ALLOWLIST ?? [])
 
   return betterAuth({
     baseURL: env.BETTER_AUTH_URL,
@@ -50,6 +58,16 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions = {}) {
     },
     // Better Auth logs raw error objects (Drizzle errors carry query parameters); sanitize them.
     logger: { log: sanitizedLog },
+    hooks: {
+      // Invite-only sign-up: exact match on the lowercased email (no plus-address or dot folding).
+      // Runs before anything is written, so a refusal creates no user and no session.
+      before: createAuthMiddleware(async (ctx) => {
+        if (allowlist.size === 0 || ctx.path !== '/sign-up/email') return
+        const email = (ctx.body as { email?: unknown } | undefined)?.email
+        if (typeof email === 'string' && allowlist.has(email.toLowerCase())) return
+        throw new APIError('FORBIDDEN', { code: 'SIGNUP_CLOSED', message: 'signup_closed' })
+      }),
+    },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,

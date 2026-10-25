@@ -24,6 +24,27 @@ const schema = z.object({
         .filter(Boolean),
     )
     .pipe(z.array(z.url())),
+  // Request header that carries the client IP for rate limiting; replaces the default
+  // (x-forwarded-for in production, none elsewhere). Set it ONLY when the app is reachable solely
+  // through a trusted proxy that sets this header and discards any client-supplied copy (a
+  // Cloudflare Tunnel sets cf-connecting-ip); otherwise clients can pick their own "IP".
+  CLIENT_IP_HEADER: z
+    .string()
+    .optional()
+    .transform((v) => (v === '' ? undefined : v))
+    .pipe(z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'must be a lowercase header name').optional()),
+  // Comma separated emails. When non-empty only these may create an account (exact match after
+  // lowercasing); empty or unset leaves sign-up open. Sign-in is never affected.
+  SIGNUP_ALLOWLIST: z
+    .string()
+    .optional()
+    .transform((v) =>
+      (v ?? '')
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    )
+    .pipe(z.array(z.email('invalid email in list'))),
   // Directory of the built SPA; set only in the production image.
   STATIC_DIR: z.string().optional(),
 })

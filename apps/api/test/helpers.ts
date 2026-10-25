@@ -8,7 +8,11 @@ import { withTestDb, type TestDb } from './harness.js'
 export const TEST_ORIGIN = 'https://app.example.com'
 export const GOOD_PASSWORD = 'correct horse battery'
 
-export type TestEnv = OriginEnv & { BETTER_AUTH_SECRET: string; STATIC_DIR?: string }
+export type TestEnv = OriginEnv & {
+  BETTER_AUTH_SECRET: string
+  STATIC_DIR?: string
+  SIGNUP_ALLOWLIST?: string[]
+}
 
 export function testEnv(over: Partial<TestEnv> = {}): TestEnv {
   const NODE_ENV = over.NODE_ENV ?? 'test'
