@@ -16,6 +16,7 @@ cat > "$STUBS/docker" <<'STUB'
 #!/bin/sh
 # Logs every call; fails selected subcommands.
 echo "docker $* [IMAGE_REF=${IMAGE_REF:-}]" >> "$STUB_LOG"
+echo "COMPOSE_FILE=${COMPOSE_FILE:-} PWD=$(pwd -P)" >> "$STUB_LOG.ctx"
 case "$*" in
   "compose pull"*) [ -z "${FAIL_PULL:-}" ] || exit 1 ;;
   "compose ps"*) [ -z "${DB_RUNNING:-}" ] || echo abc123 ;;
@@ -235,6 +236,58 @@ check "dump before migrate" before 'pg_dump' 'migrate.js'
 check "migrate before up" before 'migrate.js' 'remove-orphans'
 check "pull before up" before 'compose pull' 'remove-orphans'
 check "all compose calls ran with new IMAGE_REF" sh -c "! grep '^docker compose' '$STUB_LOG' | grep -v 'IMAGE_REF=$REF_B'"
+
+echo "# (h) self-hosted mode (COMPOSE_FILE)"
+sh_case() { # a deploy/ tree with self-hosted/compose.yaml and a hand-made .env there
+  new_case
+  mkdir -p "$W/self-hosted"
+  cp "$SRC/self-hosted/compose.yaml" "$W/self-hosted/"
+  cat > "$W/self-hosted/.env" <<ENV
+DOMAIN=example.invalid
+POSTGRES_USER=workout
+POSTGRES_PASSWORD=$(printf 'c%.0s' $(seq 1 64))
+POSTGRES_DB=workout
+BETTER_AUTH_SECRET=$(printf 'd%.0s' $(seq 1 64))
+TUNNEL_NETWORK=tunnel
+ENV
+  [ -z "${1:-}" ] || echo "IMAGE_REF=$1" >> "$W/self-hosted/.env"
+  chmod 600 "$W/self-hosted/.env"
+}
+sh_run() { # sh_run <ref>
+  ( cd "$W" && COMPOSE_FILE=self-hosted/compose.yaml PATH="$STUBS:$PATH" sh deploy.sh "$1" ) > "$W/out" 2>&1
+  RC=$?
+}
+sh_case "$REF_A"
+sh_run "$REF_B"
+check "self-hosted upgrade succeeds" [ "$RC" -eq 0 ]
+check "compose runs inside the compose file's directory" has "PWD=$W/self-hosted\$" "$STUB_LOG.ctx"
+check "compose always gets COMPOSE_FILE" sh -c "! grep -v 'COMPOSE_FILE=compose.yaml' '$STUB_LOG.ctx'"
+check "self-hosted: IMAGE_REF recorded in its own .env" has "^IMAGE_REF=$REF_B$" "$W/self-hosted/.env"
+check "self-hosted: previous image recorded" has "^PREVIOUS_IMAGE_REF=$REF_A$" "$W/self-hosted/.env"
+check "self-hosted: no .env next to deploy.sh" [ ! -e "$W/.env" ]
+check "self-hosted: needs no DOMAIN" hasnt 'DOMAIN' "$W/out"
+
+sh_case "$REF_A"
+( cd "$W" && DB_RUNNING=1 COMPOSE_FILE=self-hosted/compose.yaml PATH="$STUBS:$PATH" sh deploy.sh "$REF_B" ) > "$W/out" 2>&1
+check "self-hosted: pre-migration dump lands beside the .env" [ -n "$(find "$W/self-hosted/backups" -name 'pre-*.dump' 2>/dev/null)" ]
+check "self-hosted: dump before migrate before up" sh -c "[ \$(grep -n pg_dump '$STUB_LOG' | head -1 | cut -d: -f1) -lt \$(grep -n migrate.js '$STUB_LOG' | head -1 | cut -d: -f1) ]"
+
+sh_case "$REF_A"
+FAIL_UP=1 sh_run "$REF_B"
+check "self-hosted: failed bring-up exits non-zero" [ "$RC" -ne 0 ]
+check "self-hosted: rolls back to the previous image" has "wait-timeout 120 app \[IMAGE_REF=$REF_A\]" "$STUB_LOG"
+check "self-hosted: .env still names the previous image" has "^IMAGE_REF=$REF_A$" "$W/self-hosted/.env"
+
+sh_case "$REF_A"
+FAIL_MIGRATE=1 sh_run "$REF_B"
+check "self-hosted: migration failure exits non-zero" [ "$RC" -ne 0 ]
+
+sh_case ""
+rm "$W/self-hosted/.env"
+sh_run "$REF_A"
+check "self-hosted: never generates a .env" [ "$RC" -ne 0 ] 
+check "self-hosted: missing .env explained" has 'Create .*env' "$W/out"
+check "self-hosted: missing .env: docker never called" [ ! -s "$STUB_LOG" ]
 
 echo
 echo "$PASS passed, $FAIL failed"

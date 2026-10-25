@@ -90,6 +90,23 @@ jobs:
           echo "published ports: $published"
           test "$published" = "[80,443]"
 
+  self-hosted-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Self-hosted compose validates with the example env and publishes no ports
+        env:
+          IMAGE_REF: ghcr.io/example/app@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        run: |
+          docker compose -f deploy/self-hosted/compose.yaml --env-file deploy/self-hosted/.env.example config --format json > config.json
+          jq -e '[.services | keys[]] | sort == ["app","db"]' config.json
+          published=$(jq -c '[.services[].ports[]?]' config.json)
+          echo "published ports: $published"
+          test "$published" = "[]"
+
   deploy-script:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -98,9 +115,11 @@ jobs:
         with:
           persist-credentials: false
       - name: shellcheck
-        run: docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d deploy/deploy.sh deploy/test/deploy.test.sh
+        run: docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d deploy/deploy.sh deploy/self-hosted/update.sh deploy/test/deploy.test.sh deploy/test/update.test.sh
       - name: deploy.sh tests (stubbed docker)
         run: sh deploy/test/deploy.test.sh
+      - name: update.sh tests (stubbed docker and deploy.sh)
+        run: sh deploy/test/update.test.sh
 
   dependency-review:
     if: github.event_name == 'pull_request'

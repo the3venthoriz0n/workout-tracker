@@ -6,6 +6,10 @@
 # serving while migrations run, so migrations must stay backward compatible.
 # .env is only updated after everything succeeded; if bring-up fails the previous
 # image is restored (best effort) and the script exits non-zero.
+# Self-hosted mode: COMPOSE_FILE=self-hosted/compose.yaml (relative to this script, or absolute)
+# runs everything in that file's directory (its .env, backups/). There the .env is written by
+# hand (the tunnel network and sign-up list are site specific), never generated, and DOMAIN
+# is optional.
 # Manual rollback: sh deploy.sh <previous image@sha256:...>   (see PREVIOUS_IMAGE_REF in .env)
 set -eu
 
@@ -31,7 +35,20 @@ if [ -n "${DOMAIN:-}" ] && ! valid_domain "$DOMAIN"; then
   exit 1
 fi
 
-cd "$(dirname "$0")"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+if [ -n "${COMPOSE_FILE:-}" ]; then
+  case "$COMPOSE_FILE" in
+    /*) ;;
+    *) COMPOSE_FILE="$SCRIPT_DIR/$COMPOSE_FILE" ;;
+  esac
+  cd "$(dirname "$COMPOSE_FILE")"
+  COMPOSE_FILE=$(basename "$COMPOSE_FILE")
+  export COMPOSE_FILE
+  SELF_HOSTED=1
+else
+  cd "$SCRIPT_DIR"
+  SELF_HOSTED=
+fi
 umask 077
 
 # Value of KEY in .env (empty if absent). sed fails loudly if .env is unreadable.
@@ -41,6 +58,10 @@ envval() {
 
 # First deploy: generate production secrets here, so they never exist anywhere else.
 # Written to a temp file first so an interruption can't leave a partial .env.
+if [ ! -e .env ] && [ -n "$SELF_HOSTED" ]; then
+  echo "Create .env first (copy .env.example in $(pwd) and fill it in); self-hosted mode never generates one." >&2
+  exit 1
+fi
 if [ ! -e .env ]; then
   : "${DOMAIN:?DOMAIN is required on first deploy}"
   cat > .env.new <<ENVEOF

@@ -1,0 +1,65 @@
+# Self-hosted stack for any Linux Docker host that already runs a Cloudflare Tunnel (cloudflared)
+# in its own container. cloudflared is NOT part of this stack: it reaches the app over an
+# existing, external Docker network (TUNNEL_NETWORK) at http://app:3000. Nothing is published
+# on the host. Setup: deploy/self-hosted/README.md.
+name: workout-tracker-selfhosted
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt: [no-new-privileges:true]
+
+services:
+  app:
+    <<: *hardening
+    # Pin by digest (repo@sha256:...). deploy.sh / update.sh set it; never use a mutable tag.
+    image: ${IMAGE_REF:?}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
+      BETTER_AUTH_URL: https://${DOMAIN:?}
+      # The tunnel sets cf-connecting-ip and the app is reachable only through it (no published
+      # ports), so this header is safe to trust for per-client rate limits.
+      CLIENT_IP_HEADER: cf-connecting-ip
+      # Comma separated emails allowed to create an account; empty means open sign-up.
+      SIGNUP_ALLOWLIST: ${SIGNUP_ALLOWLIST:-}
+      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
+    healthcheck:
+      test: [CMD, wget, -qO-, 'http://127.0.0.1:3000/healthz']
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [default, tunnel]
+
+  db:
+    <<: *hardening
+    image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
+    shm_size: 128mb
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [default]
+
+networks:
+  # The network cloudflared is already attached to; its name is a site-specific value.
+  tunnel:
+    external: true
+    name: ${TUNNEL_NETWORK:?}
+
+volumes:
+  pgdata:
