@@ -3,8 +3,10 @@ import {
   ConflictError,
   NotFoundError,
   SessionInProgressError,
+  compareSetLogs,
   effectiveValues,
   newId,
+  planSessionSets,
   progress,
   setLogSchema,
 } from '@workout/shared'
@@ -21,7 +23,8 @@ import {
   workoutSession,
 } from '../db/schema.js'
 import type { Db } from '../db/types.js'
-import { dec, isUuid, now, num, toExercise, toPlanItem, toRule, toSession, toSetLog } from './mappers.js'
+import { dec, isUuid, now, num, toExercise, toPlanItem, toProfile, toSession, toSetLog } from './mappers.js'
+import { ruleOf } from './plans.js'
 import { isUniqueViolation } from './pg-error.js'
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
@@ -29,7 +32,7 @@ type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 const activeFilter = (userId: string) =>
   and(eq(workoutSession.userId, userId), isNull(workoutSession.completedAt), isNull(workoutSession.deletedAt))
 
-/** Groups a session's set logs by plan item (ordered by position, then set number). */
+/** Groups a session's set logs by plan item, in display order (seq, else position then set number). */
 async function detailOf(tx: Tx, userId: string, session: WorkoutSession): Promise<SessionDetail> {
   const logs = (
     await tx
@@ -38,7 +41,7 @@ async function detailOf(tx: Tx, userId: string, session: WorkoutSession): Promis
       .where(and(eq(setLog.userId, userId), eq(setLog.sessionId, session.id)))
   )
     .map(toSetLog)
-    .sort((a, b) => a.position - b.position || a.set_no - b.set_no)
+    .sort(compareSetLogs)
   const groups = new Map<string, SetLog[]>()
   for (const log of logs) {
     const group = groups.get(log.plan_item_id)
@@ -65,7 +68,7 @@ async function detailOf(tx: Tx, userId: string, session: WorkoutSession): Promis
       exercise_name: first.exercise_name,
       video_url: ex?.video_url ?? null,
       notes: ex?.notes ?? '',
-      sets,
+      sets: sets.sort((a, b) => a.set_no - b.set_no),
     })
   }
   return { ...session, exercises: out }
@@ -129,31 +132,38 @@ export async function startSession(db: Db, userId: string, planDayId: string): P
         createdAt: ts,
         updatedAt: ts,
       })
-      const logs: (typeof setLog.$inferInsert)[] = []
-      for (const { item: itemRow, ex: exRow } of items) {
+      const rows = items.map(({ item: itemRow, ex: exRow }) => {
         const item = toPlanItem(itemRow)
-        const eff = effectiveValues(item, toExercise(exRow))
-        for (let setNo = 1; setNo <= eff.sets; setNo++) {
-          logs.push({
-            id: newId(),
-            userId,
-            sessionId: id,
-            planItemId: item.id,
-            exerciseId: exRow.id,
-            exerciseName: exRow.name,
-            setNo,
-            position: item.position,
-            targetReps: eff.targetReps,
-            targetWeight: dec(eff.targetWeight),
-            actualReps: eff.targetReps,
-            weight: dec(eff.targetWeight),
-            done: false,
-            note: '',
-            createdAt: ts,
-            updatedAt: ts,
-          })
+        return { item, exRow, eff: effectiveValues(item, toExercise(exRow)) }
+      })
+      const byId = new Map(rows.map((r) => [r.item.id, r]))
+      const layout = planSessionSets(rows.map((r) => ({ ...r.item, sets: r.eff.sets })))
+      const logs: (typeof setLog.$inferInsert)[] = layout.map((slot) => {
+        const { item, exRow, eff } = byId.get(slot.plan_item_id)!
+        return {
+          id: newId(),
+          userId,
+          sessionId: id,
+          planItemId: item.id,
+          exerciseId: exRow.id,
+          exerciseName: exRow.name,
+          setNo: slot.set_no,
+          position: item.position,
+          targetReps: eff.targetReps,
+          targetWeight: dec(eff.targetWeight),
+          actualReps: eff.targetReps,
+          weight: dec(eff.targetWeight),
+          done: false,
+          note: '',
+          angle: item.angle,
+          amrap: item.amrap_last && slot.set_no === eff.sets,
+          seq: slot.seq,
+          supersetGroup: slot.superset_group,
+          supersetLabel: slot.superset_label,
+          createdAt: ts,
+          updatedAt: ts,
         }
-      }
+      })
       for (let i = 0; i < logs.length; i += 500) await tx.insert(setLog).values(logs.slice(i, i + 500))
       return id
     })
@@ -229,6 +239,7 @@ export async function finishSession(db: Db, userId: string, id: string): Promise
     const [prof] = await tx.select().from(profile).where(eq(profile.userId, userId))
     if (!prof) throw new NotFoundError('Profile')
     const increment = num(prof.weightIncrement)
+    const profileView = toProfile(prof)
     const ts = now()
     const summary: FinishSummary = []
 
@@ -253,7 +264,8 @@ export async function finishSession(db: Db, userId: string, id: string): Promise
         continue
       }
       const item = toPlanItem(itemRow)
-      const eff = effectiveValues(item, toExercise(exRow))
+      const ex = toExercise(exRow)
+      const eff = effectiveValues(item, ex)
       const [ruleRow] = await tx
         .select()
         .from(progressionRule)
@@ -264,7 +276,7 @@ export async function finishSession(db: Db, userId: string, id: string): Promise
         .where(and(eq(itemState.userId, userId), eq(itemState.planItemId, item.id)))
       const result = progress(
         { targetReps: eff.targetReps, targetWeight: eff.targetWeight, baseReps: eff.baseReps, plannedSets: eff.sets },
-        ruleRow ? toRule(ruleRow) : null,
+        ruleOf(item, ex, profileView, ruleRow).rule,
         stateRow?.failStreak ?? 0,
         group.sets,
         increment,

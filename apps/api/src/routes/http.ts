@@ -7,6 +7,7 @@ import {
   NotFoundError,
   ProfileNotFoundError,
   SessionInProgressError,
+  ValidationError,
 } from '@workout/shared'
 import type { z } from 'zod'
 import type { AppEnv } from '../middleware.js'
@@ -58,6 +59,9 @@ export async function body<S extends z.ZodType>(c: Ctx, schema: S): Promise<z.in
 /** Maps domain errors to HTTP. Returns undefined for anything else (the caller sends the sanitized 500). */
 export function mapDomainError(err: unknown, c: Context): Response | undefined {
   if (err instanceof InvalidRequestError) return c.json({ error: 'invalid', issues: err.issues }, 400)
+  if (err instanceof ValidationError) {
+    return c.json({ error: 'invalid', issues: [{ path: err.path, message: err.message }] }, 400)
+  }
   if (err instanceof ImportInvalidError) {
     return c.json({ error: 'invalid', issues: [{ path: '', message: err.message }] }, 400)
   }

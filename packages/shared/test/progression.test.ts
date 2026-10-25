@@ -68,3 +68,23 @@ describe('progress caps', () => {
     expect(progress(high, reps, 0, sets, 5).targetReps).toBe(1000)
   })
 })
+
+describe('AMRAP sets (spec §6: target_reps is the minimum)', () => {
+  // The last set is AMRAP; progress() sees it as an ordinary set log.
+  const amrap = (actual_reps: number) => ({ done: true, actual_reps, weight: 100, amrap: true })
+  it('extra reps on the AMRAP set count as success, exactly like hitting the minimum', () => {
+    const withExtra = progress(base, addW, 1, [hit, hit, amrap(12)], 5)
+    const atMinimum = progress(base, addW, 1, [hit, hit, amrap(5)], 5)
+    expect(withExtra).toEqual({ targetReps: 5, targetWeight: 105, failStreak: 0, outcome: 'success' })
+    expect(withExtra).toEqual(atMinimum)
+    expect(atMinimum).toEqual(progress(base, addW, 1, [hit, hit, hit], 5))
+  })
+  it('an AMRAP set below the minimum is a miss', () => {
+    expect(progress(base, addW, 0, [hit, hit, amrap(4)], 5)).toEqual({
+      targetReps: 5,
+      targetWeight: 100,
+      failStreak: 1,
+      outcome: 'miss',
+    })
+  })
+})

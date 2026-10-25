@@ -74,6 +74,18 @@ async function markDone(repo: Repo, session: SessionDetail, itemId: string, coun
   }
 }
 
+/** The typed validation error every implementation throws (ApiRepo maps the API's 400 to it). */
+async function expectInvalid(p: Promise<unknown>): Promise<void> {
+  await expect(p).rejects.toMatchObject({ name: 'ValidationError' })
+}
+async function expectNotFound(p: Promise<unknown>): Promise<void> {
+  await expect(p).rejects.toMatchObject({ name: 'NotFoundError' })
+}
+/** Every set of a session in display order (seq, the snapshot written at start). */
+function displayOrder(session: SessionDetail) {
+  return session.exercises.flatMap((e) => e.sets).sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
+}
+
 /** Spin (no timers) until the wall clock is past `iso`, so a later server/client timestamp is strictly newer. */
 async function pastInstant(iso: string): Promise<void> {
   const limit = Date.parse(iso)
@@ -383,8 +395,10 @@ export function runRepoContract(
       const second = await repo.addPlanItem(day.id, must(ex[1], 'exercise').id)
       expect(second.position).toBeGreaterThan(first.position)
       expect((await planItem(repo, plan.id, second.id)).rule).toMatchObject(custom)
-      // existing items keep the rule they started with
-      expect((await planItem(repo, plan.id, first.id)).rule).toMatchObject(defaultRule(5))
+      // Items without an override inherit at read time, so existing items follow the new default
+      // (owner decision: layered rules replace copy-on-add).
+      expect(await planItem(repo, plan.id, first.id)).toMatchObject({ rule: custom, ruleSource: 'profile' })
+      expect((await repo.exportAll()).progression_rules).toEqual([])
 
       // a unit change converts the stored default (10 lb -> 4.5 kg -> nearest 2.5) and new items use it
       await repo.updateProfile({ units: 'kg' })
@@ -764,6 +778,345 @@ export function runRepoContract(
       },
     )
 
+    // ------------------------------------------- day colours, angle, AMRAP, supersets
+    contract('plans', 'plan days take an optional palette colour; an update without one keeps it', async ({ repo }) => {
+      const plan = await repo.savePlan({ name: 'P' })
+      const plain = await repo.savePlanDay({ plan_id: plan.id, name: 'A' })
+      expect(plain.color).toBeNull()
+      const coloured = await repo.savePlanDay({ plan_id: plan.id, name: 'B', color: 'teal' })
+      expect(coloured.color).toBe('teal')
+      await repo.savePlanDay({ id: coloured.id, plan_id: plan.id, name: 'B2' })
+      expect((await tree(repo, plan.id)).days.map((d) => [d.name, d.color])).toEqual([
+        ['A', null],
+        ['B2', 'teal'],
+      ])
+      await repo.savePlanDay({ id: coloured.id, plan_id: plan.id, name: 'B2', color: 'red' })
+      expect((await tree(repo, plan.id)).days[1]?.color).toBe('red')
+      await repo.savePlanDay({ id: coloured.id, plan_id: plan.id, name: 'B2', color: null })
+      expect((await tree(repo, plan.id)).days[1]?.color).toBeNull()
+      await expect(repo.savePlanDay({ plan_id: plan.id, name: 'X', color: 'mauve' as never })).rejects.toThrow()
+      expect((await tree(repo, plan.id)).days).toHaveLength(2)
+    })
+
+    contract(
+      'plans',
+      'angle is set per plan item, only on exercises that support it; turning support off clears it',
+      async ({ repo }) => {
+        const bench = await exercise(repo, 'Bench Press')
+        expect(bench.supports_angle).toBe(false)
+        expect(bench.default_rule).toBeNull()
+        const { plan, day } = await planWithDay(repo)
+        const a = await repo.addPlanItem(day.id, bench.id)
+        expect(a).toMatchObject({ angle: null, amrap_last: false, superset_group: null })
+        await expectInvalid(repo.updatePlanItem(a.id, { angle: 'incline' }))
+        expect((await planItem(repo, plan.id, a.id)).angle).toBeNull()
+
+        const saved = await repo.saveExercise({ ...bench, supports_angle: true })
+        expect(saved.supports_angle).toBe(true)
+        // a save that does not mention the flag keeps it
+        const { supports_angle: _flag, ...withoutFlag } = saved
+        expect((await repo.saveExercise({ ...withoutFlag, notes: 'tempo' })).supports_angle).toBe(true)
+
+        // the same exercise as incline in one item and flat in another, each with its own targets
+        expect(await repo.updatePlanItem(a.id, { angle: 'incline', weight: 80 })).toMatchObject({ angle: 'incline', weight: 80 })
+        const b = await repo.addPlanItem(day.id, bench.id)
+        await repo.updatePlanItem(b.id, { angle: 'flat', weight: 100 })
+        const items = (await tree(repo, plan.id)).days[0]?.items ?? []
+        expect(items.map((i) => [i.angle, i.effective.targetWeight])).toEqual([
+          ['incline', 80],
+          ['flat', 100],
+        ])
+        // an angle edit is not a reps/weight edit: targets stay
+        expect(await repo.updatePlanItem(b.id, { amrap_last: true })).toMatchObject({ amrap_last: true, angle: 'flat' })
+        await expect(repo.updatePlanItem(a.id, { angle: 'sideways' as never })).rejects.toThrow()
+        expect(await repo.updatePlanItem(a.id, { angle: null })).toMatchObject({ angle: null })
+        await repo.updatePlanItem(a.id, { angle: 'decline' })
+
+        await repo.saveExercise({ ...withoutFlag, supports_angle: false })
+        const after = (await tree(repo, plan.id)).days[0]?.items ?? []
+        expect(after.map((i) => i.angle)).toEqual([null, null])
+        expect(after.map((i) => i.amrap_last)).toEqual([false, true])
+      },
+    )
+
+    contract(
+      'sessions',
+      'startSession snapshots angle and AMRAP (last set only); extra AMRAP reps progress like any success',
+      async ({ repo }) => {
+        const bench = await repo.saveExercise({ ...(await exercise(repo, 'Bench Press')), supports_angle: true })
+        const squat = await exercise(repo, 'Back Squat')
+        const { day } = await planWithDay(repo)
+        const a = await repo.addPlanItem(day.id, bench.id)
+        await repo.updatePlanItem(a.id, { sets: 3, reps: 5, weight: 100, angle: 'decline', amrap_last: true })
+        const b = await repo.addPlanItem(day.id, squat.id)
+        await repo.updatePlanItem(b.id, { sets: 2 })
+
+        const session = await repo.startSession(day.id)
+        expect(setsOf(session, a.id).map((s) => [s.set_no, s.angle, s.amrap])).toEqual([
+          [1, 'decline', false],
+          [2, 'decline', false],
+          [3, 'decline', true],
+        ])
+        expect(setsOf(session, b.id).map((s) => [s.angle, s.amrap, s.superset_group, s.superset_label])).toEqual([
+          [null, false, null, null],
+          [null, false, null, null],
+        ])
+        const [s1, s2, s3] = setsOf(session, a.id)
+        await repo.updateSet(must(s1, 'set').id, { done: true })
+        await repo.updateSet(must(s2, 'set').id, { done: true })
+        await repo.updateSet(must(s3, 'set').id, { done: true, actual_reps: 11 })
+        const summary = await repo.finishSession(session.id)
+        expect(summary.find((r) => r.exercise_name === 'Bench Press')).toMatchObject({
+          outcome: 'success',
+          before: { reps: 5, weight: 100 },
+          after: { reps: 5, weight: 105 },
+        })
+
+        // history keeps the snapshot after the plan changes
+        await repo.updatePlanItem(a.id, { angle: 'flat', amrap_last: false })
+        const history = must(await repo.getSession(session.id), 'session')
+        expect(setsOf(history, a.id).map((s) => [s.angle, s.amrap, s.actual_reps])).toEqual([
+          ['decline', false, 5],
+          ['decline', false, 5],
+          ['decline', true, 11],
+        ])
+        const next = await repo.startSession(day.id)
+        expect(setsOf(next, a.id).map((s) => [s.angle, s.amrap])).toEqual([
+          ['flat', false],
+          ['flat', false],
+          ['flat', false],
+        ])
+      },
+    )
+
+    contract(
+      'sessions',
+      'setSuperset groups 2-3 items of one day; sessions interleave members and label them',
+      async ({ repo }) => {
+        const names = ['Bench Press', 'Barbell Row', 'Overhead Press', 'Pull-up', 'Back Squat', 'Deadlift']
+        const ex = await Promise.all(names.map((n) => exercise(repo, n)))
+        const { plan, day } = await planWithDay(repo)
+        const other = await repo.savePlanDay({ plan_id: plan.id, name: 'Other' })
+        const add = async (d: string, e: Exercise, sets: number) => {
+          const i = await repo.addPlanItem(d, e.id)
+          await repo.updatePlanItem(i.id, { sets })
+          return i
+        }
+        const x = await add(day.id, must(ex[0], 'ex'), 1)
+        const a = await add(day.id, must(ex[1], 'ex'), 3)
+        const b = await add(day.id, must(ex[2], 'ex'), 2)
+        const c = await add(day.id, must(ex[3], 'ex'), 1)
+        const o1 = await add(other.id, must(ex[4], 'ex'), 1)
+        const o2 = await add(other.id, must(ex[5], 'ex'), 1)
+        const g = newId()
+        await repo.setSuperset(day.id, g, [a.id, b.id])
+        const groups = async () => (await tree(repo, plan.id)).days.flatMap((d) => d.items.map((i) => i.superset_group))
+        expect(await groups()).toEqual([null, g, g, null, null, null])
+
+        await expectInvalid(repo.setSuperset(day.id, newId(), [x.id])) // too small
+        await expectInvalid(repo.setSuperset(day.id, newId(), [x.id, a.id, b.id, c.id])) // too big
+        await expectInvalid(repo.setSuperset(day.id, newId(), [x.id, x.id])) // duplicate
+        await expectInvalid(repo.setSuperset(day.id, newId(), [x.id, o1.id])) // another day
+        await expectNotFound(repo.setSuperset(day.id, newId(), [x.id, newId()]))
+        await expectNotFound(repo.setSuperset(newId(), newId(), [x.id, c.id]))
+        // a group id belongs to one day
+        await expect(repo.setSuperset(other.id, g, [o1.id, o2.id])).rejects.toMatchObject({ name: 'ConflictError' })
+        expect(await groups()).toEqual([null, g, g, null, null, null])
+
+        const session = await repo.startSession(day.id)
+        expect(session.exercises.map((e) => e.plan_item_id)).toEqual([x.id, a.id, b.id, c.id])
+        const order = displayOrder(session)
+        expect(order.map((s) => [s.plan_item_id, s.set_no])).toEqual([
+          [x.id, 1],
+          [a.id, 1],
+          [b.id, 1],
+          [a.id, 2],
+          [b.id, 2],
+          [a.id, 3],
+          [c.id, 1],
+        ])
+        expect(order.map((s) => s.seq)).toEqual([0, 1, 2, 3, 4, 5, 6])
+        expect(order.map((s) => s.superset_label)).toEqual([null, 'A1', 'A2', 'A1', 'A2', 'A1', null])
+        expect(order.map((s) => s.superset_group)).toEqual([null, g, g, g, g, g, null])
+        await repo.finishSession(session.id)
+
+        // ungrouping changes the plan, never the history
+        await repo.setSuperset(day.id, g, null)
+        expect(await groups()).toEqual([null, null, null, null, null, null])
+        const history = displayOrder(must(await repo.getSession(session.id), 'session'))
+        expect(history.map((s) => s.superset_label)).toEqual([null, 'A1', 'A2', 'A1', 'A2', 'A1', null])
+        // three members are allowed
+        await repo.setSuperset(day.id, g, [c.id, x.id, a.id])
+        expect(await groups()).toEqual([g, g, null, g, null, null])
+      },
+    )
+
+    contract(
+      'plans',
+      'a superset shrinks when a member leaves and dissolves at one member',
+      async ({ repo }) => {
+        const names = ['Bench Press', 'Barbell Row', 'Overhead Press', 'Pull-up']
+        const ex = await Promise.all(names.map((n) => exercise(repo, n)))
+        const { plan, day } = await planWithDay(repo)
+        const added: PlanItem[] = []
+        for (const e of ex) added.push(await repo.addPlanItem(day.id, e.id))
+        const [a, b, c, d] = added.map((i) => i.id)
+        const ids = { a: must(a, 'a'), b: must(b, 'b'), c: must(c, 'c'), d: must(d, 'd') }
+        const groupOf = async () =>
+          Object.fromEntries(((await tree(repo, plan.id)).days[0]?.items ?? []).map((i) => [i.id, i.superset_group]))
+        const g1 = newId()
+        const g2 = newId()
+        await repo.setSuperset(day.id, g1, [ids.a, ids.b, ids.c])
+        await repo.deletePlanItem(ids.c)
+        expect(await groupOf()).toEqual({ [ids.a]: g1, [ids.b]: g1, [ids.d]: null })
+        // regrouping moves b out of g1, which is left with one member and dissolves
+        await repo.setSuperset(day.id, g2, [ids.b, ids.d])
+        expect(await groupOf()).toEqual({ [ids.a]: null, [ids.b]: g2, [ids.d]: g2 })
+        // re-setting a group replaces its member list
+        await repo.setSuperset(day.id, g2, [ids.b, ids.d, ids.a])
+        expect(await groupOf()).toEqual({ [ids.a]: g2, [ids.b]: g2, [ids.d]: g2 })
+        await repo.setSuperset(day.id, g2, [ids.b, ids.d])
+        expect(await groupOf()).toEqual({ [ids.a]: null, [ids.b]: g2, [ids.d]: g2 })
+        // deleting an exercise removes its items from groups too
+        await repo.deleteExercise(must(ex[3], 'ex').id)
+        expect(await groupOf()).toEqual({ [ids.a]: null, [ids.b]: null })
+        // deleted items never keep a group
+        const data = await repo.exportAll()
+        expect(data.plan_items.filter((i) => i.deleted_at !== null).map((i) => i.superset_group)).toEqual([null, null])
+      },
+    )
+
+    contract(
+      'progression',
+      'rules layer item ?? exercise ?? profile ?? built-in; new items inherit until overridden',
+      async ({ repo }) => {
+        const bench = await exercise(repo, 'Bench Press')
+        const squat = await exercise(repo, 'Back Squat')
+        const { plan, day } = await planWithDay(repo)
+        const a = await repo.addPlanItem(day.id, bench.id)
+        const b = await repo.addPlanItem(day.id, squat.id)
+        const view = async (id: string) => {
+          const i = await planItem(repo, plan.id, id)
+          return { rule: i.rule, source: i.ruleSource }
+        }
+        expect((await repo.exportAll()).progression_rules).toEqual([])
+        expect(await view(a.id)).toEqual({ rule: defaultRule(5), source: 'builtin' })
+
+        const P = rule({ success_amount: 20 })
+        const E = rule({ success_action: 'add_reps', success_amount: 1, rep_ceiling: 10 })
+        const I = rule({ success_amount: 15, fail_streak_limit: 2 })
+        await repo.updateProfile({ default_rule: P })
+        expect(await view(a.id)).toEqual({ rule: P, source: 'profile' })
+        await repo.setExerciseRule(bench.id, E)
+        expect((await exercise(repo, 'Bench Press')).default_rule).toEqual(E)
+        expect(await view(a.id)).toEqual({ rule: E, source: 'exercise' })
+        expect(await view(b.id)).toEqual({ rule: P, source: 'profile' })
+        await repo.setRule(a.id, I)
+        expect(await view(a.id)).toEqual({ rule: I, source: 'item' })
+        await repo.setRule(b.id, null) // explicit "no progression" override
+        expect(await view(b.id)).toEqual({ rule: null, source: 'item' })
+        const rows = await repo.listProgression()
+        expect(rows.map((r) => [r.item_id, r.exercise_id, r.ruleSource])).toEqual([
+          [a.id, bench.id, 'item'],
+          [b.id, squat.id, 'item'],
+        ])
+
+        await repo.clearRule(a.id)
+        await repo.clearRule(b.id)
+        expect(await view(a.id)).toEqual({ rule: E, source: 'exercise' })
+        expect(await view(b.id)).toEqual({ rule: P, source: 'profile' })
+        await repo.clearRule(a.id) // clearing twice is fine
+        await repo.setExerciseRule(bench.id, null)
+        expect((await exercise(repo, 'Bench Press')).default_rule).toBeNull()
+        expect(await view(a.id)).toEqual({ rule: P, source: 'profile' })
+        expect((await repo.listProgression()).map((r) => [r.ruleSource, r.rule])).toEqual([
+          ['profile', P],
+          ['profile', P],
+        ])
+
+        await expect(repo.setExerciseRule(bench.id, rule({ success_amount: 0 }))).rejects.toThrow()
+        await expectNotFound(repo.setExerciseRule(newId(), E))
+        await expectNotFound(repo.clearRule(newId()))
+        expect((await repo.exportAll()).progression_rules).toEqual([])
+      },
+    )
+
+    contract('progression', 'finishSession progresses with the resolved rule', async ({ repo }) => {
+      const bench = await exercise(repo, 'Bench Press')
+      const { plan, day } = await planWithDay(repo)
+      const item = await repo.addPlanItem(day.id, bench.id)
+      await repo.updatePlanItem(item.id, { sets: 1, reps: 5, weight: 100 })
+      const finish = async () => {
+        const s = await repo.startSession(day.id)
+        await markDone(repo, s, item.id)
+        return must((await repo.finishSession(s.id))[0], 'summary row')
+      }
+      await repo.setExerciseRule(bench.id, rule({ success_amount: 10 }))
+      expect(await finish()).toMatchObject({ outcome: 'success', after: { weight: 110 } })
+      await repo.updateProfile({ default_rule: rule({ success_amount: 20 }) })
+      expect(await finish()).toMatchObject({ outcome: 'success', after: { weight: 120 } }) // exercise still wins
+      await repo.setExerciseRule(bench.id, null)
+      expect(await finish()).toMatchObject({ outcome: 'success', after: { weight: 140 } }) // profile
+      await repo.setRule(item.id, null)
+      expect(await finish()).toMatchObject({ outcome: 'skipped', after: { weight: 140 } })
+      expect((await planItem(repo, plan.id, item.id)).target_weight).toBe(140)
+    })
+
+    contract(
+      'progression',
+      'listProgressionByExercise lists every live exercise once with its default, overrides and inheriting items',
+      async ({ repo }) => {
+        const bench = await exercise(repo, 'Bench Press')
+        const squat = await exercise(repo, 'Back Squat')
+        const p = await repo.savePlan({ name: 'One' })
+        const d = await repo.savePlanDay({ plan_id: p.id, name: 'A' })
+        const i1 = await repo.addPlanItem(d.id, bench.id)
+        const i2 = await repo.addPlanItem(d.id, bench.id)
+        const i3 = await repo.addPlanItem(d.id, squat.id)
+        const gone = await repo.addPlanItem(d.id, squat.id)
+        await repo.deletePlanItem(gone.id)
+        const I = rule({ success_amount: 15 })
+        const E = rule({ success_amount: 25 })
+        await repo.setRule(i2.id, I)
+        await repo.setExerciseRule(squat.id, E)
+
+        const rows = await repo.listProgressionByExercise()
+        const live = await repo.listExercises()
+        expect(rows.map((r) => r.exercise_id)).toEqual(live.map((e) => e.id))
+        const at = { plan_id: p.id, plan_name: 'One', day_id: d.id, day_name: 'A' }
+        expect(rows.find((r) => r.exercise_id === bench.id)).toEqual({
+          exercise_id: bench.id,
+          exercise_name: 'Bench Press',
+          rule: defaultRule(5),
+          source: 'builtin',
+          overrides: [{ ...at, item_id: i2.id, rule: I }],
+          inheriting: [{ ...at, item_id: i1.id }],
+        })
+        expect(rows.find((r) => r.exercise_id === squat.id)).toMatchObject({
+          rule: E,
+          source: 'exercise',
+          overrides: [],
+          inheriting: [{ ...at, item_id: i3.id }],
+        })
+        expect(rows.find((r) => r.exercise_name === 'Deadlift')).toMatchObject({ overrides: [], inheriting: [] })
+        await repo.deleteExercise(bench.id)
+        expect((await repo.listProgressionByExercise()).some((r) => r.exercise_id === bench.id)).toBe(false)
+      },
+    )
+
+    contract('profile', 'a unit switch converts add_weight exercise default rules too', async ({ repo }) => {
+      const bench = await exercise(repo, 'Bench Press')
+      const squat = await exercise(repo, 'Back Squat')
+      const row = await exercise(repo, 'Barbell Row')
+      await repo.setExerciseRule(bench.id, rule({ success_amount: 10 }))
+      await repo.setExerciseRule(squat.id, rule({ success_action: 'add_reps', success_amount: 2 }))
+      await repo.setExerciseRule(row.id, rule({ success_amount: 5 }))
+      await repo.updateProfile({ units: 'kg' })
+      expect((await exercise(repo, 'Bench Press')).default_rule?.success_amount).toBe(5) // 4.5 kg -> nearest 2.5
+      expect((await exercise(repo, 'Back Squat')).default_rule?.success_amount).toBe(2)
+      expect((await exercise(repo, 'Barbell Row')).default_rule?.success_amount).toBe(2.5) // the old step
+    })
+
     // --------------------------------------------------------------- transfer
     contract(
       'transfer',
@@ -781,6 +1134,13 @@ export function runRepoContract(
         const i2 = await repo.addPlanItem(day.id, squat.id)
         await repo.setRule(i2.id, null)
         await repo.addPlanItem(day2.id, squat.id)
+        // the new fields round-trip too
+        await repo.savePlanDay({ id: day2.id, plan_id: plan.id, name: 'Day 2', color: 'violet' })
+        await repo.saveExercise({ ...bench, supports_angle: true })
+        await repo.setExerciseRule(squat.id, rule({ success_amount: 15 }))
+        await repo.updatePlanItem(i1.id, { angle: 'incline', amrap_last: true })
+        const i3 = await repo.addPlanItem(day.id, (await exercise(repo, 'Deadlift')).id)
+        await repo.setSuperset(day.id, newId(), [i2.id, i3.id])
         const dropped = await repo.savePlan({ name: 'Dropped' })
         await repo.deletePlan(dropped.id)
         const s1 = await repo.startSession(day.id)

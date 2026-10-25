@@ -149,6 +149,7 @@ describe('service plans', () => {
     const { s, userId, ex, plan, day } = await setup()
     const other = (await s.listExercises())[1]!
     const gone = await s.addPlanItem(day.id, ex.id)
+    await s.setRule(gone.id, defaultRule(5)) // an override, so the item has a rule row
     const kept = await s.addPlanItem(day.id, other.id)
     await s.deleteExercise(ex.id)
     expect((await ids(s, plan.id)).items).toEqual([kept.id])

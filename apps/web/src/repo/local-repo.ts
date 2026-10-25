@@ -7,8 +7,18 @@ import {
   workoutSessionSchema,
   SEED_GEAR,
   newId,
-  defaultRule,
+  ConflictError,
+  LIMITS,
+  NotFoundError,
+  ValidationError,
+  angleSchema,
+  compareSetLogs,
+  dayColorSchema,
   effectiveValues,
+  groupProgressionByExercise,
+  planSessionSets,
+  resolveRule,
+  ruleFieldsOf,
   itemStateSchema,
   planDaySchema,
   planItemSchema,
@@ -22,14 +32,18 @@ import {
   seedExercises,
 } from '@workout/shared'
 import type {
+  Angle,
+  DayColor,
   Exercise,
   ExerciseInput,
+  ExerciseProgression,
   Gear,
   Plan,
   PlanDay,
   PlanItem,
   Profile,
   RuleInput,
+  RuleSource,
   SetLog,
   Units,
   WorkoutSession,
@@ -148,14 +162,18 @@ export class LocalRepo implements Repo {
 
   async saveExercise(input: ExerciseInput): Promise<Exercise> {
     const parsed = exerciseInputSchema.parse(input)
-    return this.db.transaction('rw', this.db.profile, this.db.exercises, async () => {
+    const { profile, exercises, planItems } = this.db
+    return this.db.transaction('rw', profile, exercises, planItems, async () => {
       const existing = parsed.id ? await this.db.exercises.get(parsed.id) : undefined
       const ts = now()
+      // Not mentioning supports_angle keeps the stored value.
+      const supports_angle = parsed.supports_angle ?? existing?.supports_angle ?? false
       const exercise = exerciseSchema.parse(
         existing
-          ? { ...existing, ...parsed, id: existing.id, updated_at: ts }
+          ? { ...existing, ...parsed, supports_angle, id: existing.id, updated_at: ts }
           : {
               ...parsed,
+              supports_angle,
               id: parsed.id ?? newId(),
               user_id: (await this.getProfile()).user_id,
               created_at: ts,
@@ -164,7 +182,24 @@ export class LocalRepo implements Repo {
             },
       )
       await this.db.exercises.put(exercise)
+      if (existing && existing.deleted_at === null && !supports_angle) {
+        // Turning angle support off clears the angle of the exercise's live items.
+        await planItems
+          .where('exercise_id')
+          .equals(exercise.id)
+          .filter((i) => i.deleted_at === null && i.angle !== null)
+          .modify({ angle: null, updated_at: ts })
+      }
       return exercise
+    })
+  }
+
+  async setExerciseRule(exerciseId: string, rule: RuleInput | null): Promise<void> {
+    const parsed = rule === null ? null : ruleInputSchema.parse(rule)
+    await this.db.transaction('rw', this.db.exercises, async () => {
+      const existing = await this.db.exercises.get(exerciseId)
+      if (!existing || existing.deleted_at !== null) throw new NotFoundError('Exercise')
+      await this.db.exercises.put(exerciseSchema.parse({ ...existing, default_rule: parsed, updated_at: now() }))
     })
   }
 
@@ -223,7 +258,16 @@ export class LocalRepo implements Repo {
 
   // Shared per-item cleanup for deletePlanItem and deleteExercise (keep them consistent).
   private async softDeleteItem(item: PlanItem, ts: string): Promise<void> {
-    await this.db.planItems.put({ ...item, deleted_at: ts, updated_at: ts })
+    await this.db.planItems.put({ ...item, superset_group: null, deleted_at: ts, updated_at: ts })
+    if (item.superset_group !== null) await this.dissolveIfAlone(item.plan_day_id, item.superset_group, ts)
+  }
+
+  // A superset needs two live members; a group left with one is dissolved.
+  private async dissolveIfAlone(planDayId: string, group: string, ts: string): Promise<void> {
+    const left = (await this.db.planItems.where('plan_day_id').equals(planDayId).toArray()).filter(
+      (i) => i.deleted_at === null && i.superset_group === group,
+    )
+    if (left.length === 1) await this.db.planItems.put({ ...left[0]!, superset_group: null, updated_at: ts })
   }
 
   async updateProfile(patch: {
@@ -247,8 +291,15 @@ export class LocalRepo implements Repo {
         next.units = to
         next.weight_increment = DEFAULT_INCREMENT[to]
         const newIncrement = DEFAULT_INCREMENT[to]
+        const convAmount = (amount: number) =>
+          amount === current.weight_increment
+            ? newIncrement
+            : Math.max(newIncrement, roundToIncrement(conv(amount), newIncrement))
         await d.exercises.toCollection().modify((e) => {
           e.default_weight = conv(e.default_weight)
+          if (e.default_rule?.success_action === 'add_weight') {
+            e.default_rule = { ...e.default_rule, success_amount: convAmount(e.default_rule.success_amount) }
+          }
           e.updated_at = ts
         })
         await d.planItems.toCollection().modify((i) => {
@@ -261,10 +312,6 @@ export class LocalRepo implements Repo {
           l.target_weight = conv(l.target_weight)
           l.updated_at = ts
         })
-        const convAmount = (amount: number) =>
-          amount === current.weight_increment
-            ? newIncrement
-            : Math.max(newIncrement, roundToIncrement(conv(amount), newIncrement))
         await d.rules.toCollection().modify((r) => {
           if (r.success_action !== 'add_weight') return
           r.success_amount = convAmount(r.success_amount)
@@ -291,9 +338,26 @@ export class LocalRepo implements Repo {
       .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.name.localeCompare(b.name))
   }
 
+  // Effective rule of an item (spec §6 layering).
+  private async ruleOf(
+    item: PlanItem,
+    exercise: Exercise,
+    profile: Profile,
+  ): Promise<{ rule: RuleInput | null; source: RuleSource }> {
+    const row = await this.db.rules.get(item.id)
+    return resolveRule({
+      itemRule: row ? ruleFieldsOf(row) : null,
+      inherit: item.inherit_rule,
+      exerciseRule: exercise.default_rule,
+      profileRule: profile.default_rule,
+      increment: profile.weight_increment,
+    })
+  }
+
   async getPlan(id: string): Promise<PlanTree | undefined> {
     const plan = await this.db.plans.get(id)
     if (!plan || plan.deleted_at !== null) return undefined
+    const profile = await this.getProfile()
     const byPosition = <T extends { position: number }>(a: T, b: T) => a.position - b.position
     const days = (await this.db.planDays.where('plan_id').equals(id).toArray())
       .filter((d) => d.deleted_at === null)
@@ -307,8 +371,8 @@ export class LocalRepo implements Repo {
       for (const item of items) {
         const exercise = await this.db.exercises.get(item.exercise_id)
         if (!exercise) continue
-        const rule = (await this.db.rules.get(item.id)) ?? null
-        full.push({ ...item, exercise, rule, effective: effectiveValues(item, exercise) })
+        const { rule, source } = await this.ruleOf(item, exercise, profile)
+        full.push({ ...item, exercise, rule, ruleSource: source, effective: effectiveValues(item, exercise) })
       }
       tree.push({ ...day, items: full })
     }
@@ -351,13 +415,14 @@ export class LocalRepo implements Repo {
     })
   }
 
-  async savePlanDay(input: { id?: string; plan_id: string; name: string }): Promise<PlanDay> {
+  async savePlanDay(input: { id?: string; plan_id: string; name: string; color?: DayColor | null }): Promise<PlanDay> {
+    const color = input.color === undefined ? undefined : dayColorSchema.nullable().parse(input.color)
     return this.db.transaction('rw', this.db.profile, this.db.planDays, async () => {
       const existing = input.id ? await this.db.planDays.get(input.id) : undefined
       const ts = now()
       let day: PlanDay
       if (existing) {
-        day = planDaySchema.parse({ ...existing, name: input.name, updated_at: ts })
+        day = planDaySchema.parse({ ...existing, name: input.name, color: color === undefined ? existing.color : color, updated_at: ts })
       } else {
         const siblings = (await this.db.planDays.where('plan_id').equals(input.plan_id).toArray()).filter(
           (d) => d.deleted_at === null,
@@ -367,6 +432,7 @@ export class LocalRepo implements Repo {
           plan_id: input.plan_id,
           name: input.name,
           position: nextPosition(siblings),
+          color: color ?? null,
           created_at: ts,
           updated_at: ts,
           deleted_at: null,
@@ -394,8 +460,8 @@ export class LocalRepo implements Repo {
   }
 
   async addPlanItem(planDayId: string, exerciseId: string): Promise<PlanItem> {
-    const { profile, planItems, rules, itemStates } = this.db
-    return this.db.transaction('rw', profile, planItems, rules, itemStates, async () => {
+    const { profile, planItems, itemStates } = this.db
+    return this.db.transaction('rw', profile, planItems, itemStates, async () => {
       const ts = now()
       const siblings = (await planItems.where('plan_day_id').equals(planDayId).toArray()).filter(
         (i) => i.deleted_at === null,
@@ -410,15 +476,14 @@ export class LocalRepo implements Repo {
         weight: null,
         target_reps: null,
         target_weight: null,
+        // No rule row: the item inherits its rule (spec §6) until setRule overrides it.
+        inherit_rule: true,
         created_at: ts,
         updated_at: ts,
         deleted_at: null,
       })
-      const prof = await this.getProfile()
-      const startRule = prof.default_rule ?? defaultRule(prof.weight_increment)
       const base = { plan_item_id: item.id, created_at: ts, updated_at: ts, deleted_at: null }
       await planItems.add(item)
-      await rules.add(progressionRuleSchema.parse({ ...startRule, ...base }))
       await itemStates.add(itemStateSchema.parse({ ...base, fail_streak: 0 }))
       return item
     })
@@ -426,13 +491,20 @@ export class LocalRepo implements Repo {
 
   async updatePlanItem(
     id: string,
-    patch: { sets?: number | null; reps?: number | null; weight?: number | null },
+    patch: { sets?: number | null; reps?: number | null; weight?: number | null; angle?: Angle | null; amrap_last?: boolean },
   ): Promise<PlanItem> {
-    return this.db.transaction('rw', this.db.planItems, this.db.itemStates, async () => {
+    const angle = patch.angle === undefined ? undefined : angleSchema.nullable().parse(patch.angle)
+    const { planItems, itemStates, exercises } = this.db
+    return this.db.transaction('rw', planItems, itemStates, exercises, async () => {
       const existing = await this.db.planItems.get(id)
       if (!existing || existing.deleted_at !== null) throw new Error('Plan item not found')
       const ts = now()
       const next = { ...existing, updated_at: ts }
+      if (angle !== undefined && angle !== null && !(await exercises.get(existing.exercise_id))?.supports_angle) {
+        throw new ValidationError('angle', 'This exercise does not support an angle')
+      }
+      if (angle !== undefined) next.angle = angle
+      if (patch.amrap_last !== undefined) next.amrap_last = patch.amrap_last
       if (patch.sets !== undefined) next.sets = patch.sets
       if (patch.reps !== undefined) next.reps = patch.reps
       if (patch.weight !== undefined) next.weight = patch.weight
@@ -449,16 +521,21 @@ export class LocalRepo implements Repo {
   }
 
   async deletePlanItem(id: string): Promise<void> {
-    const item = await this.db.planItems.get(id)
-    if (!item || item.deleted_at !== null) return
-    await this.softDeleteItem(item, now())
+    await this.db.transaction('rw', this.db.planItems, async () => {
+      const item = await this.db.planItems.get(id)
+      if (!item || item.deleted_at !== null) return
+      await this.softDeleteItem(item, now())
+    })
   }
 
   async setRule(planItemId: string, rule: RuleInput | null): Promise<void> {
     const parsed = rule === null ? null : ruleInputSchema.parse(rule)
-    await this.db.transaction('rw', this.db.rules, async () => {
+    await this.db.transaction('rw', this.db.rules, this.db.planItems, async () => {
       if (parsed === null) {
+        // An explicit "no progression" override.
         await this.db.rules.delete(planItemId)
+        const item = await this.db.planItems.get(planItemId)
+        if (item && item.inherit_rule) await this.db.planItems.put({ ...item, inherit_rule: false, updated_at: now() })
         return
       }
       const existing = await this.db.rules.get(planItemId)
@@ -472,6 +549,52 @@ export class LocalRepo implements Repo {
           deleted_at: null,
         }),
       )
+    })
+  }
+
+  async clearRule(planItemId: string): Promise<void> {
+    await this.db.transaction('rw', this.db.rules, this.db.planItems, async () => {
+      const item = await this.db.planItems.get(planItemId)
+      if (!item || item.deleted_at !== null) throw new NotFoundError('Plan item')
+      await this.db.rules.delete(planItemId)
+      if (!item.inherit_rule) await this.db.planItems.put({ ...item, inherit_rule: true, updated_at: now() })
+    })
+  }
+
+  async setSuperset(planDayId: string, groupId: string, itemIds: string[] | null): Promise<void> {
+    const { plans, planDays, planItems } = this.db
+    await this.db.transaction('rw', plans, planDays, planItems, async () => {
+      const day = await planDays.get(planDayId)
+      const plan = day && day.deleted_at === null ? await plans.get(day.plan_id) : undefined
+      if (!day || !plan || plan.deleted_at !== null) throw new NotFoundError('Plan day')
+      const ts = now()
+      const all = await planItems.toArray()
+      const live = all.filter((i) => i.deleted_at === null)
+      if (live.some((i) => i.superset_group === groupId && i.plan_day_id !== planDayId)) {
+        throw new ConflictError('Superset group is in use on another day')
+      }
+      const current = live.filter((i) => i.superset_group === groupId)
+      if (itemIds === null) {
+        for (const i of current) await planItems.put({ ...i, superset_group: null, updated_at: ts })
+        return
+      }
+      checkSupersetIds(itemIds)
+      const members: PlanItem[] = []
+      for (const itemId of itemIds) {
+        const item = live.find((i) => i.id === itemId)
+        if (!item) throw new NotFoundError('Plan item')
+        if (item.plan_day_id !== planDayId) throw new ValidationError('item_ids', 'Superset items must be in the same day')
+        members.push(item)
+      }
+      const touched = new Set<string>()
+      for (const i of current) {
+        if (!itemIds.includes(i.id)) await planItems.put({ ...i, superset_group: null, updated_at: ts })
+      }
+      for (const m of members) {
+        if (m.superset_group !== null && m.superset_group !== groupId) touched.add(m.superset_group)
+        await planItems.put({ ...m, superset_group: groupId, updated_at: ts })
+      }
+      for (const g of touched) await this.dissolveIfAlone(planDayId, g, ts)
     })
   }
 
@@ -508,9 +631,7 @@ export class LocalRepo implements Repo {
   }
 
   private async sessionDetail(session: WorkoutSession): Promise<SessionDetail> {
-    const logs = (await this.db.setLogs.where('session_id').equals(session.id).toArray()).sort(
-      (a, b) => a.position - b.position || a.set_no - b.set_no,
-    )
+    const logs = (await this.db.setLogs.where('session_id').equals(session.id).toArray()).sort(compareSetLogs)
     const groups = new Map<string, SetLog[]>()
     for (const log of logs) {
       const group = groups.get(log.plan_item_id)
@@ -565,34 +686,40 @@ export class LocalRepo implements Repo {
         const items = (await planItems.where('plan_day_id').equals(day.id).toArray())
           .filter((i) => i.deleted_at === null)
           .sort((a, b) => a.position - b.position)
-        const logs: SetLog[] = []
+        const rows: { item: PlanItem; exercise: Exercise; eff: ReturnType<typeof effectiveValues> }[] = []
         for (const item of items) {
           const exercise = await exercises.get(item.exercise_id)
           if (!exercise) continue
-          const eff = effectiveValues(item, exercise)
-          for (let set_no = 1; set_no <= eff.sets; set_no++) {
-            logs.push(
-              setLogSchema.parse({
-                id: newId(),
-                session_id: session.id,
-                plan_item_id: item.id,
-                exercise_id: exercise.id,
-                exercise_name: exercise.name,
-                set_no,
-                position: item.position,
-                target_reps: eff.targetReps,
-                target_weight: eff.targetWeight,
-                actual_reps: eff.targetReps,
-                weight: eff.targetWeight,
-                done: false,
-                note: '',
-                created_at: ts,
-                updated_at: ts,
-                deleted_at: null,
-              }),
-            )
-          }
+          rows.push({ item, exercise, eff: effectiveValues(item, exercise) })
         }
+        const byId = new Map(rows.map((r) => [r.item.id, r]))
+        const layout = planSessionSets(rows.map((r) => ({ ...r.item, sets: r.eff.sets })))
+        const logs: SetLog[] = layout.map((slot) => {
+          const { item, exercise, eff } = byId.get(slot.plan_item_id)!
+          return setLogSchema.parse({
+            id: newId(),
+            session_id: session.id,
+            plan_item_id: item.id,
+            exercise_id: exercise.id,
+            exercise_name: exercise.name,
+            set_no: slot.set_no,
+            position: item.position,
+            target_reps: eff.targetReps,
+            target_weight: eff.targetWeight,
+            actual_reps: eff.targetReps,
+            weight: eff.targetWeight,
+            done: false,
+            note: '',
+            angle: item.angle,
+            amrap: item.amrap_last && slot.set_no === eff.sets,
+            seq: slot.seq,
+            superset_group: slot.superset_group,
+            superset_label: slot.superset_label,
+            created_at: ts,
+            updated_at: ts,
+            deleted_at: null,
+          })
+        })
         await sessions.add(session)
         await setLogs.bulkAdd(logs)
         return session.id
@@ -635,7 +762,8 @@ export class LocalRepo implements Repo {
         if (!session) throw new Error('Session not found')
         if (session.completed_at !== null) throw new Error('Session already completed')
         const detail = await this.sessionDetail(session)
-        const increment = (await this.getProfile()).weight_increment
+        const prof = await this.getProfile()
+        const increment = prof.weight_increment
         const ts = now()
         const summary: FinishSummary = []
         for (const group of detail.exercises) {
@@ -654,7 +782,7 @@ export class LocalRepo implements Repo {
             continue
           }
           const eff = effectiveValues(item, exercise)
-          const rule = (await rules.get(item.id)) ?? null
+          const { rule } = await this.ruleOf(item, exercise, prof)
           const state = await itemStates.get(item.id)
           const result = progress(
             {
@@ -740,7 +868,8 @@ export class LocalRepo implements Repo {
 
   async listProgression(): Promise<ProgressionRow[]> {
     const d = this.db
-    return d.transaction('r', [d.plans, d.planDays, d.planItems, d.exercises, d.rules], async () => {
+    return d.transaction('r', [d.profile, d.plans, d.planDays, d.planItems, d.exercises, d.rules], async () => {
+      const profile = await this.getProfile()
       const byPosition = <T extends { position: number }>(a: T, b: T) => a.position - b.position
       const rows: ProgressionRow[] = []
       for (const plan of await this.listPlans()) {
@@ -754,14 +883,17 @@ export class LocalRepo implements Repo {
           for (const item of items) {
             const exercise = await d.exercises.get(item.exercise_id)
             if (!exercise) continue
+            const { rule, source } = await this.ruleOf(item, exercise, profile)
             rows.push({
               plan_id: plan.id,
               plan_name: plan.name,
               day_id: day.id,
               day_name: day.name,
               item_id: item.id,
+              exercise_id: exercise.id,
               exercise_name: exercise.name,
-              rule: (await d.rules.get(item.id)) ?? null,
+              rule,
+              ruleSource: source,
             })
           }
         }
@@ -769,4 +901,18 @@ export class LocalRepo implements Repo {
       return rows
     })
   }
+
+  async listProgressionByExercise(): Promise<ExerciseProgression[]> {
+    const d = this.db
+    return d.transaction('r', [d.profile, d.plans, d.planDays, d.planItems, d.exercises, d.rules], async () =>
+      groupProgressionByExercise(await this.listExercises(), await this.listProgression(), await this.getProfile()),
+    )
+  }
+}
+
+function checkSupersetIds(itemIds: string[]): void {
+  if (itemIds.length < LIMITS.supersetMin || itemIds.length > LIMITS.supersetMax) {
+    throw new ValidationError('item_ids', `A superset has ${LIMITS.supersetMin} to ${LIMITS.supersetMax} items`)
+  }
+  if (new Set(itemIds).size !== itemIds.length) throw new ValidationError('item_ids', 'Duplicate item')
 }

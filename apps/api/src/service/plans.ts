@@ -1,19 +1,45 @@
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import {
   ConflictError,
+  LIMITS,
   NotFoundError,
-  defaultRule,
+  ValidationError,
+  angleSchema,
+  dayColorSchema,
   effectiveValues,
   newId,
   planItemSchema,
+  resolveRule,
+  ruleFieldsOf,
   ruleInputSchema,
 } from '@workout/shared'
-import type { Plan, PlanDay, PlanItem, PlanTree, RuleInput } from '@workout/shared'
+import type { Angle, DayColor, Exercise, PlanItem, Plan, PlanDay, PlanTree, Profile, RuleInput, RuleSource } from '@workout/shared'
 import { exercise, itemState, plan, planDay, planItem, profile, progressionRule } from '../db/schema.js'
 import type { Db } from '../db/types.js'
-import { assertUuid, dec, isUuid, now, num, readRule, toExercise, toPlan, toPlanDay, toPlanItem, toRule } from './mappers.js'
+import { dissolveLonelyGroups, softDeleteItemsWhere, type Tx } from './items.js'
+import { assertUuid, dec, isUuid, now, toExercise, toPlan, toPlanDay, toPlanItem, toProfile, toRule } from './mappers.js'
 
-type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
+/** Effective rule of an item (spec §6 layering); `row` is its stored override, if any. */
+export function ruleOf(
+  item: PlanItem,
+  ex: Exercise,
+  prof: Profile,
+  row: typeof progressionRule.$inferSelect | null | undefined,
+): { rule: RuleInput | null; source: RuleSource } {
+  return resolveRule({
+    itemRule: row ? ruleFieldsOf(toRule(row)) : null,
+    inherit: item.inherit_rule,
+    exerciseRule: ex.default_rule,
+    profileRule: prof.default_rule,
+    increment: prof.weight_increment,
+  })
+}
+
+export async function profileOf(tx: Tx | Db, userId: string): Promise<Profile> {
+  const [row] = await tx.select().from(profile).where(eq(profile.userId, userId))
+  if (!row) throw new NotFoundError('Profile')
+  return toProfile(row)
+}
 
 const nextPosition = (max: number | null): number => (max === null ? 0 : max + 1)
 
@@ -36,6 +62,7 @@ export async function getPlan(db: Db, userId: string, id: string): Promise<PlanT
       .from(plan)
       .where(and(eq(plan.userId, userId), eq(plan.id, id), isNull(plan.deletedAt)))
     if (!planRow) return undefined
+    const prof = await profileOf(tx, userId)
     const dayRows = await tx
       .select()
       .from(planDay)
@@ -68,7 +95,8 @@ export async function getPlan(db: Db, userId: string, id: string): Promise<PlanT
         .map((r) => {
           const item = toPlanItem(r.item)
           const ex = toExercise(r.ex)
-          return { ...item, exercise: ex, rule: r.rule ? toRule(r.rule) : null, effective: effectiveValues(item, ex) }
+          const { rule, source } = ruleOf(item, ex, prof, r.rule)
+          return { ...item, exercise: ex, rule, ruleSource: source, effective: effectiveValues(item, ex) }
         }),
     }))
     return { ...toPlan(planRow), days }
@@ -89,10 +117,7 @@ export async function savePlan(db: Db, userId: string, input: { id?: string; nam
 
 async function softDeleteItemsOfDays(tx: Tx, userId: string, dayIds: string[], ts: Date): Promise<void> {
   if (dayIds.length === 0) return
-  await tx
-    .update(planItem)
-    .set({ deletedAt: ts, updatedAt: ts })
-    .where(and(eq(planItem.userId, userId), inArray(planItem.planDayId, dayIds), isNull(planItem.deletedAt)))
+  await softDeleteItemsWhere(tx, userId, inArray(planItem.planDayId, dayIds), ts)
 }
 
 export async function deletePlan(db: Db, userId: string, id: string): Promise<void> {
@@ -121,10 +146,11 @@ export async function deletePlan(db: Db, userId: string, id: string): Promise<vo
 export async function savePlanDay(
   db: Db,
   userId: string,
-  input: { id?: string; plan_id: string; name: string },
+  input: { id?: string; plan_id: string; name: string; color?: DayColor | null },
 ): Promise<PlanDay> {
   const id = assertUuid(input.id ?? newId(), 'plan day id')
   if (input.name.length < 1) throw new Error('Day name is required')
+  const color = input.color === undefined ? undefined : dayColorSchema.nullable().parse(input.color)
   if (!isUuid(input.plan_id)) throw new NotFoundError('Plan')
   return db.transaction(async (tx) => {
     // Lock the parent so concurrent appends serialize and never pick the same position.
@@ -147,11 +173,15 @@ export async function savePlanDay(
         planId: input.plan_id,
         name: input.name,
         position: nextPosition(max?.max ?? null),
+        color: color ?? null,
         createdAt: ts,
         updatedAt: ts,
       })
-      // Only the name is editable; position and plan are kept (use move to reorder).
-      .onConflictDoUpdate({ target: [planDay.userId, planDay.id], set: { name: input.name, updatedAt: ts } })
+      // Name and colour are editable (an omitted colour is kept); position and plan are kept (use move to reorder).
+      .onConflictDoUpdate({
+        target: [planDay.userId, planDay.id],
+        set: { name: input.name, ...(color === undefined ? {} : { color }), updatedAt: ts },
+      })
       .returning()
     return toPlanDay(row!)
   })
@@ -195,8 +225,6 @@ export async function addPlanItem(
       .from(exercise)
       .where(and(eq(exercise.userId, userId), eq(exercise.id, exerciseId), isNull(exercise.deletedAt)))
     if (!ex) throw new NotFoundError('Exercise')
-    const [prof] = await tx.select().from(profile).where(eq(profile.userId, userId))
-    if (!prof) throw new NotFoundError('Profile')
 
     if (id !== undefined) {
       const [dup] = await tx
@@ -224,24 +252,12 @@ export async function addPlanItem(
         planDayId,
         exerciseId,
         position: nextPosition(max?.max ?? null),
+        // No rule row: the item inherits its rule (spec §6) until setRule overrides it.
+        inheritRule: true,
         createdAt: ts,
         updatedAt: ts,
       })
       .returning()
-    const startRule: RuleInput = prof.defaultRule
-      ? readRule(prof.defaultRule)
-      : defaultRule(num(prof.weightIncrement))
-    await tx.insert(progressionRule).values({
-      userId,
-      planItemId: itemId,
-      successAction: startRule.success_action,
-      successAmount: dec(startRule.success_amount),
-      failStreakLimit: startRule.fail_streak_limit,
-      deloadPct: dec(startRule.deload_pct),
-      repCeiling: startRule.rep_ceiling,
-      createdAt: ts,
-      updatedAt: ts,
-    })
     await tx.insert(itemState).values({ userId, planItemId: itemId, failStreak: 0, createdAt: ts, updatedAt: ts })
     return toPlanItem(row!)
   })
@@ -251,9 +267,10 @@ export async function updatePlanItem(
   db: Db,
   userId: string,
   id: string,
-  patch: { sets?: number | null; reps?: number | null; weight?: number | null },
+  patch: { sets?: number | null; reps?: number | null; weight?: number | null; angle?: Angle | null; amrap_last?: boolean },
 ): Promise<PlanItem> {
   if (!isUuid(id)) throw new NotFoundError('Plan item')
+  const angle = patch.angle === undefined ? undefined : angleSchema.nullable().parse(patch.angle)
   return db.transaction(async (tx) => {
     const [existing] = await tx
       .select()
@@ -261,8 +278,17 @@ export async function updatePlanItem(
       .where(and(eq(planItem.userId, userId), eq(planItem.id, id), isNull(planItem.deletedAt)))
       .for('update')
     if (!existing) throw new NotFoundError('Plan item')
+    if (angle !== undefined && angle !== null) {
+      const [ex] = await tx
+        .select({ supports: exercise.supportsAngle })
+        .from(exercise)
+        .where(and(eq(exercise.userId, userId), eq(exercise.id, existing.exerciseId)))
+      if (!ex?.supports) throw new ValidationError('angle', 'This exercise does not support an angle')
+    }
     const ts = now()
     const next = toPlanItem(existing)
+    if (angle !== undefined) next.angle = angle
+    if (patch.amrap_last !== undefined) next.amrap_last = patch.amrap_last
     if (patch.sets !== undefined) next.sets = patch.sets
     if (patch.reps !== undefined) next.reps = patch.reps
     if (patch.weight !== undefined) next.weight = patch.weight
@@ -280,6 +306,8 @@ export async function updatePlanItem(
         weight: valid.weight === null ? null : dec(valid.weight),
         targetReps: valid.target_reps,
         targetWeight: valid.target_weight === null ? null : dec(valid.target_weight),
+        angle: valid.angle,
+        amrapLast: valid.amrap_last,
         updatedAt: ts,
       })
       .where(and(eq(planItem.userId, userId), eq(planItem.id, id)))
@@ -296,11 +324,7 @@ export async function updatePlanItem(
 
 export async function deletePlanItem(db: Db, userId: string, id: string): Promise<void> {
   if (!isUuid(id)) return
-  const ts = now()
-  await db
-    .update(planItem)
-    .set({ deletedAt: ts, updatedAt: ts })
-    .where(and(eq(planItem.userId, userId), eq(planItem.id, id), isNull(planItem.deletedAt)))
+  await db.transaction((tx) => softDeleteItemsWhere(tx, userId, eq(planItem.id, id), now()))
 }
 
 export async function setRule(db: Db, userId: string, planItemId: string, rule: RuleInput | null): Promise<void> {
@@ -314,9 +338,14 @@ export async function setRule(db: Db, userId: string, planItemId: string, rule: 
       .for('update')
     if (!item) throw new NotFoundError('Plan item')
     if (parsed === null) {
+      // An explicit "no progression" override.
       await tx
         .delete(progressionRule)
         .where(and(eq(progressionRule.userId, userId), eq(progressionRule.planItemId, planItemId)))
+      await tx
+        .update(planItem)
+        .set({ inheritRule: false, updatedAt: now() })
+        .where(and(eq(planItem.userId, userId), eq(planItem.id, planItemId), eq(planItem.inheritRule, true)))
       return
     }
     const ts = now()
@@ -334,6 +363,74 @@ export async function setRule(db: Db, userId: string, planItemId: string, rule: 
         target: [progressionRule.userId, progressionRule.planItemId],
         set: { ...fields, updatedAt: ts, deletedAt: null },
       })
+  })
+}
+
+/** Drops the item's override: back to the inherited rule. */
+export async function clearRule(db: Db, userId: string, planItemId: string): Promise<void> {
+  if (!isUuid(planItemId)) throw new NotFoundError('Plan item')
+  await db.transaction(async (tx) => {
+    const [item] = await tx
+      .update(planItem)
+      .set({ inheritRule: true, updatedAt: now() })
+      .where(and(eq(planItem.userId, userId), eq(planItem.id, planItemId), isNull(planItem.deletedAt)))
+      .returning({ id: planItem.id })
+    if (!item) throw new NotFoundError('Plan item')
+    await tx
+      .delete(progressionRule)
+      .where(and(eq(progressionRule.userId, userId), eq(progressionRule.planItemId, planItemId)))
+  })
+}
+
+export async function setSuperset(
+  db: Db,
+  userId: string,
+  planDayId: string,
+  groupId: string,
+  itemIds: string[] | null,
+): Promise<void> {
+  if (!isUuid(planDayId)) throw new NotFoundError('Plan day')
+  if (!isUuid(groupId)) throw new ValidationError('groupId', 'Group id must be a UUID')
+  if (itemIds !== null) {
+    if (itemIds.length < LIMITS.supersetMin || itemIds.length > LIMITS.supersetMax) {
+      throw new ValidationError('item_ids', `A superset has ${LIMITS.supersetMin} to ${LIMITS.supersetMax} items`)
+    }
+    if (new Set(itemIds).size !== itemIds.length) throw new ValidationError('item_ids', 'Duplicate item')
+    if (!itemIds.every(isUuid)) throw new NotFoundError('Plan item')
+  }
+  await db.transaction(async (tx) => {
+    // Lock the day so concurrent regroupings in it serialize.
+    const [day] = await tx
+      .select({ id: planDay.id })
+      .from(planDay)
+      .innerJoin(plan, and(eq(plan.userId, planDay.userId), eq(plan.id, planDay.planId)))
+      .where(and(eq(planDay.userId, userId), eq(planDay.id, planDayId), isNull(planDay.deletedAt), isNull(plan.deletedAt)))
+      .for('update', { of: planDay })
+    if (!day) throw new NotFoundError('Plan day')
+    const ts = now()
+    const live = and(eq(planItem.userId, userId), isNull(planItem.deletedAt))
+    const inGroup = await tx
+      .select({ id: planItem.id, day: planItem.planDayId })
+      .from(planItem)
+      .where(and(live, eq(planItem.supersetGroup, groupId)))
+    if (inGroup.some((i) => i.day !== planDayId)) throw new ConflictError('Superset group is in use on another day')
+    if (itemIds === null) {
+      await tx.update(planItem).set({ supersetGroup: null, updatedAt: ts }).where(and(live, eq(planItem.supersetGroup, groupId)))
+      return
+    }
+    const members = await tx
+      .select({ id: planItem.id, day: planItem.planDayId, group: planItem.supersetGroup })
+      .from(planItem)
+      .where(and(live, inArray(planItem.id, itemIds)))
+    if (members.length !== itemIds.length) throw new NotFoundError('Plan item')
+    if (members.some((m) => m.day !== planDayId)) throw new ValidationError('item_ids', 'Superset items must be in the same day')
+    const leaving = inGroup.filter((i) => !itemIds.includes(i.id)).map((i) => i.id)
+    if (leaving.length > 0) {
+      await tx.update(planItem).set({ supersetGroup: null, updatedAt: ts }).where(and(live, inArray(planItem.id, leaving)))
+    }
+    await tx.update(planItem).set({ supersetGroup: groupId, updatedAt: ts }).where(and(live, inArray(planItem.id, itemIds)))
+    const left = members.map((m) => m.group).filter((g): g is string => g !== null && g !== groupId)
+    await dissolveLonelyGroups(tx, userId, left, ts)
   })
 }
 

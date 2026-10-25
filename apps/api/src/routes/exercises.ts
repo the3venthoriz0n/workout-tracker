@@ -1,4 +1,4 @@
-import { PutExerciseBody } from '@workout/shared'
+import { PutExerciseBody, PutRuleBody } from '@workout/shared'
 import { body, param, service } from './http.js'
 import type { RouteDeps, V1 } from './types.js'
 
@@ -15,6 +15,12 @@ export function registerExercises(v1: V1, { getService }: RouteDeps) {
     if (!(await s.owns('exercise', id))) return c.json({ error: 'not_found' }, 404)
     await s.deleteExercise(id)
     return c.body(null, 204)
+  })
+  v1.put('/exercises/:id/rule', async (c) => {
+    const id = param(c, 'id')
+    const { rule } = await body(c, PutRuleBody)
+    await service(c, getService).setExerciseRule(id, rule)
+    return c.json({ rule })
   })
   v1.get('/exercises/:id/usage', async (c) => {
     const id = param(c, 'id')

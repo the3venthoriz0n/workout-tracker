@@ -38,5 +38,26 @@ export class AppDb extends Dexie {
       sessions: 'id',
       setLogs: 'id, session_id',
     })
+    // v2: day colour, angle, AMRAP, supersets, layered rules. Same indexes; existing rows get the
+    // new fields with defaults that keep their meaning (inherit_rule false: a missing rule row
+    // still means "no progression", an existing rule row stays an override).
+    this.version(2)
+      .stores({})
+      .upgrade(async (tx) => {
+        const fill = <T extends object>(row: T, defaults: Record<string, unknown>) => {
+          const r = row as Record<string, unknown>
+          for (const [k, v] of Object.entries(defaults)) if (r[k] === undefined) r[k] = v
+        }
+        await tx.table('planDays').toCollection().modify((d) => fill(d, { color: null }))
+        await tx.table('exercises').toCollection().modify((e) => fill(e, { supports_angle: false, default_rule: null }))
+        await tx
+          .table('planItems')
+          .toCollection()
+          .modify((i) => fill(i, { angle: null, amrap_last: false, superset_group: null, inherit_rule: false }))
+        await tx
+          .table('setLogs')
+          .toCollection()
+          .modify((l) => fill(l, { angle: null, amrap: false, seq: null, superset_group: null, superset_label: null }))
+      })
   }
 }

@@ -91,18 +91,20 @@ The zod schemas in `packages/shared` are the single definition. Dexie (M1) and D
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| `profile` | user_id, plan (`free`\|`pro`), units (`lb`\|`kg`), weight_increment, default_rule? | `weight_increment` is the progression step: the smallest weight change you can load (default 5 lb / 2.5 kg), used for rounding. `default_rule` (optional rule shape) is what new plan items start with; absent means the default rule in §6 |
+| `profile` | user_id, plan (`free`\|`pro`), units (`lb`\|`kg`), weight_increment, default_rule? | `weight_increment` is the progression step: the smallest weight change you can load (default 5 lb / 2.5 kg), used for rounding. `default_rule` (optional rule shape) is the profile layer of the rule layering in §6 |
 | `gear` | id, user_id, name, owned | Seeded list plus custom items; `owned` drives the picker |
-| `exercise` | id, user_id, name, notes, video_url, required_gear_ids[], active, default_sets, default_reps, default_weight | The reusable "var" |
+| `exercise` | id, user_id, name, notes, video_url, required_gear_ids[], active, default_sets, default_reps, default_weight, supports_angle, default_rule? | The reusable "var". `supports_angle` (default false) lets its items take an angle; turning it off clears the angle of its live items. `default_rule` (rule shape, nullable): the exercise layer in §6 |
 | `plan` | id, user_id, name, archived | A routine |
-| `plan_day` | id, plan_id, name, position | e.g. "Push A" |
-| `plan_item` | id, plan_day_id, exercise_id, position, sets?, reps?, weight?, target_reps?, target_weight? | Overrides and targets are nullable; see §6 |
-| `progression_rule` | plan_item_id, success_action (`add_weight`\|`add_reps`), success_amount, fail_streak_limit, deload_pct, rep_ceiling? | At most one per item; none = no progression |
+| `plan_day` | id, plan_id, name, position, color? | e.g. "Push A". `color`: one of `DAY_COLORS` (blue, red, green, amber, violet, teal, pink, slate) or null, when the UI derives it from the position |
+| `plan_item` | id, plan_day_id, exercise_id, position, sets?, reps?, weight?, target_reps?, target_weight?, angle?, amrap_last, superset_group?, inherit_rule | Overrides and targets are nullable; see §6. `angle`: `flat`\|`incline`\|`decline`\|null, only if the exercise supports it. `amrap_last`: the last set is AMRAP. `superset_group`: uuid shared by 2-3 items of the same day. `inherit_rule`: see §6 |
+| `progression_rule` | plan_item_id, success_action (`add_weight`\|`add_reps`), success_amount, fail_streak_limit, deload_pct, rep_ceiling? | At most one per item: the item's override (§6) |
 | `item_state` | plan_item_id, fail_streak | Progression bookkeeping |
 | `workout_session` | id, user_id, plan_day_id, plan_name, day_name, started_at, completed_at?, note | `completed_at` null = in progress (at most one). Names are snapshots. |
-| `set_log` | id, session_id, plan_item_id, exercise_id, exercise_name, set_no, position, target_reps, target_weight, actual_reps, weight, done, note | Created when the session starts; snapshots values, so history never changes when plans or exercises do. `position`: plan item position at session start (ordering snapshot) |
+| `set_log` | id, session_id, plan_item_id, exercise_id, exercise_name, set_no, position, target_reps, target_weight, actual_reps, weight, done, note, angle?, amrap, seq?, superset_group?, superset_label? | Created when the session starts; snapshots values, so history never changes when plans or exercises do. `position`: plan item position at session start. `seq`: display order (§6 supersets); rows without it sort by (position, set_no). `superset_label`: e.g. `A1`, `A2` |
 
-Weights are stored in the profile's unit as decimals. Changing units converts every stored weight in one transaction, rounded to 0.1, and resets the progression step (`weight_increment`) to that unit's default and converts an `add_weight` `default_rule` amount like plan-item rules.
+Weights are stored in the profile's unit as decimals. Changing units converts every stored weight in one transaction, rounded to 0.1, and resets the progression step (`weight_increment`) to that unit's default and converts `add_weight` amounts of the profile and exercise `default_rule`s like plan-item rules.
+
+New fields are additive: rows and exports written before them load with defaults (null / false), which keep their old meaning. Dexie schema v2 and migration `0001` add them.
 
 **Postgres mapping (M2).** Drizzle tables mirror the zod schemas, with these rules:
 - Every domain table has the primary key `(user_id, id)`, so two accounts can never collide on a client-generated UUID and a foreign ID never resolves to another user's row. `user_id` is `text` (Better Auth's user id) with a foreign key to the auth user and `ON DELETE CASCADE`; `id` and all other ids are `uuid`.
@@ -126,7 +128,7 @@ Sessions pre-fill from `targetReps` and `targetWeight`. Overriding a plan item n
 
 **Progression** runs once per plan item when a session is finished: `progress({ targetReps, targetWeight, baseReps, plannedSets }, rule, failStreak, sets, increment) → { targetReps, targetWeight, failStreak, outcome }`, where `outcome` is `skipped | success | miss | deload`.
 
-1. No rule, or no set marked done for the item: nothing changes.
+1. No rule (after layering, below), or no set marked done for the item: nothing changes.
 2. **Success** = the item's planned number of sets are all `done` with `actual_reps >= targetReps` and `weight >= targetWeight`. Anything else is a **miss**.
 3. On success, reset `fail_streak` and apply the rule:
    - `add_weight`: `targetWeight += success_amount`, rounded to the increment and never smaller than one increment.
@@ -135,7 +137,11 @@ Sessions pre-fill from `targetReps` and `targetWeight`. Overriding a plan item n
 5. Weights are rounded to the nearest `increment` and never go below 0. A successful `add_weight` step is rounded to the increment and is never smaller than one increment.
 6. Write the new `target_reps`, `target_weight` and `item_state`.
 
-**Default rule** for a new plan item (unless the profile sets `default_rule`): `add_weight` by the progression step, `fail_streak_limit = 3`, `deload_pct = 10`, no rep ceiling.
+**Rule layering**: an item's effective rule = its `progression_rule` row (override) ?? `exercise.default_rule` ?? `profile.default_rule` ?? the built-in default (`add_weight` by the progression step, `fail_streak_limit = 3`, `deload_pct = 10`, no rep ceiling). It is resolved when read and when a session finishes, so changing a default changes every inheriting item. `plan_item.inherit_rule` says what a missing row means: `true` (new items) inherits; `false` is an explicit "no progression" override (and the value for rows from before layering, where a missing row meant exactly that). `setRule(item, rule)` stores an override, `setRule(item, null)` overrides with no progression, `clearRule(item)` goes back to inheriting. Views carry `ruleSource` (`item`\|`exercise`\|`profile`\|`builtin`). Existing rule rows stay overrides even when equal to the old default (no guessing).
+
+**AMRAP**: `amrap_last` makes the item's last set "as many reps as possible": `target_reps` is the minimum, success is `actual_reps >= target_reps` as for any set, extra reps are only logged. `set_log.amrap` snapshots it at start.
+
+**Supersets**: 2-3 items of one day share `superset_group` (`setSuperset(dayId, groupId, itemIds | null)`; a group id lives on one day). Deleting an item (directly or by cascade) takes it out of its group; a group left with one member dissolves. At session start set logs get `seq`: normal items keep per-item order; a superset's members are pulled to the first member's position and interleaved round by round (A1 set 1, A2 set 1, A1 set 2, ...), a longer member continuing alone. Groups are lettered A, B, ... in day order and members numbered by position (`superset_label`). `angle` is snapshotted too.
 
 ## 7. Data access, guest mode and sync
 
@@ -188,16 +194,19 @@ REST under `/api/v1`, JSON bodies validated by the shared zod schemas. Changes a
 | GET | `/api/v1/gear` | List gear (sorted by name) |
 | PUT / DELETE | `/api/v1/gear/:id` | Create/rename/own-toggle gear; delete also removes it from exercises' required gear |
 | GET | `/api/v1/exercises` | List exercises (sorted by name) |
-| PUT / DELETE | `/api/v1/exercises/:id` | Create/update; delete cascades to its live plan items |
+| PUT / DELETE | `/api/v1/exercises/:id` | Create/update (`supports_angle` optional: omitted keeps it); delete cascades to its live plan items |
+| PUT | `/api/v1/exercises/:id/rule` | `{ rule }` sets the exercise's `default_rule`; `null` clears it |
 | GET | `/api/v1/exercises/:id/usage` | `{ planItemCount, plans }` for the delete confirmation |
 | GET | `/api/v1/plans`, `/api/v1/plans/:id` | Plans; one plan as a tree (days, items, rules, effective values) |
 | PUT / DELETE | `/api/v1/plans/:id` | Create/rename; delete cascades to days and items |
-| PUT / DELETE | `/api/v1/days/:id` | Create/rename a day (`plan_id` in the body); delete cascades to items |
-| POST | `/api/v1/days/:dayId/items` | Add an exercise to a day (`exercise_id`, optional `id`); gets the profile's default rule |
-| PATCH / DELETE | `/api/v1/items/:id` | Edit `sets`/`reps`/`weight` overrides (null clears; reps/weight edits clear targets); delete |
-| PUT | `/api/v1/items/:id/rule` | Set a rule, or `null` for no progression |
+| PUT / DELETE | `/api/v1/days/:id` | Create/rename a day (`plan_id`, optional `color`: omitted keeps it, null clears); delete cascades to items |
+| PUT | `/api/v1/days/:dayId/supersets/:groupId` | `{ item_ids: [2-3 ids] \| null }`: set or dissolve a superset; 400 for size/duplicates/another day, 409 if the group is on another day |
+| POST | `/api/v1/days/:dayId/items` | Add an exercise to a day (`exercise_id`, optional `id`); inherits its rule |
+| PATCH / DELETE | `/api/v1/items/:id` | Edit `sets`/`reps`/`weight` overrides (null clears; reps/weight edits clear targets), `angle` (400 if the exercise does not support it), `amrap_last`; delete |
+| PUT / DELETE | `/api/v1/items/:id/rule` | PUT sets an override (`null` = no progression); DELETE goes back to inheriting |
 | POST | `/api/v1/move` | `{ kind: 'day' \| 'item', id, direction: -1 \| 1 }` |
-| GET | `/api/v1/progression` | Every live plan item with its rule, in plan/day/item order |
+| GET | `/api/v1/progression` | Every live plan item with its effective rule and `ruleSource`, in plan/day/item order |
+| GET | `/api/v1/progression/exercises` | Every live exercise once (by name) with its effective default, overriding items and inheriting items |
 | GET | `/api/v1/sessions` | Completed sessions, newest first |
 | GET | `/api/v1/sessions/active` | The in-progress session, or `null` |
 | POST | `/api/v1/sessions` | Start from a plan day (`plan_day_id`); `409 session_in_progress` if one is active |
@@ -272,6 +281,9 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | Sign out returns to a fresh guest database | Server data stays safe on the server; nothing sensitive lingers on a shared device |
 | Offline queue limited to set edits (+ a local mirror of the active session) | Matches the gym use case; starting or finishing a workout needs a connection |
 | `Repo` interface and view types move to `packages/shared` | Web (`LocalRepo`, `ApiRepo`) and API (server service) implement and test against one contract |
+| Layered progression rules (item ?? exercise ?? profile ?? built-in), resolved at read/finish time (owner's choice) | One edit to a default reaches every inheriting item; overrides stay explicit. Old rule rows stay overrides; nothing is guessed |
+| Angle per plan item, gated by `exercise.supports_angle` (owner's choice) | One exercise can be incline in one plan and flat in another, each with its own targets and progression |
+| AMRAP last set, supersets of 2-3 items in one day, palette day colours (owner's choice) | Snapshotted onto set logs (`amrap`, `seq`, `superset_label`) so history renders without the plan; progression rules unchanged |
 
 ## 14. Open questions
 

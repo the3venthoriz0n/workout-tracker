@@ -80,6 +80,13 @@ describe('user B using user A\'s ids', () => {
       ['POST', '/api/v1/move', { kind: 'day', id: fa.day, direction: 1 }],
       ['POST', '/api/v1/move', { kind: 'item', id: fa.item, direction: -1 }],
       ['PUT', `/api/v1/items/${fa.item}/rule`, { rule: null }],
+      ['DELETE', `/api/v1/items/${fa.item}/rule`, {}],
+      ['PUT', `/api/v1/exercises/${fa.exercise}/rule`, { rule: null }],
+      ['PATCH', `/api/v1/items/${fa.item}`, { angle: 'flat' }],
+      ['PUT', `/api/v1/days/${fb.day}/supersets/${newId()}`, { item_ids: [fa.item, fa.item2] }], // A's items, B's day
+      ['PUT', `/api/v1/days/${fb.day}/supersets/${newId()}`, { item_ids: [fb.item, fa.item] }], // one of A's items
+      ['PUT', `/api/v1/days/${fa.day}/supersets/${fa.group}`, { item_ids: null }], // dissolve A's group
+      ['PUT', `/api/v1/days/${fa.day}/supersets/${newId()}`, { item_ids: [fb.item, fb.item2] }], // B's items, A's day
     ]
     for (const [method, path, body] of attempts) {
       const res = await b.call(method, path, body)
@@ -106,6 +113,20 @@ describe('user B using user A\'s ids', () => {
       expect(res.text, path).not.toContain('alice@example.com')
     }
     expect((await b.call('GET', '/api/v1/sessions/active')).text).toBe('null')
+  })
+
+  it('B reusing A\'s superset group id groups B\'s own items only', async () => {
+    const beforeA = await snapshot(a)
+    const res = await b.call('PUT', `/api/v1/days/${fb.day}/supersets/${fa.group}`, { item_ids: [fb.item, fb.item2] })
+    expect(res.status, res.text).toBe(200)
+    const bTree = (await b.call('GET', `/api/v1/plans/${fb.plan}`)).json as { days: { items: { superset_group: string | null }[] }[] }
+    expect(bTree.days[0]!.items.map((i) => i.superset_group)).toEqual([fa.group, fa.group])
+    expect(await snapshot(a)).toBe(beforeA)
+    // and B dissolving "that" group leaves A's group alone
+    expect((await b.call('PUT', `/api/v1/days/${fb.day}/supersets/${fa.group}`, { item_ids: null })).status).toBe(200)
+    expect(await snapshot(a)).toBe(beforeA)
+    const aTree = (await a.call('GET', `/api/v1/plans/${fa.plan}`)).json as { days: { items: { superset_group: string | null }[] }[] }
+    expect(aTree.days[0]!.items.map((i) => i.superset_group)).toEqual([fa.group, fa.group])
   })
 
   it('PUT with A\'s id creates B\'s OWN row and leaves A\'s untouched (composite keys)', async () => {
@@ -254,10 +275,12 @@ describe('route table completeness', () => {
 
   it('every route that takes an id (path or body) declares how foreign ids behave', () => {
     const probe: Fixture = {
-      gear: newId(), exercise: newId(), plan: newId(), day: newId(), item: newId(), session: newId(),
-      set: newId(), completedSession: newId(), export: {} as ExportData,
+      gear: newId(), exercise: newId(), plan: newId(), day: newId(), item: newId(), item2: newId(), group: newId(),
+      session: newId(), set: newId(), completedSession: newId(), export: {} as ExportData,
     }
-    const ids = ['gear', 'exercise', 'plan', 'day', 'item', 'session', 'set'].map((k) => probe[k as keyof Fixture] as string)
+    const ids = ['gear', 'exercise', 'plan', 'day', 'item', 'item2', 'group', 'session', 'set'].map(
+      (k) => probe[k as keyof Fixture] as string,
+    )
     for (const spec of ROUTES) {
       const names = [...spec.path.matchAll(/:(\w+)/g)].map((m) => m[1]!)
       expect(Object.keys(spec.params ?? {}).sort(), label(spec)).toEqual(names.sort())

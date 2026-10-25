@@ -1,6 +1,9 @@
 import { z } from 'zod'
 import { exportDataSchema } from './export.js'
 import {
+  LIMITS,
+  angleSchema,
+  dayColorSchema,
   stepAmount,
   exerciseInputSchema,
   gearSchema,
@@ -25,15 +28,23 @@ export const IdParam = idSchema
 export const PutGearBody = gearSchema.pick({ name: true, owned: true })
 export const PutExerciseBody = exerciseInputSchema.omit({ id: true })
 export const PutPlanBody = planSchema.pick({ name: true })
-export const PutDayBody = planDaySchema.pick({ plan_id: true, name: true })
+// color: omitted keeps the stored colour, null clears it
+export const PutDayBody = planDaySchema.pick({ plan_id: true, name: true }).extend({ color: dayColorSchema.nullable().optional() })
 export const PatchProfileBody = z.object({
   units: unitsSchema.optional(),
   weight_increment: stepAmount.optional(),
   default_rule: ruleInputSchema.optional(),
 })
 export const AddItemBody = z.object({ exercise_id: idSchema, id: idSchema.optional() })
-export const PatchItemBody = planItemSchema.pick({ sets: true, reps: true, weight: true }).partial()
+export const PatchItemBody = planItemSchema
+  .pick({ sets: true, reps: true, weight: true })
+  .extend({ angle: angleSchema.nullable(), amrap_last: z.boolean() })
+  .partial()
 export const PutRuleBody = z.object({ rule: ruleInputSchema.nullable() })
+// item_ids: the 2-3 members of the group; null dissolves it
+export const PutSupersetBody = z.object({
+  item_ids: z.array(idSchema).min(LIMITS.supersetMin).max(LIMITS.supersetMax).nullable(),
+})
 export const MoveBody = z.object({
   kind: z.enum(['day', 'item']),
   id: idSchema,

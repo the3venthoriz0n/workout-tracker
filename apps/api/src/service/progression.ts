@@ -1,8 +1,11 @@
 import { and, asc, eq, isNull } from 'drizzle-orm'
-import type { ProgressionRow } from '@workout/shared'
+import { groupProgressionByExercise } from '@workout/shared'
+import type { ExerciseProgression, ProgressionRow } from '@workout/shared'
 import { exercise, plan, planDay, planItem, progressionRule } from '../db/schema.js'
 import type { Db } from '../db/types.js'
-import { toRule } from './mappers.js'
+import { listExercises } from './exercises.js'
+import { toExercise, toPlanItem } from './mappers.js'
+import { profileOf, ruleOf } from './plans.js'
 
 export async function listProgression(db: Db, userId: string): Promise<ProgressionRow[]> {
   const rows = await db
@@ -24,13 +27,32 @@ export async function listProgression(db: Db, userId: string): Promise<Progressi
       ),
     )
     .orderBy(asc(plan.createdAt), asc(plan.name), asc(plan.id), asc(planDay.position), asc(planDay.id), asc(planItem.position), asc(planItem.id))
-  return rows.map((r) => ({
-    plan_id: r.p.id,
-    plan_name: r.p.name,
-    day_id: r.d.id,
-    day_name: r.d.name,
-    item_id: r.i.id,
-    exercise_name: r.e.name,
-    rule: r.r ? toRule(r.r) : null,
-  }))
+  // Probed before init (no profile) by auth checks: nothing to resolve then.
+  if (rows.length === 0) return []
+  const prof = await profileOf(db, userId)
+  return rows.map((r) => {
+    const { rule, source } = ruleOf(toPlanItem(r.i), toExercise(r.e), prof, r.r)
+    return {
+      plan_id: r.p.id,
+      plan_name: r.p.name,
+      day_id: r.d.id,
+      day_name: r.d.name,
+      item_id: r.i.id,
+      exercise_id: r.e.id,
+      exercise_name: r.e.name,
+      rule,
+      ruleSource: source,
+    }
+  })
+}
+
+export async function listProgressionByExercise(db: Db, userId: string): Promise<ExerciseProgression[]> {
+  return db.transaction(
+    async (tx) => {
+      const exercises = await listExercises(tx as unknown as Db, userId)
+      if (exercises.length === 0) return []
+      return groupProgressionByExercise(exercises, await listProgression(tx as unknown as Db, userId), await profileOf(tx, userId))
+    },
+    { isolationLevel: 'repeatable read', accessMode: 'read only' },
+  )
 }

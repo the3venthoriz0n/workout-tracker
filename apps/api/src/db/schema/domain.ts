@@ -84,6 +84,9 @@ export const exercise = pgTable(
     defaultSets: integer('default_sets').notNull(),
     defaultReps: integer('default_reps').notNull(),
     defaultWeight: numeric('default_weight', { precision: 8, scale: 2 }).notNull(),
+    supportsAngle: boolean('supports_angle').notNull().default(false),
+    // Rule shape validated by the shared zod schema on every write; null = inherit the profile's.
+    defaultRule: jsonb('default_rule').$type<RuleInput>(),
     ...syncColumns(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.id] })],
@@ -109,10 +112,12 @@ export const planDay = pgTable(
     planId: uuid('plan_id').notNull(),
     name: text('name').notNull(),
     position: integer('position').notNull(),
+    color: text('color'),
     ...syncColumns(),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
+    check('plan_day_color_check', sql`${t.color} in ('blue', 'red', 'green', 'amber', 'violet', 'teal', 'pink', 'slate')`),
     foreignKey({
       columns: [t.userId, t.planId],
       foreignColumns: [plan.userId, plan.id],
@@ -134,10 +139,17 @@ export const planItem = pgTable(
     weight: numeric('weight', { precision: 8, scale: 2 }),
     targetReps: integer('target_reps'),
     targetWeight: numeric('target_weight', { precision: 8, scale: 2 }),
+    angle: text('angle'),
+    amrapLast: boolean('amrap_last').notNull().default(false),
+    // Shared by the 2-3 members of a superset in one day; not a foreign key (groups have no table).
+    supersetGroup: uuid('superset_group'),
+    // false (the default for rows from before layering): no rule row = no progression.
+    inheritRule: boolean('inherit_rule').notNull().default(false),
     ...syncColumns(),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
+    check('plan_item_angle_check', sql`${t.angle} in ('flat', 'incline', 'decline')`),
     foreignKey({
       columns: [t.userId, t.planDayId],
       foreignColumns: [planDay.userId, planDay.id],
@@ -234,6 +246,12 @@ export const setLog = pgTable(
     weight: numeric('weight', { precision: 8, scale: 2 }).notNull(),
     done: boolean('done').notNull().default(false),
     note: text('note').notNull().default(''),
+    // Snapshots taken at session start; seq null (older rows) falls back to (position, set_no).
+    angle: text('angle'),
+    amrap: boolean('amrap').notNull().default(false),
+    seq: integer('seq'),
+    supersetGroup: uuid('superset_group'),
+    supersetLabel: text('superset_label'),
     ...syncColumns(),
   },
   (t) => [

@@ -8,8 +8,10 @@ import {
   ProfileNotFoundError,
   SessionInProgressError,
   UnauthenticatedError,
+  ValidationError,
 } from './repo.js'
 import type { ExportData, FinishSummary, PlanTree, ProgressionRow, Repo, SessionDetail } from './repo.js'
+import type { ExerciseProgression } from './rules.js'
 import { newId } from './id.js'
 import type { Exercise, Gear, Plan, PlanDay, PlanItem, Profile, SetLog, WorkoutSession } from './schemas.js'
 
@@ -65,6 +67,10 @@ export function createApiRepo(opts: ApiRepoOptions = {}): ApiRepo {
       if (code === 'conflict') throw new ConflictError()
     }
     if (res.status === 400 && path === '/import') throw new ImportInvalidError()
+    if (res.status === 400 && code === 'invalid') {
+      const issue = (data as { issues?: { path?: unknown }[] } | undefined)?.issues?.[0]
+      throw new ValidationError(typeof issue?.path === 'string' ? issue.path.slice(0, 200) : '')
+    }
     throw new ApiError(res.status, code)
   }
 
@@ -129,6 +135,13 @@ export function createApiRepo(opts: ApiRepoOptions = {}): ApiRepo {
     async setRule(planItemId, rule) {
       await put(`/items/${seg(planItemId)}/rule`, { rule })
     },
+    clearRule: (planItemId) => del(`/items/${seg(planItemId)}/rule`),
+    async setExerciseRule(exerciseId, rule) {
+      await put(`/exercises/${seg(exerciseId)}/rule`, { rule })
+    },
+    async setSuperset(planDayId, groupId, itemIds) {
+      await put(`/days/${seg(planDayId)}/supersets/${seg(groupId)}`, { item_ids: itemIds })
+    },
     async move(kind, id, direction) {
       await post('/move', { kind, id, direction })
     },
@@ -153,6 +166,7 @@ export function createApiRepo(opts: ApiRepoOptions = {}): ApiRepo {
     },
     exportAll: () => get<ExportData>('/export', profileMissing),
     listProgression: () => get<ProgressionRow[]>('/progression'),
+    listProgressionByExercise: () => get<ExerciseProgression[]>('/progression/exercises'),
     async importAll(data) {
       await post('/import', data)
     },

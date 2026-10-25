@@ -9,8 +9,8 @@ import {
   planItemSchema,
   planSchema,
   profileSchema,
-  progressionRuleSchema,
   ruleInputSchema,
+  ruleSourceSchema,
   setLogSchema,
   workoutSessionSchema,
 } from '@workout/shared'
@@ -19,7 +19,8 @@ import { z } from 'zod'
 
 export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 /** Kinds of owned ids a path param or body field can carry. */
-export type Kind = 'gear' | 'exercise' | 'plan' | 'day' | 'item' | 'session' | 'set'
+// `item2`: a second item on the same day (supersets need two); `group`: a superset group id on that day.
+export type Kind = 'gear' | 'exercise' | 'plan' | 'day' | 'item' | 'item2' | 'group' | 'session' | 'set'
 
 /** Ids of one user's data. The tests build it by calling the API as that user. */
 export type Fixture = Record<Kind, string> & {
@@ -85,17 +86,28 @@ const planTree = planSchema.extend({
       items: z.array(
         planItemSchema.extend({
           exercise: exerciseSchema,
-          rule: progressionRuleSchema.nullable(),
+          rule: ruleInputSchema.nullable(),
+          ruleSource: ruleSourceSchema,
           effective: z.object({}).loose(),
         }),
       ),
     }),
   ),
 })
+const placement = { plan_id: z.string(), plan_name: z.string(), day_id: z.string(), day_name: z.string(), item_id: z.string() }
+const exerciseProgression = z.object({
+  exercise_id: z.string(),
+  exercise_name: z.string(),
+  rule: ruleInputSchema,
+  source: z.enum(['exercise', 'profile', 'builtin']),
+  overrides: z.array(z.object({ ...placement, rule: ruleInputSchema.nullable() }).strict()),
+  inheriting: z.array(z.object(placement).strict()),
+})
 const pair = z.object({ reps: z.number(), weight: z.number() })
 
 const exerciseBody = (f: Fixture) => ({
   name: 'Incline Press',
+  supports_angle: true,
   notes: 'Controlled tempo',
   video_url: null,
   required_gear_ids: [f.gear],
@@ -143,6 +155,15 @@ export const ROUTES: RouteSpec[] = [
   },
   { method: 'DELETE', path: `${V1}/exercises/:id`, params: { id: 'exercise' }, status: 204, foreign: 'not_found' },
   {
+    method: 'PUT',
+    path: `${V1}/exercises/:id/rule`,
+    params: { id: 'exercise' },
+    body: () => ({ rule }),
+    status: 200,
+    response: z.object({ rule: ruleInputSchema.nullable() }),
+    foreign: 'not_found',
+  },
+  {
     method: 'GET',
     path: `${V1}/exercises/:id/usage`,
     params: { id: 'exercise' },
@@ -168,7 +189,7 @@ export const ROUTES: RouteSpec[] = [
     method: 'PUT',
     path: `${V1}/days/:id`,
     params: { id: 'day' },
-    body: (f) => ({ plan_id: f.plan, name: 'Day B' }),
+    body: (f) => ({ plan_id: f.plan, name: 'Day B', color: 'amber' }),
     status: 200,
     response: planDaySchema,
     foreign: 'not_found',
@@ -188,7 +209,7 @@ export const ROUTES: RouteSpec[] = [
     method: 'PATCH',
     path: `${V1}/items/:id`,
     params: { id: 'item' },
-    body: () => ({ sets: 4, reps: 6, weight: 100 }),
+    body: () => ({ sets: 4, reps: 6, weight: 100, angle: 'incline', amrap_last: true }),
     status: 200,
     response: planItemSchema,
     foreign: 'not_found',
@@ -201,6 +222,16 @@ export const ROUTES: RouteSpec[] = [
     body: () => ({ rule }),
     status: 200,
     response: z.object({ rule: ruleInputSchema.nullable() }),
+    foreign: 'not_found',
+  },
+  { method: 'DELETE', path: `${V1}/items/:id/rule`, params: { id: 'item' }, status: 204, foreign: 'not_found' },
+  {
+    method: 'PUT',
+    path: `${V1}/days/:dayId/supersets/:groupId`,
+    params: { dayId: 'day', groupId: 'group' },
+    body: (f) => ({ item_ids: [f.item2, f.item] }),
+    status: 200,
+    response: z.object({ superset_group: z.string().nullable() }),
     foreign: 'not_found',
   },
   {
@@ -222,10 +253,19 @@ export const ROUTES: RouteSpec[] = [
         day_id: z.string(),
         day_name: z.string(),
         item_id: z.string(),
+        exercise_id: z.string(),
         exercise_name: z.string(),
-        rule: progressionRuleSchema.nullable(),
+        rule: ruleInputSchema.nullable(),
+        ruleSource: ruleSourceSchema,
       }),
     ),
+    foreign: 'none',
+  },
+  {
+    method: 'GET',
+    path: `${V1}/progression/exercises`,
+    status: 200,
+    response: z.array(exerciseProgression),
     foreign: 'none',
   },
 

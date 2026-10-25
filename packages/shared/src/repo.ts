@@ -1,4 +1,6 @@
 import type {
+  Angle,
+  DayColor,
   Exercise,
   ExerciseInput,
   Gear,
@@ -9,17 +11,28 @@ import type {
   Profile,
   ProgressionRule,
   RuleInput,
+  RuleSource,
   SetLog,
   WorkoutSession,
 } from './schemas.js'
+import type { ExerciseProgression } from './rules.js'
 import type { Effective } from './effective.js'
 import type { Outcome } from './progression.js'
 import type { Units } from './units.js'
 
+/**
+ * A plan item as the UI sees it. `rule` is the EFFECTIVE rule (what finishing a session uses):
+ * the item's override, else the exercise's, the profile's or the built-in default; `ruleSource` says
+ * which. `rule: null` with `ruleSource: 'item'` is an explicit "no progression" override.
+ */
+export type PlanItemView = PlanItem & {
+  exercise: Exercise
+  rule: RuleInput | null
+  ruleSource: RuleSource
+  effective: Effective
+}
 export type PlanTree = Plan & {
-  days: (PlanDay & {
-    items: (PlanItem & { exercise: Exercise; rule: ProgressionRule | null; effective: Effective })[]
-  })[]
+  days: (PlanDay & { items: PlanItemView[] })[]
 }
 export type SessionDetail = WorkoutSession & {
   exercises: {
@@ -57,8 +70,11 @@ export type ProgressionRow = {
   day_id: string
   day_name: string
   item_id: string
+  exercise_id: string
   exercise_name: string
-  rule: ProgressionRule | null
+  /** Effective rule, as in PlanItemView. */
+  rule: RuleInput | null
+  ruleSource: RuleSource
 }
 export class SessionInProgressError extends Error {}
 // Thrown by importAll() when the account already has a profile (import is first-time only).
@@ -121,6 +137,22 @@ export class ApiError extends Error {
     this.name = 'ApiError'
   }
 }
+/**
+ * A request that breaks a rule needing stored data (angle on an exercise without angle support,
+ * superset size or day). Thrown by LocalRepo and the service; the API answers 400 invalid and
+ * ApiRepo maps that back to this class. It is an ApiError(400) so the offline queue treats it as
+ * permanent, like any other 4xx.
+ */
+export class ValidationError extends ApiError {
+  constructor(
+    readonly path = '',
+    message = 'Invalid request',
+  ) {
+    super(400, 'invalid')
+    this.message = message
+    this.name = 'ValidationError'
+  }
+}
 
 export interface Repo {
   init(): Promise<void> // idempotent: guest profile + seeds on first run
@@ -141,15 +173,26 @@ export interface Repo {
   getPlan(id: string): Promise<PlanTree | undefined> // days and items sorted by position
   savePlan(input: { id?: string; name: string }): Promise<Plan>
   deletePlan(id: string): Promise<void> // soft-deletes days and items too
-  savePlanDay(input: { id?: string; plan_id: string; name: string }): Promise<PlanDay>
+  // color: undefined keeps the stored colour (null on create)
+  savePlanDay(input: { id?: string; plan_id: string; name: string; color?: DayColor | null }): Promise<PlanDay>
   deletePlanDay(id: string): Promise<void>
-  addPlanItem(planDayId: string, exerciseId: string): Promise<PlanItem> // appends; rule = profile.default_rule if set, else defaultRule(progression step)
+  addPlanItem(planDayId: string, exerciseId: string): Promise<PlanItem> // appends; no rule row: inherits (spec §6)
   updatePlanItem(
     id: string,
-    patch: { sets?: number | null; reps?: number | null; weight?: number | null },
+    // angle needs exercise.supports_angle (else ValidationError); angle/amrap_last never clear targets
+    patch: { sets?: number | null; reps?: number | null; weight?: number | null; angle?: Angle | null; amrap_last?: boolean },
   ): Promise<PlanItem>
-  deletePlanItem(id: string): Promise<void>
-  setRule(planItemId: string, rule: RuleInput | null): Promise<void>
+  deletePlanItem(id: string): Promise<void> // also leaves its superset (a group of one dissolves)
+  setRule(planItemId: string, rule: RuleInput | null): Promise<void> // item override; null = "no progression"
+  clearRule(planItemId: string): Promise<void> // drop the override: back to the inherited rule
+  setExerciseRule(exerciseId: string, rule: RuleInput | null): Promise<void> // exercise.default_rule; null clears
+  /**
+   * Makes `itemIds` (2-3 live items of `planDayId`) the members of superset `groupId` (a client
+   * newId()); members of other groups move, and any group left with one member dissolves. `null`
+   * dissolves the group. ValidationError for size/duplicates/another day, NotFoundError for unknown
+   * ids, ConflictError when `groupId` is in use on another day.
+   */
+  setSuperset(planDayId: string, groupId: string, itemIds: string[] | null): Promise<void>
   move(kind: 'day' | 'item', id: string, direction: -1 | 1): Promise<void>
   getActiveSession(): Promise<SessionDetail | undefined>
   startSession(planDayId: string): Promise<SessionDetail> // throws SessionInProgressError
@@ -164,4 +207,5 @@ export interface Repo {
   getSession(id: string): Promise<SessionDetail | undefined>
   exportAll(): Promise<ExportData>
   listProgression(): Promise<ProgressionRow[]> // live plan items with their rules, in plan/day/item order
+  listProgressionByExercise(): Promise<ExerciseProgression[]> // every live exercise once, sorted by name
 }

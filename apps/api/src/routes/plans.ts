@@ -1,4 +1,4 @@
-import { AddItemBody, MoveBody, PatchItemBody, PutDayBody, PutPlanBody, PutRuleBody } from '@workout/shared'
+import { AddItemBody, MoveBody, PatchItemBody, PutDayBody, PutPlanBody, PutRuleBody, PutSupersetBody } from '@workout/shared'
 import { body, param, service } from './http.js'
 import type { RouteDeps, V1 } from './types.js'
 
@@ -56,6 +56,17 @@ export function registerPlans(v1: V1, { getService }: RouteDeps) {
     const { rule } = await body(c, PutRuleBody)
     await service(c, getService).setRule(id, rule)
     return c.json({ rule })
+  })
+  v1.delete('/items/:id/rule', async (c) => {
+    await service(c, getService).clearRule(param(c, 'id'))
+    return c.body(null, 204)
+  })
+  v1.put('/days/:dayId/supersets/:groupId', async (c) => {
+    const dayId = param(c, 'dayId')
+    const groupId = param(c, 'groupId')
+    const { item_ids } = await body(c, PutSupersetBody)
+    await service(c, getService).setSuperset(dayId, groupId, item_ids)
+    return c.json({ superset_group: item_ids === null ? null : groupId })
   })
   v1.post('/move', async (c) => {
     const { kind, id, direction } = await body(c, MoveBody)

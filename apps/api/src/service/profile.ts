@@ -15,7 +15,7 @@ import {
 import type { Profile, RuleInput, Units } from '@workout/shared'
 import { exercise, gear, planItem, profile, progressionRule, setLog } from '../db/schema.js'
 import type { Db } from '../db/types.js'
-import { dec, now, num, toProfile } from './mappers.js'
+import { dec, now, num, readRule, toProfile } from './mappers.js'
 
 export async function init(db: Db, userId: string): Promise<void> {
   await db.transaction(async (tx) => {
@@ -134,6 +134,19 @@ async function convertUnits(tx: Parameters<Parameters<Db['transaction']>[0]>[0],
       .update(progressionRule)
       .set({ successAmount: remap(progressionRule.successAmount, ruleMap), updatedAt: ts })
       .where(addWeight)
+  }
+
+  // Exercise default rules (jsonb): bounded by the user's library size, so one update per changed row.
+  const exRules = await tx
+    .select({ id: exercise.id, rule: exercise.defaultRule })
+    .from(exercise)
+    .where(and(eq(exercise.userId, userId), sql`${exercise.defaultRule}->>'success_action' = 'add_weight'`))
+  for (const row of exRules) {
+    const r = readRule(row.rule)
+    await tx
+      .update(exercise)
+      .set({ defaultRule: { ...r, success_amount: convAmount(r.success_amount) }, updatedAt: ts })
+      .where(and(eq(exercise.userId, userId), eq(exercise.id, row.id)))
   }
 
   const rule = current.default_rule

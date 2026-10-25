@@ -93,3 +93,46 @@ describe('rule and increment precision', () => {
     expect(ruleInputSchema.safeParse({ ...reps, success_amount: 2 }).success).toBe(true)
   })
 })
+
+describe('new fields (day colour, angle, AMRAP, supersets, layered rules)', () => {
+  it('exports the day colour palette and validates colours', async () => {
+    const { DAY_COLORS, planDaySchema } = await import('../src/index.js')
+    expect(DAY_COLORS).toEqual(['blue', 'red', 'green', 'amber', 'violet', 'teal', 'pink', 'slate'])
+    const day = { id: uuid, plan_id: uuid, name: 'D', position: 0, created_at: ts, updated_at: ts, deleted_at: null }
+    expect(planDaySchema.parse(day).color).toBeNull() // old rows default to null
+    expect(planDaySchema.parse({ ...day, color: 'teal' }).color).toBe('teal')
+    expect(planDaySchema.safeParse({ ...day, color: 'mauve' }).success).toBe(false)
+  })
+  it('defaults the new plan item, exercise and set log fields on old rows', async () => {
+    const { planItemSchema, exerciseSchema: ex, setLogSchema: logs } = await import('../src/index.js')
+    const item = {
+      id: uuid, plan_day_id: uuid, exercise_id: uuid, position: 0, sets: null, reps: null, weight: null,
+      target_reps: null, target_weight: null, created_at: ts, updated_at: ts, deleted_at: null,
+    }
+    // inherit_rule false keeps the old meaning: no rule row = no progression
+    expect(planItemSchema.parse(item)).toMatchObject({ angle: null, amrap_last: false, superset_group: null, inherit_rule: false })
+    expect(planItemSchema.safeParse({ ...item, angle: 'incline' }).success).toBe(true)
+    expect(planItemSchema.safeParse({ ...item, angle: 'upside-down' }).success).toBe(false)
+    expect(planItemSchema.safeParse({ ...item, superset_group: 'nope' }).success).toBe(false)
+    const exercise = { ...validInput, id: uuid, user_id: uuid, created_at: ts, updated_at: ts, deleted_at: null }
+    expect(ex.parse(exercise)).toMatchObject({ supports_angle: false, default_rule: null })
+    const log = {
+      id: uuid, session_id: uuid, plan_item_id: uuid, exercise_id: uuid, exercise_name: 'Squat',
+      set_no: 1, position: 0, target_reps: 5, target_weight: 45, actual_reps: 0, weight: 45, done: false, note: '',
+      created_at: ts, updated_at: ts, deleted_at: null,
+    }
+    expect(logs.parse(log)).toMatchObject({ angle: null, amrap: false, seq: null, superset_group: null, superset_label: null })
+    expect(logs.safeParse({ ...log, superset_label: 'x'.repeat(9) }).success).toBe(false)
+  })
+  it('an export written before these fields still parses, with defaults', async () => {
+    const { exportDataSchema } = await import('../src/index.js')
+    const old = {
+      version: 1, exported_at: ts,
+      profile: { user_id: uuid, plan: 'free', units: 'lb', weight_increment: 5, created_at: ts, updated_at: ts, deleted_at: null },
+      gear: [], exercises: [{ ...validInput, id: uuid, user_id: uuid, created_at: ts, updated_at: ts, deleted_at: null }],
+      plans: [], plan_days: [], plan_items: [], progression_rules: [], item_states: [], workout_sessions: [], set_logs: [],
+    }
+    const parsed = exportDataSchema.parse(old)
+    expect(parsed.exercises[0]).toMatchObject({ supports_angle: false, default_rule: null })
+  })
+})

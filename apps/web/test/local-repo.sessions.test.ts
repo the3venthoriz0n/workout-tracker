@@ -171,6 +171,8 @@ describe('LocalRepo units and export', () => {
 
   it('unit change converts progression rules and bumps updated_at', async () => {
     const { db, repo, benchItem, otherItem } = await setup()
+    // Stored item overrides are converted (new items have none: they inherit, spec §6).
+    await repo.setRule(benchItem.id, defaultRule(5))
     await repo.setRule(otherItem.id, { ...defaultRule(5), success_amount: 10 })
     const first = (await db.exercises.toArray())[0]
     if (!first) throw new Error('seed missing')
@@ -195,7 +197,9 @@ describe('LocalRepo units and export', () => {
   })
 
   it('exportAll returns every table including deleted rows and round-trips JSON', async () => {
-    const { repo, plan, day } = await setup()
+    const { repo, plan, day, benchItem, otherItem } = await setup()
+    await repo.setRule(benchItem.id, defaultRule(5)) // overrides are rows; inheriting items have none
+    await repo.setRule(otherItem.id, defaultRule(5))
     const session = await repo.startSession(day.id)
     await repo.deletePlan(plan.id)
     const data = await repo.exportAll()

@@ -107,6 +107,8 @@ export function toExercise(row: typeof exercise.$inferSelect): Exercise {
     default_sets: row.defaultSets,
     default_reps: row.defaultReps,
     default_weight: clampWeight(num(row.defaultWeight)),
+    supports_angle: row.supportsAngle,
+    default_rule: row.defaultRule === null ? null : readRule(row.defaultRule),
     user_id: row.userId,
     created_at: iso(row.createdAt),
     updated_at: iso(row.updatedAt),
@@ -138,6 +140,7 @@ export function toPlanDay(row: typeof planDay.$inferSelect): PlanDay {
     plan_id: row.planId,
     name: row.name,
     position: row.position,
+    color: row.color,
     ...syncOf(row),
   })
 }
@@ -153,6 +156,10 @@ export function toPlanItem(row: typeof planItem.$inferSelect): PlanItem {
     weight: clampWeightOrNull(row.weight),
     target_reps: row.targetReps,
     target_weight: clampWeightOrNull(row.targetWeight),
+    angle: row.angle,
+    amrap_last: row.amrapLast,
+    superset_group: row.supersetGroup,
+    inherit_rule: row.inheritRule,
     ...syncOf(row),
   })
 }
@@ -202,6 +209,11 @@ export function toSetLog(row: typeof setLog.$inferSelect): SetLog {
     weight: clampWeight(num(row.weight)),
     done: row.done,
     note: row.note,
+    angle: row.angle,
+    amrap: row.amrap,
+    seq: row.seq,
+    superset_group: row.supersetGroup,
+    superset_label: row.supersetLabel,
     ...syncOf(row),
   })
 }

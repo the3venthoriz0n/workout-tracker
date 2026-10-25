@@ -138,6 +138,7 @@ describe('listProgression', () => {
     const plan = await repo.savePlan({ name: 'A' })
     const day = await repo.savePlanDay({ plan_id: plan.id, name: 'D' })
     const gone = await repo.addPlanItem(day.id, ex1.id)
+    await repo.setRule(gone.id, defaultRule(5)) // an override, so the item has a rule row
     const kept = await repo.addPlanItem(day.id, ex2.id)
     expect((await repo.listProgression()).map((r) => r.item_id)).toEqual([gone.id, kept.id])
 

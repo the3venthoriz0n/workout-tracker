@@ -1,9 +1,10 @@
 import type { ExportData, PlanItem, Repo } from '@workout/shared'
 import type { Db } from '../db/types.js'
-import { deleteExercise, exerciseUsage, listExercises, saveExercise } from './exercises.js'
+import { deleteExercise, exerciseUsage, listExercises, saveExercise, setExerciseRule } from './exercises.js'
 import { deleteGear, listGear, saveGear } from './gear.js'
 import {
   addPlanItem,
+  clearRule,
   deletePlan,
   deletePlanDay,
   deletePlanItem,
@@ -13,9 +14,10 @@ import {
   savePlan,
   savePlanDay,
   setRule,
+  setSuperset,
   updatePlanItem,
 } from './plans.js'
-import { listProgression } from './progression.js'
+import { listProgression, listProgressionByExercise } from './progression.js'
 import { getProfile, init, updateProfile } from './profile.js'
 import {
   discardSession,
@@ -50,6 +52,7 @@ export function createService(db: Db, userId: string): Service {
     saveExercise: (input) => saveExercise(db, userId, input),
     deleteExercise: (id) => deleteExercise(db, userId, id),
     exerciseUsage: (id) => exerciseUsage(db, userId, id),
+    setExerciseRule: (id, rule) => setExerciseRule(db, userId, id, rule),
 
     // plans, items, rules, progression (Task 2b)
     listPlans: () => listPlans(db, userId),
@@ -62,8 +65,11 @@ export function createService(db: Db, userId: string): Service {
     updatePlanItem: (id, patch) => updatePlanItem(db, userId, id, patch),
     deletePlanItem: (id) => deletePlanItem(db, userId, id),
     setRule: (itemId, rule) => setRule(db, userId, itemId, rule),
+    clearRule: (itemId) => clearRule(db, userId, itemId),
+    setSuperset: (dayId, groupId, itemIds) => setSuperset(db, userId, dayId, groupId, itemIds),
     move: (kind, id, direction) => move(db, userId, kind, id, direction),
     listProgression: () => listProgression(db, userId),
+    listProgressionByExercise: () => listProgressionByExercise(db, userId),
 
     // sessions, export, import (Task 2c)
     getActiveSession: () => getActiveSession(db, userId),

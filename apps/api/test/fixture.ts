@@ -32,8 +32,8 @@ const must = <T>(v: T | undefined | null, what: string): T => {
 type Opts = { active?: boolean }
 
 /**
- * Builds one user's data through the public API: gear, exercise, plan, day, item with a rule, a
- * finished session and (unless `active: false`) a second, active session with its sets.
+ * Builds one user's data through the public API: gear, exercise (with a default rule), plan, day,
+ * an item with a rule plus a second item in a superset with it, a finished session and (unless `active: false`) a second, active session with its sets.
  */
 export async function buildFixture(c: Client, opts: Opts = {}): Promise<Fixture> {
   const ok = async (method: string, path: string, body?: unknown) => {
@@ -52,6 +52,7 @@ export async function buildFixture(c: Client, opts: Opts = {}): Promise<Fixture>
     video_url: null,
     required_gear_ids: [f.gear],
     active: true,
+    supports_angle: true,
     default_sets: 2,
     default_reps: 5,
     default_weight: 95,
@@ -61,6 +62,14 @@ export async function buildFixture(c: Client, opts: Opts = {}): Promise<Fixture>
   const item = (await ok('POST', `/api/v1/days/${f.day}/items`, { exercise_id: f.exercise })) as { id: string }
   await ok('PUT', `/api/v1/items/${item.id}/rule`, {
     rule: { success_action: 'add_weight', success_amount: 5, fail_streak_limit: 3, deload_pct: 10, rep_ceiling: null },
+  })
+  // A second item on the day, superset with the first, so routes that take two items or a group have real ids.
+  const item2 = (await ok('POST', `/api/v1/days/${f.day}/items`, { exercise_id: f.exercise })) as { id: string }
+  const group = newId()
+  await ok('PUT', `/api/v1/days/${f.day}/supersets/${group}`, { item_ids: [item.id, item2.id] })
+  await ok('PATCH', `/api/v1/items/${item2.id}`, { angle: 'incline', amrap_last: true })
+  await ok('PUT', `/api/v1/exercises/${f.exercise}/rule`, {
+    rule: { success_action: 'add_reps', success_amount: 1, fail_streak_limit: 3, deload_pct: 10, rep_ceiling: 8 },
   })
 
   const first = (await ok('POST', '/api/v1/sessions', { plan_day_id: f.day })) as { id: string }
@@ -81,7 +90,7 @@ export async function buildFixture(c: Client, opts: Opts = {}): Promise<Fixture>
     set = must(done.exercises[0]?.sets[0]?.id, 'set')
   }
   const exported = (await ok('GET', '/api/v1/export')) as ExportData
-  return { ...f, item: item.id, session, set, completedSession: first.id, export: exported }
+  return { ...f, item: item.id, item2: item2.id, group, session, set, completedSession: first.id, export: exported }
 }
 
 /** A fixture whose ids all belong to nobody. */
@@ -92,6 +101,8 @@ export function randomFixture(like: Fixture): Fixture {
     plan: newId(),
     day: newId(),
     item: newId(),
+    item2: newId(),
+    group: newId(),
     session: newId(),
     set: newId(),
     completedSession: newId(),

@@ -180,6 +180,16 @@ describe('validation: 400 invalid with issues, never a 500, never an echo', () =
     ['profile units', 'PATCH', '/api/v1/me', { units: 'stone' }, 'units'],
     ['profile increment zero', 'PATCH', '/api/v1/me', { weight_increment: 0 }, 'weight_increment'],
     ['import is not an export', 'POST', '/api/v1/import', {}, 'version'],
+    ['day colour not in the palette', 'PUT', `/api/v1/days/${id}`, { plan_id: id, name: 'D', color: 'mauve' }, 'color'],
+    ['item angle not an angle', 'PATCH', `/api/v1/items/${id}`, { angle: 'sideways' }, 'angle'],
+    ['item amrap_last not a boolean', 'PATCH', `/api/v1/items/${id}`, { amrap_last: 'yes' }, 'amrap_last'],
+    ['exercise supports_angle not a boolean', 'PUT', `/api/v1/exercises/${id}`, exercise({ supports_angle: 1 }), 'supports_angle'],
+    ['exercise rule amount over bound', 'PUT', `/api/v1/exercises/${id}/rule`, rule({ success_amount: 100001 }), 'rule.success_amount'],
+    ['exercise rule missing key', 'PUT', `/api/v1/exercises/${id}/rule`, {}, 'rule'],
+    ['superset with one item', 'PUT', `/api/v1/days/${id}/supersets/${newId()}`, { item_ids: [id] }, 'item_ids'],
+    ['superset with four items', 'PUT', `/api/v1/days/${id}/supersets/${newId()}`, { item_ids: [newId(), newId(), newId(), newId()] }, 'item_ids'],
+    ['superset item id not a uuid', 'PUT', `/api/v1/days/${id}/supersets/${newId()}`, { item_ids: [id, 'nope'] }, 'item_ids.1'],
+    ['superset missing item_ids', 'PUT', `/api/v1/days/${id}/supersets/${newId()}`, {}, 'item_ids'],
   ]
   it.each(cases)('%s', async (_n, method, path, payload, issuePath) => {
     const res = await u.call(method, path, payload)
@@ -189,6 +199,30 @@ describe('validation: 400 invalid with issues, never a 500, never an echo', () =
     expect(j.issues.length).toBeGreaterThan(0)
     expect(j.issues.map((i) => i.path)).toContain(issuePath)
     for (const i of j.issues) expect(Object.keys(i).sort()).toEqual(['message', 'path'])
+  })
+
+  it('rule checks that need stored data are 400 invalid too (angle support, superset day and duplicates)', async () => {
+    const f = await buildFixture(u, { active: false })
+    const plain = newId()
+    await u.call('PUT', `/api/v1/exercises/${plain}`, exercise({}))
+    const item = (await u.call('POST', `/api/v1/days/${f.day}/items`, { exercise_id: plain })).json as { id: string }
+    const day2 = newId()
+    await u.call('PUT', `/api/v1/days/${day2}`, { plan_id: f.plan, name: 'Other' })
+    const before = (await u.call('GET', '/api/v1/export')).json as ExportData
+    const cases: [string, string, unknown, string][] = [
+      ['PATCH', `/api/v1/items/${item.id}`, { angle: 'incline' }, 'angle'],
+      ['PUT', `/api/v1/days/${day2}/supersets/${newId()}`, { item_ids: [f.item, f.item2] }, 'item_ids'],
+      ['PUT', `/api/v1/days/${f.day}/supersets/${newId()}`, { item_ids: [f.item, f.item] }, 'item_ids'],
+    ]
+    for (const [method, path, payload, issuePath] of cases) {
+      const res = await u.call(method, path, payload)
+      expect(res.status, `${method} ${path} ${res.text}`).toBe(400)
+      const j = res.json as { error: string; issues: { path: string }[] }
+      expect(j.error).toBe('invalid')
+      expect(j.issues.map((i) => i.path)).toContain(issuePath)
+    }
+    const after = (await u.call('GET', '/api/v1/export')).json as ExportData
+    expect(after.plan_items).toEqual(before.plan_items)
   })
 
   it('does not echo submitted values back', async () => {

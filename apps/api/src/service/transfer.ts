@@ -1,5 +1,5 @@
 import { asc, eq } from 'drizzle-orm'
-import { AlreadyHasDataError, ImportInvalidError, ProfileNotFoundError, exportDataSchema } from '@workout/shared'
+import { AlreadyHasDataError, ImportInvalidError, LIMITS, ProfileNotFoundError, exportDataSchema } from '@workout/shared'
 import type { ExportData } from '@workout/shared'
 import {
   exercise,
@@ -104,6 +104,20 @@ function checkIntegrity(d: ExportData): void {
     need('plan_items', r.plan_day_id, dayIds)
     need('plan_items', r.exercise_id, exerciseIds)
   }
+  // Supersets: 2-3 live members, all in one day; deleted items never carry a group.
+  const groups = new Map<string, { days: Set<string>; count: number }>()
+  for (const r of d.plan_items) {
+    if (r.superset_group === null) continue
+    if (r.deleted_at !== null) bad('plan_items: a deleted item is in a superset')
+    const g = groups.get(r.superset_group) ?? { days: new Set<string>(), count: 0 }
+    g.days.add(r.plan_day_id)
+    g.count++
+    groups.set(r.superset_group, g)
+  }
+  for (const g of groups.values()) {
+    if (g.days.size !== 1) bad('plan_items: a superset spans days')
+    if (g.count < LIMITS.supersetMin || g.count > LIMITS.supersetMax) bad('plan_items: a superset has the wrong size')
+  }
   for (const r of d.progression_rules) need('progression_rules', r.plan_item_id, itemIds)
   for (const r of d.item_states) need('item_states', r.plan_item_id, itemIds)
   for (const r of d.set_logs) {
@@ -140,7 +154,7 @@ function checkIntegrity(d: ExportData): void {
     ...d.plan_items.flatMap((i) => [i.position, i.sets, i.reps, i.target_reps]),
     ...d.progression_rules.flatMap((r) => [r.fail_streak_limit, r.rep_ceiling]),
     ...d.item_states.map((s) => s.fail_streak),
-    ...d.set_logs.flatMap((l) => [l.set_no, l.position, l.target_reps, l.actual_reps]),
+    ...d.set_logs.flatMap((l) => [l.set_no, l.position, l.target_reps, l.actual_reps, l.seq]),
   ]
   for (const n of ints) if (n !== null && Math.abs(n) > MAX_INT) bad('a number is out of range')
 }
@@ -199,6 +213,8 @@ export async function importAll(db: Db, userId: string, raw: ExportData): Promis
             defaultSets: r.default_sets,
             defaultReps: r.default_reps,
             defaultWeight: dec(r.default_weight),
+            supportsAngle: r.supports_angle,
+            defaultRule: r.default_rule,
             ...sync(r),
           })),
         ),
@@ -209,7 +225,7 @@ export async function importAll(db: Db, userId: string, raw: ExportData): Promis
       await insertChunked(d.plan_days, (c) =>
         tx
           .insert(planDay)
-          .values(c.map((r) => ({ id: r.id, userId, planId: r.plan_id, name: r.name, position: r.position, ...sync(r) }))),
+          .values(c.map((r) => ({ id: r.id, userId, planId: r.plan_id, name: r.name, position: r.position, color: r.color, ...sync(r) }))),
       )
       await insertChunked(d.plan_items, (c) =>
         tx.insert(planItem).values(
@@ -224,6 +240,10 @@ export async function importAll(db: Db, userId: string, raw: ExportData): Promis
             weight: r.weight === null ? null : dec(r.weight),
             targetReps: r.target_reps,
             targetWeight: r.target_weight === null ? null : dec(r.target_weight),
+            angle: r.angle,
+            amrapLast: r.amrap_last,
+            supersetGroup: r.superset_group,
+            inheritRule: r.inherit_rule,
             ...sync(r),
           })),
         ),
@@ -279,6 +299,11 @@ export async function importAll(db: Db, userId: string, raw: ExportData): Promis
             weight: dec(r.weight),
             done: r.done,
             note: r.note,
+            angle: r.angle,
+            amrap: r.amrap,
+            seq: r.seq,
+            supersetGroup: r.superset_group,
+            supersetLabel: r.superset_label,
             ...sync(r),
           })),
         ),

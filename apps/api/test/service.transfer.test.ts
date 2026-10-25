@@ -39,6 +39,9 @@ async function populated() {
   const i1 = await u.s.addPlanItem(day.id, bench!.id)
   const i2 = await u.s.addPlanItem(day.id, squat!.id)
   await u.s.updatePlanItem(i1.id, { sets: 1 })
+  // Item overrides, so the export has rule rows (new items inherit and have none).
+  await u.s.setRule(i1.id, { success_action: 'add_weight', success_amount: 5, fail_streak_limit: 3, deload_pct: 10, rep_ceiling: null })
+  await u.s.setRule(i2.id, { success_action: 'add_weight', success_amount: 5, fail_streak_limit: 3, deload_pct: 10, rep_ceiling: null })
   const first = await u.s.startSession(day.id)
   for (const e of first.exercises) for (const set of e.sets) await u.s.updateSet(set.id, { done: true })
   await u.s.finishSession(first.id)
@@ -264,5 +267,60 @@ describe('session isolation between users', () => {
     const after = await a.s.exportAll()
     expect({ ...after, exported_at: '' }).toEqual({ ...before, exported_at: '' })
     expect((await b.s.exportAll()).workout_sessions).toEqual([])
+  })
+})
+
+describe('imports written before day colours, angle, AMRAP, supersets and layered rules', () => {
+  const NEW_FIELDS: Record<string, string[]> = {
+    plan_days: ['color'],
+    exercises: ['supports_angle', 'default_rule'],
+    plan_items: ['angle', 'amrap_last', 'superset_group', 'inherit_rule'],
+    set_logs: ['angle', 'amrap', 'seq', 'superset_group', 'superset_label'],
+  }
+  const strip = (data: ExportData): unknown => {
+    const out: Record<string, unknown> = { ...data }
+    for (const [table, keys] of Object.entries(NEW_FIELDS)) {
+      out[table] = (data[table as keyof ExportData] as Record<string, unknown>[]).map((row) =>
+        Object.fromEntries(Object.entries(row).filter(([k]) => !keys.includes(k))),
+      )
+    }
+    return out
+  }
+
+  it('still imports, with defaults that keep the old meaning (no rule row = no progression)', async () => {
+    const src = await populated()
+    // As the previous release stored them: every item had its own rule row unless the user chose
+    // "no progression", which deleted it.
+    await src.s.setRule(src.i1.id, { success_action: 'add_weight', success_amount: 10, fail_streak_limit: 3, deload_pct: 10, rep_ceiling: null })
+    await src.s.setRule(src.i2.id, null)
+    const old = strip(await src.s.exportAll()) as ExportData
+    expect(Object.keys(old.plan_items[0]!)).not.toContain('inherit_rule')
+    const dst = await makeUser(false)
+    await dst.s.importAll(old)
+    const tree = await dst.s.getPlan(src.plan.id)
+    expect(tree?.days[0]?.color).toBeNull()
+    expect(tree?.days[0]?.items.map((i) => [i.ruleSource, i.rule?.success_amount ?? null, i.inherit_rule, i.superset_group])).toEqual([
+      ['item', 10, false, null],
+      ['item', null, false, null],
+    ])
+    const logs = (await dst.s.exportAll()).set_logs
+    expect(logs.every((l) => l.seq === null && l.amrap === false && l.superset_label === null)).toBe(true)
+  })
+
+  it('rejects a file whose superset spans days or has one live member', async () => {
+    const src = await populated()
+    const data = await src.s.exportAll()
+    const g = newId()
+    const spread = structuredClone(data)
+    spread.plan_items[0]!.superset_group = g
+    const lonely = await makeUser(false)
+    await expect(lonely.s.importAll(spread)).rejects.toBeInstanceOf(ImportInvalidError)
+    const day2 = { ...spread.plan_days[0]!, id: newId(), position: 1 }
+    const across = structuredClone(spread)
+    across.plan_days.push(day2)
+    across.plan_items[1]!.superset_group = g
+    across.plan_items[1]!.plan_day_id = day2.id
+    const other = await makeUser(false)
+    await expect(other.s.importAll(across)).rejects.toBeInstanceOf(ImportInvalidError)
   })
 })

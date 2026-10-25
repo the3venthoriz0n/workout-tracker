@@ -17,6 +17,9 @@ export const LIMITS = {
   reps: 1000,
   weight: 100_000,
   failStreak: 1000,
+  supersetMin: 2,
+  supersetMax: 3,
+  supersetLabel: 8,
 } as const
 
 /** Client-generated resource ids (and path params) are UUIDs. */
@@ -43,6 +46,20 @@ const owned = { user_id: userId, ...base }
 export const unitsSchema = z.enum(['lb', 'kg'])
 export const planTierSchema = z.enum(['free', 'pro'])
 export const successActionSchema = z.enum(['add_weight', 'add_reps'])
+
+/** Named plan-day colours; null on a day means the UI derives one from the day's position. */
+export const DAY_COLORS = ['blue', 'red', 'green', 'amber', 'violet', 'teal', 'pink', 'slate'] as const
+export const dayColorSchema = z.enum(DAY_COLORS)
+export type DayColor = z.infer<typeof dayColorSchema>
+
+/** Bench angle of a plan item; null means not applicable. */
+export const ANGLES = ['flat', 'incline', 'decline'] as const
+export const angleSchema = z.enum(ANGLES)
+export type Angle = z.infer<typeof angleSchema>
+
+/** Where an item's effective progression rule comes from (spec §6 rule layering). */
+export const ruleSourceSchema = z.enum(['item', 'exercise', 'profile', 'builtin'])
+export type RuleSource = z.infer<typeof ruleSourceSchema>
 
 const ruleFields = {
   success_action: successActionSchema,
@@ -89,10 +106,18 @@ export const exerciseInputSchema = z.object({
   default_sets: sets,
   default_reps: reps,
   default_weight: weight,
+  // Optional on input so a save that does not mention it keeps the stored value (false on create).
+  supports_angle: z.boolean().optional(),
 })
 export type ExerciseInput = z.infer<typeof exerciseInputSchema>
 
-export const exerciseSchema = exerciseInputSchema.required({ id: true }).extend(owned)
+// New fields default on parse, so rows and exports written before them still load.
+export const exerciseSchema = exerciseInputSchema.required({ id: true }).extend({
+  supports_angle: z.boolean().default(false),
+  // Default progression rule for this exercise's items (between the item override and the profile's).
+  default_rule: ruleInputSchema.nullable().default(null),
+  ...owned,
+})
 export type Exercise = z.infer<typeof exerciseSchema>
 
 export const planSchema = z.object({
@@ -108,6 +133,7 @@ export const planDaySchema = z.object({
   plan_id: id,
   name,
   position: z.number().int().min(0).max(1_000_000),
+  color: dayColorSchema.nullable().default(null),
   ...base,
 })
 export type PlanDay = z.infer<typeof planDaySchema>
@@ -122,6 +148,14 @@ export const planItemSchema = z.object({
   weight: weight.nullable(),
   target_reps: reps.nullable(),
   target_weight: weight.nullable(),
+  angle: angleSchema.nullable().default(null),
+  // The item's last set is "as many reps as possible"; target_reps stays the minimum.
+  amrap_last: z.boolean().default(false),
+  // Shared by the 2-3 items of one superset in the same day.
+  superset_group: id.nullable().default(null),
+  // true: no rule row means "inherit" (exercise, then profile, then built-in default).
+  // false (rows from before layering): no rule row means "no progression". A rule row always wins.
+  inherit_rule: z.boolean().default(false),
   ...base,
 })
 export type PlanItem = z.infer<typeof planItemSchema>
@@ -170,6 +204,13 @@ export const setLogSchema = z.object({
   weight,
   done: z.boolean(),
   note: z.string().max(LIMITS.notes),
+  // Snapshots taken at session start (null/false on rows from before they existed).
+  angle: angleSchema.nullable().default(null),
+  amrap: z.boolean().default(false),
+  // Display order within the session; null falls back to (position, set_no).
+  seq: z.number().int().min(0).max(1_000_000).nullable().default(null),
+  superset_group: id.nullable().default(null),
+  superset_label: z.string().min(1).max(LIMITS.supersetLabel).nullable().default(null),
   ...base,
 })
 export type SetLog = z.infer<typeof setLogSchema>

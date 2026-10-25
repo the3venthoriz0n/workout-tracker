@@ -109,3 +109,33 @@ describe('ApiRepo requests', () => {
     expect(JSON.parse(calls[1]!.init.body as string)).toEqual({ name: 'B' })
   })
 })
+
+describe('ApiRepo: day colours, angle, AMRAP, supersets and layered rules', () => {
+  it('maps a 400 invalid to ValidationError, which is still an ApiError(400) for the offline queue', async () => {
+    const { ValidationError } = await import('../src/repo.js')
+    const err = await stub(400, { error: 'invalid', issues: [{ path: 'angle', message: 'x' }] })
+      .repo.updatePlanItem('i', { angle: 'incline' })
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ValidationError)
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err).toMatchObject({ name: 'ValidationError', status: 400, code: 'invalid' })
+  })
+  it('calls the new routes', async () => {
+    const s = stub(200, {})
+    await s.repo.setSuperset('d1', 'g1', ['i1', 'i2'])
+    await s.repo.setSuperset('d1', 'g1', null)
+    await s.repo.clearRule('i1')
+    await s.repo.setExerciseRule('e1', null)
+    await s.repo.listProgressionByExercise()
+    expect(s.calls.map((c) => `${c.init.method} ${c.url}`)).toEqual([
+      'PUT /api/v1/days/d1/supersets/g1',
+      'PUT /api/v1/days/d1/supersets/g1',
+      'DELETE /api/v1/items/i1/rule',
+      'PUT /api/v1/exercises/e1/rule',
+      'GET /api/v1/progression/exercises',
+    ])
+    expect(JSON.parse(s.calls[0]!.init.body as string)).toEqual({ item_ids: ['i1', 'i2'] })
+    expect(JSON.parse(s.calls[1]!.init.body as string)).toEqual({ item_ids: null })
+    expect(JSON.parse(s.calls[3]!.init.body as string)).toEqual({ rule: null })
+  })
+})

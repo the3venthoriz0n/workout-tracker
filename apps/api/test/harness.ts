@@ -12,11 +12,11 @@ const migrationsFolder = fileURLToPath(new URL('../drizzle', import.meta.url))
 // drizzle-kit writes foreign keys as REFERENCES "public"."table", which would point out of the
 // test schema. The committed SQL is applied here with that qualifier removed so every
 // reference resolves through search_path. Production applies the SQL unchanged.
-function migrationStatements(): string[] {
+function migrationStatements(from = 0, to?: number): string[] {
   const journal = JSON.parse(readFileSync(`${migrationsFolder}/meta/_journal.json`, 'utf8')) as {
     entries: { tag: string }[]
   }
-  return journal.entries.flatMap(({ tag }) =>
+  return journal.entries.slice(from, to).flatMap(({ tag }) =>
     readFileSync(`${migrationsFolder}/${tag}.sql`, 'utf8')
       .replaceAll('"public".', '')
       .split('--> statement-breakpoint')
@@ -25,9 +25,18 @@ function migrationStatements(): string[] {
   )
 }
 
-export type TestDb = { db: Db; schemaName: string; cleanup(): Promise<void> }
+export type TestDb = {
+  db: Db
+  schemaName: string
+  cleanup(): Promise<void>
+  /** Applies the journal entries after the first `upTo` (only with `withTestDb({ upTo })`). */
+  migrateRest(): Promise<void>
+  /** Raw SQL in the test schema, for writing rows the way an older release did. */
+  sql(query: string): Promise<unknown>
+}
 
-export async function withTestDb(): Promise<TestDb> {
+/** `upTo`: apply only the first N migrations (to test upgrading data written by an older release). */
+export async function withTestDb(opts: { upTo?: number } = {}): Promise<TestDb> {
   const url = process.env.DATABASE_URL_TEST
   if (!url) {
     throw new Error(
@@ -53,7 +62,7 @@ export async function withTestDb(): Promise<TestDb> {
   const db: Db = drizzle(client, { schema })
   try {
     await client.begin(async (tx) => {
-      for (const statement of migrationStatements()) await tx.unsafe(statement)
+      for (const statement of migrationStatements(0, opts.upTo)) await tx.unsafe(statement)
     })
   } catch (err) {
     await client.unsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`).catch(() => {})
@@ -64,6 +73,13 @@ export async function withTestDb(): Promise<TestDb> {
   return {
     db,
     schemaName,
+    async migrateRest() {
+      if (opts.upTo === undefined) return
+      await client.begin(async (tx) => {
+        for (const statement of migrationStatements(opts.upTo)) await tx.unsafe(statement)
+      })
+    },
+    sql: (query: string) => client.unsafe(query),
     async cleanup() {
       try {
         await client.unsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`)

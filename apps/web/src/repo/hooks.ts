@@ -12,6 +12,7 @@ export const keys = {
   sessions: ['sessions'] as const,
   session: (id: string) => ['session', id] as const,
   progression: ['progression'] as const,
+  progressionByExercise: ['progression', 'by-exercise'] as const,
   exerciseUsage: (id: string) => ['exercise-usage', id] as const,
 }
 
@@ -65,6 +66,11 @@ export const useProgression = () => {
   const repo = useRepo()
   return useQuery({ queryKey: keys.progression, queryFn: () => repo.listProgression() })
 }
+/** Every live exercise once, with its effective default rule, overriding items and inheriting items. */
+export const useProgressionByExercise = () => {
+  const repo = useRepo()
+  return useQuery({ queryKey: keys.progressionByExercise, queryFn: () => repo.listProgressionByExercise() })
+}
 
 // Mutations touch many cached views (plan trees, effective targets, sessions), so each
 // one invalidates everything: correctness over cleverness. Multi-argument methods take
@@ -96,9 +102,7 @@ export const useSavePlan = () =>
   useRepoMutation((r, input: { id?: string; name: string }) => r.savePlan(input))
 export const useDeletePlan = () => useRepoMutation((r, id: string) => r.deletePlan(id))
 export const useSavePlanDay = () =>
-  useRepoMutation((r, input: { id?: string; plan_id: string; name: string }) =>
-    r.savePlanDay(input),
-  )
+  useRepoMutation((r, input: Parameters<Repo['savePlanDay']>[0]) => r.savePlanDay(input))
 export const useDeletePlanDay = () => useRepoMutation((r, id: string) => r.deletePlanDay(id))
 export const useAddPlanItem = () =>
   useRepoMutation((r, v: { planDayId: string; exerciseId: string }) =>
@@ -110,6 +114,15 @@ export const useDeletePlanItem = () => useRepoMutation((r, id: string) => r.dele
 export const useSetRule = () =>
   useRepoMutation((r, v: { planItemId: string; rule: RuleInputT }) =>
     r.setRule(v.planItemId, v.rule),
+  )
+/** Back to the inherited rule (exercise, profile or built-in default). */
+export const useClearRule = () => useRepoMutation((r, planItemId: string) => r.clearRule(planItemId))
+export const useSetExerciseRule = () =>
+  useRepoMutation((r, v: { exerciseId: string; rule: RuleInputT }) => r.setExerciseRule(v.exerciseId, v.rule))
+/** groupId: a client newId() for a new group; itemIds null dissolves the group. */
+export const useSetSuperset = () =>
+  useRepoMutation((r, v: { planDayId: string; groupId: string; itemIds: string[] | null }) =>
+    r.setSuperset(v.planDayId, v.groupId, v.itemIds),
   )
 export const useMove = () =>
   useRepoMutation((r, v: { kind: 'day' | 'item'; id: string; direction: -1 | 1 }) =>
