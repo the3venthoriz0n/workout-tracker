@@ -354,6 +354,8 @@ test('finishing while offline says to reconnect and keeps the workout', async ()
   renderApp(repo)
   const user = userEvent.setup()
   await user.click(await screen.findByRole('button', { name: /^Set 1:/ }))
+  // Wait for the done set to land, or Finish asks "finish anyway?" first
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Set 1:/ }).getAttribute('aria-pressed')).toBe('true'))
   await user.click(screen.getByRole('button', { name: 'Finish workout' }))
   await waitFor(() => expect(err).toHaveBeenCalledWith(expect.stringMatching(/^Reconnect to finish/)))
   expect(screen.getByRole('button', { name: 'Finish workout' })).toBeTruthy()
