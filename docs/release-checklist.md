@@ -57,3 +57,7 @@ A rollback does not undo migrations. Restore from a pre-deploy dump only if a mi
 - `deploy.sh` takes a `pg_dump -Fc` into `/opt/workout-tracker/backups/` before each migration (newest 5 kept). That lives on the same disk as the database, so it protects against bad migrations only.
 - **TODO before real users (accounts are live in M2):** nightly `pg_dump` to DigitalOcean Spaces (or another off-box location) with a restore test.
 - **Back up `/opt/workout-tracker/.env` off the server** (password manager or encrypted storage). Losing the Droplet loses `BETTER_AUTH_SECRET`, which invalidates all sessions, and the database password.
+
+## Later
+
+- [ ] **Decide whether `TRUSTED_ORIGINS` should be required** in `deploy/compose.yaml` (currently optional, `${TRUSTED_ORIGINS:-}`, because `deploy.sh` does not generate it). Revisit when the Capacitor mobile builds ship and need extra origins.
