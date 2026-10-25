@@ -14,8 +14,8 @@ function deps(over: { getProfile?: () => Promise<unknown>; importAll?: () => Pro
   return {
     calls,
     auth: {
-      signUp: vi.fn(log('signUp', over.signUp ?? (async () => ({ userId: 'u', email: 'a@b.co' })))),
-      signIn: vi.fn(log('signIn', over.signIn ?? (async () => ({ userId: 'u', email: 'a@b.co' })))),
+      signUp: vi.fn(log('signUp', over.signUp ?? (async () => ({ userId: 'u', email: 'a@example.com' })))),
+      signIn: vi.fn(log('signIn', over.signIn ?? (async () => ({ userId: 'u', email: 'a@example.com' })))),
       signOut: vi.fn(log('signOut', over.signOut ?? (async () => {}))),
       session: vi.fn(async () => null),
     },
@@ -29,7 +29,7 @@ function deps(over: { getProfile?: () => Promise<unknown>; importAll?: () => Pro
 
 test('sign-up uploads once and clears local data only after the server confirms', async () => {
   const d = deps()
-  expect(await signUpFlow(d, 'a@b.co', 'longenough1')).toBe('signed-in')
+  expect(await signUpFlow(d, 'a@example.com', 'longenough1')).toBe('signed-in')
   expect(d.calls).toEqual(['signUp', 'export', 'import', 'reset'])
   expect(d.api.importAll).toHaveBeenCalledWith(DATA)
 })
@@ -37,7 +37,7 @@ test('sign-up uploads once and clears local data only after the server confirms'
 test('sign-up upload failure keeps local data and reports upload-failed; retry succeeds', async () => {
   let fail = true
   const d = deps({ importAll: async () => { if (fail) throw new OfflineError() } })
-  expect(await signUpFlow(d, 'a@b.co', 'longenough1')).toBe('upload-failed')
+  expect(await signUpFlow(d, 'a@example.com', 'longenough1')).toBe('upload-failed')
   expect(d.local.reset).not.toHaveBeenCalled()
   fail = false
   expect(await retryUpload(d)).toBe('signed-in')
@@ -46,20 +46,20 @@ test('sign-up upload failure keeps local data and reports upload-failed; retry s
 
 test('sign-up account creation failure throws and touches nothing', async () => {
   const d = deps({ signUp: async () => { throw new AuthError('email_taken') } })
-  await expect(signUpFlow(d, 'a@b.co', 'longenough1')).rejects.toBeInstanceOf(AuthError)
+  await expect(signUpFlow(d, 'a@example.com', 'longenough1')).rejects.toBeInstanceOf(AuthError)
   expect(d.local.exportAll).not.toHaveBeenCalled()
   expect(d.local.reset).not.toHaveBeenCalled()
 })
 
 test('sign-in to an empty new account imports the guest data like sign-up', async () => {
   const d = deps()
-  expect(await signInFlow(d, 'a@b.co', 'longenough1')).toBe('signed-in')
+  expect(await signInFlow(d, 'a@example.com', 'longenough1')).toBe('signed-in')
   expect(d.calls).toEqual(['signIn', 'getProfile', 'export', 'import', 'reset'])
 })
 
 test('sign-in to an account with data asks for confirmation and discards nothing yet', async () => {
   const d = deps({ getProfile: async () => ({ user_id: 'u' }) })
-  expect(await signInFlow(d, 'a@b.co', 'longenough1')).toBe('confirm-discard')
+  expect(await signInFlow(d, 'a@example.com', 'longenough1')).toBe('confirm-discard')
   expect(d.local.reset).not.toHaveBeenCalled()
   expect(d.api.importAll).not.toHaveBeenCalled()
 })
@@ -76,7 +76,7 @@ test('confirming discards guest data; cancelling signs out and keeps it', async 
 
 test('fail closed: if the data-exists check fails nothing is discarded or uploaded', async () => {
   const d = deps({ getProfile: async () => { throw new OfflineError() } })
-  await expect(signInFlow(d, 'a@b.co', 'longenough1')).rejects.toMatchObject({ kind: 'check_failed' })
+  await expect(signInFlow(d, 'a@example.com', 'longenough1')).rejects.toMatchObject({ kind: 'check_failed' })
   expect(d.local.reset).not.toHaveBeenCalled()
   expect(d.api.importAll).not.toHaveBeenCalled()
   expect(d.auth.signOut).toHaveBeenCalled()

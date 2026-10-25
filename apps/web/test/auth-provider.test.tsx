@@ -23,8 +23,8 @@ function makeApi(over: Record<string, unknown> = {}) {
 }
 function makeAuth(session: AuthClient['session'], over: Partial<AuthClient> = {}): AuthClient {
   return {
-    signUp: vi.fn(async () => ({ userId: 'u', email: 'a@b.co' })),
-    signIn: vi.fn(async () => ({ userId: 'u', email: 'a@b.co' })),
+    signUp: vi.fn(async () => ({ userId: 'u', email: 'a@example.com' })),
+    signIn: vi.fn(async () => ({ userId: 'u', email: 'a@example.com' })),
     signOut: vi.fn(async () => {}),
     session,
     ...over,
@@ -38,8 +38,8 @@ function Probe() {
   return (
     <div>
       <p data-testid="s">{`${a.status}|${repo.tag}|${a.pendingUpload}|${a.confirmingDiscard}|${a.error ?? ''}|${q.data ?? ''}`}</p>
-      <button onClick={() => void a.signUp('a@b.co', 'longenough1')}>up</button>
-      <button onClick={() => void a.signIn('a@b.co', 'longenough1')}>in</button>
+      <button onClick={() => void a.signUp('a@example.com', 'longenough1')}>up</button>
+      <button onClick={() => void a.signIn('a@example.com', 'longenough1')}>in</button>
       <button onClick={() => void a.signOut()}>out</button>
       <button onClick={() => void a.confirmDiscard()}>confirm</button>
       <button onClick={() => void a.cancelDiscard()}>cancel</button>
@@ -71,13 +71,13 @@ test('renders nothing (no guest flash) while the session is loading', async () =
 })
 
 test('an existing session with data starts on the API repo', async () => {
-  setup(makeAuth(async () => ({ userId: 'u', email: 'a@b.co' })))
+  setup(makeAuth(async () => ({ userId: 'u', email: 'a@example.com' })))
   await waitFor(() => expect(state()).toMatch(/^signed-in\|api/))
 })
 
 test('an existing session on an empty account keeps local data and offers upload retry', async () => {
   const api = makeApi({ getProfile: vi.fn(async () => { throw new ProfileNotFoundError() }) })
-  setup(makeAuth(async () => ({ userId: 'u', email: 'a@b.co' })), makeLocal(), api)
+  setup(makeAuth(async () => ({ userId: 'u', email: 'a@example.com' })), makeLocal(), api)
   await waitFor(() => expect(state()).toMatch(/^signed-in\|local\|true/))
 })
 
@@ -153,7 +153,7 @@ test('wrong credentials surface a typed error and stay guest', async () => {
 test('double submit only runs the flow once', async () => {
   const user = userEvent.setup()
   let release!: () => void
-  const signIn = vi.fn(() => new Promise<{ userId: string; email: string }>((r) => (release = () => r({ userId: 'u', email: 'a@b.co' }))))
+  const signIn = vi.fn(() => new Promise<{ userId: string; email: string }>((r) => (release = () => r({ userId: 'u', email: 'a@example.com' }))))
   setup(makeAuth(async () => null, { signIn }))
   await waitFor(() => expect(state()).toMatch(/^guest/))
   await user.click(screen.getByText('in'))
@@ -164,7 +164,7 @@ test('double submit only runs the flow once', async () => {
 
 test('sign-out returns to a fresh guest DB and clears the cache', async () => {
   const user = userEvent.setup()
-  const { qc, local } = setup(makeAuth(async () => ({ userId: 'u', email: 'a@b.co' })))
+  const { qc, local } = setup(makeAuth(async () => ({ userId: 'u', email: 'a@example.com' })))
   await waitFor(() => expect(state()).toMatch(/^signed-in\|api/))
   await user.click(screen.getByText('out'))
   await waitFor(() => expect(state()).toMatch(/^guest\|local\|false\|false\|\|local$/))
@@ -181,7 +181,7 @@ test('a 401 mid-use shows the signed-out prompt, never guest data', async () => 
   }
   render(
     <QueryClientProvider client={qc}>
-      <AuthProvider auth={makeAuth(async () => ({ userId: 'u', email: 'a@b.co' }))} local={makeLocal() as never} createApi={() => api as never}>
+      <AuthProvider auth={makeAuth(async () => ({ userId: 'u', email: 'a@example.com' }))} local={makeLocal() as never} createApi={() => api as never}>
         <Probe />
         <Failing />
       </AuthProvider>

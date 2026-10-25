@@ -15,7 +15,7 @@ runRepoContract(
       const headers: Record<string, string> = {
         ...(init.headers as Record<string, string> | undefined),
         cookie,
-        'x-test-client-ip': '10.9.9.9',
+        'x-test-client-ip': '203.0.113.9',
       }
       if (init.method && init.method !== 'GET') headers.origin = h.origin
       return h.app.request(url, { method: init.method, headers, body: init.body as string | undefined })

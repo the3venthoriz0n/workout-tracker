@@ -9,8 +9,8 @@ import { AccountCard } from '../src/components/account-card'
 
 function setup(opts: { session?: boolean; signIn?: AuthClient['signIn']; signUp?: AuthClient['signUp']; profile?: () => Promise<unknown>; importAll?: () => Promise<void>; signOut?: AuthClient['signOut'] } = {}) {
   const auth: AuthClient = {
-    signUp: opts.signUp ?? vi.fn(async () => ({ userId: 'u', email: 'a@b.co' })),
-    signIn: opts.signIn ?? vi.fn(async () => ({ userId: 'u', email: 'a@b.co' })),
+    signUp: opts.signUp ?? vi.fn(async () => ({ userId: 'u', email: 'a@example.com' })),
+    signIn: opts.signIn ?? vi.fn(async () => ({ userId: 'u', email: 'a@example.com' })),
     signOut: opts.signOut ?? vi.fn(async () => {}),
     session: async () => (opts.session ? { userId: 'u', email: 'me@example.test' } : null),
   }
@@ -44,7 +44,7 @@ test('guest state has labelled fields and 44px targets; validates before sending
   await user.click(submit)
   expect((await screen.findByRole('alert')).textContent).toMatch(/valid email/i)
   await user.clear(screen.getByLabelText('Email'))
-  await user.type(screen.getByLabelText('Email'), 'a@b.co')
+  await user.type(screen.getByLabelText('Email'), 'a@example.com')
   await user.clear(screen.getByLabelText('Password'))
   await user.type(screen.getByLabelText('Password'), 'short')
   await user.click(submit)
@@ -56,7 +56,7 @@ test('wrong credentials show a generic message', async () => {
   const user = userEvent.setup()
   setup({ signIn: vi.fn(async () => { throw new AuthError('invalid_credentials') }) })
   await screen.findByRole('button', { name: 'Sign in' })
-  await fill(user, 'a@b.co', 'longenough1')
+  await fill(user, 'a@example.com', 'longenough1')
   await user.click(screen.getByRole('button', { name: 'Sign in' }))
   expect((await screen.findByRole('alert')).textContent).toBe('Email or password is incorrect.')
 })
@@ -68,7 +68,7 @@ test.each([
   const user = userEvent.setup()
   setup({ signIn: vi.fn(async () => { throw new AuthError(kind as never) }) })
   await screen.findByRole('button', { name: 'Sign in' })
-  await fill(user, 'a@b.co', 'longenough1')
+  await fill(user, 'a@example.com', 'longenough1')
   await user.click(screen.getByRole('button', { name: 'Sign in' }))
   expect((await screen.findByRole('alert')).textContent).toMatch(re)
 })
@@ -79,7 +79,7 @@ test('sign-up mode, upload failure shows retry and keeps local data', async () =
   const { local } = setup({ profile: async () => { throw new ProfileNotFoundError() }, importAll })
   await user.click(await screen.findByRole('tab', { name: 'Sign up' }))
   expect(screen.getByLabelText('Password').getAttribute('autocomplete')).toBe('new-password')
-  await fill(user, 'a@b.co', 'longenough1')
+  await fill(user, 'a@example.com', 'longenough1')
   await user.click(screen.getByRole('button', { name: 'Create account' }))
   expect((await screen.findByRole('alert')).textContent).toMatch(/upload.*failed.*untouched|untouched/i)
   expect(local.reset).not.toHaveBeenCalled()
@@ -92,7 +92,7 @@ test('sign-in with existing data: confirm dialog offers export, cancel keeps gue
   const user = userEvent.setup()
   const { local } = setup()
   await screen.findByRole('button', { name: 'Sign in' })
-  await fill(user, 'a@b.co', 'longenough1')
+  await fill(user, 'a@example.com', 'longenough1')
   await user.click(screen.getByRole('button', { name: 'Sign in' }))
   const dialog = await screen.findByRole('alertdialog')
   expect(dialog.textContent).toMatch(/discard/i)
@@ -106,7 +106,7 @@ test('confirming discards and shows the signed-in state', async () => {
   const user = userEvent.setup()
   const { local } = setup()
   await screen.findByRole('button', { name: 'Sign in' })
-  await fill(user, 'a@b.co', 'longenough1')
+  await fill(user, 'a@example.com', 'longenough1')
   await user.click(screen.getByRole('button', { name: 'Sign in' }))
   await user.click(await screen.findByRole('button', { name: 'Discard guest data and continue' }))
   await waitFor(() => expect(screen.getByText(/signed in as/i)).toBeTruthy())
@@ -130,7 +130,7 @@ test('submit button is disabled while a request is in flight', async () => {
   const signIn = vi.fn(() => new Promise<never>(() => {}))
   setup({ signIn })
   await screen.findByRole('button', { name: 'Sign in' })
-  await fill(user, 'a@b.co', 'longenough1')
+  await fill(user, 'a@example.com', 'longenough1')
   await user.click(screen.getByRole('button', { name: 'Sign in' }))
   await waitFor(() => expect((screen.getByRole('button', { name: /signing in/i }) as HTMLButtonElement).disabled).toBe(true))
 })

@@ -53,6 +53,11 @@ test: setup
 
 typecheck: (pnpm "typecheck")
 
+# Fail if a tracked file holds personal info (IPs, tokens, real emails, home paths); its own tests run first
+public-check:
+    sh scripts/test/check-public-safe.test.sh
+    sh scripts/check-public-safe.sh
+
 # Generate a migration from the Drizzle schema
 db-generate: (pnpm "--filter @workout/api db:generate")
 

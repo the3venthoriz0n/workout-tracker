@@ -32,7 +32,7 @@ describe('csrfGuard', () => {
     ]) {
       const res = await h.request('/api/auth/sign-in/email', {
         method: 'POST',
-        body: { email: 'a@b.co', password: 'x' },
+        body: { email: 'a@example.com', password: 'x' },
         origin,
       })
       expect(res.status, origin).toBe(403)
@@ -65,7 +65,7 @@ describe('csrfGuard', () => {
       for (const path of ['/api/auth/sign-in/email', '/api/v1/x']) {
         const res = await h.request(path, {
           method: 'POST',
-          rawBody: JSON.stringify({ email: 'a@b.co', password: 'x' }),
+          rawBody: JSON.stringify({ email: 'a@example.com', password: 'x' }),
           contentType,
         })
         expect(res.status, `${contentType} ${path}`).toBe(415)

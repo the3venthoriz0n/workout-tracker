@@ -16,10 +16,10 @@ function makeLocal() {
 }
 function makeAuth(over: Partial<AuthClient> = {}): AuthClient {
   return {
-    signUp: vi.fn(async () => ({ userId: 'a', email: 'a@b.co' })),
-    signIn: vi.fn(async () => ({ userId: 'a', email: 'a@b.co' })),
+    signUp: vi.fn(async () => ({ userId: 'a', email: 'a@example.com' })),
+    signIn: vi.fn(async () => ({ userId: 'a', email: 'a@example.com' })),
     signOut: vi.fn(async () => {}),
-    session: async () => ({ userId: 'a', email: 'a@b.co' }),
+    session: async () => ({ userId: 'a', email: 'a@example.com' }),
     ...over,
   }
 }
@@ -30,7 +30,7 @@ function Probe() {
     <div>
       <p data-testid="s">{`${a.status}|${repo.tag}|up=${a.pendingUpload}|cd=${a.confirmingDiscard}|${a.error ?? ''}`}</p>
       <button onClick={() => void a.signOut()}>out</button>
-      <button onClick={() => void a.signIn('a@b.co', 'longenough1')}>in</button>
+      <button onClick={() => void a.signIn('a@example.com', 'longenough1')}>in</button>
       <button onClick={() => void a.cancelDiscard()}>cancel</button>
       <button onClick={() => void a.confirmDiscard()}>confirm</button>
     </div>
@@ -51,7 +51,7 @@ function setup(auth: AuthClient, api: Record<string, unknown> = {}) {
 const state = () => screen.getByTestId('s').textContent
 
 test('reloading mid-prompt re-shows the discard prompt, and signing out without confirming does not wipe guest data', async () => {
-  localStorage.setItem(HINT, JSON.stringify({ id: 'a', email: 'a@b.co', phase: 'confirm-discard' }))
+  localStorage.setItem(HINT, JSON.stringify({ id: 'a', email: 'a@example.com', phase: 'confirm-discard' }))
   const auth = makeAuth()
   const local = setup(auth)
   await screen.findByTestId('s')
@@ -63,7 +63,7 @@ test('reloading mid-prompt re-shows the discard prompt, and signing out without 
 })
 
 test('reloading with an unfinished upload re-shows the retry state and keeps guest data', async () => {
-  localStorage.setItem(HINT, JSON.stringify({ id: 'a', email: 'a@b.co', phase: 'pending-upload' }))
+  localStorage.setItem(HINT, JSON.stringify({ id: 'a', email: 'a@example.com', phase: 'pending-upload' }))
   const local = setup(makeAuth())
   await screen.findByTestId('s')
   expect(state()).toMatch(/^signed-in\|local\|up=true/)
@@ -99,7 +99,7 @@ test('cancel only returns to guest once the server sign-out succeeded', async ()
 })
 
 test('offline cold start with an unfinished prompt does not open the account view', async () => {
-  localStorage.setItem(HINT, JSON.stringify({ id: 'a', email: 'a@b.co', phase: 'confirm-discard' }))
+  localStorage.setItem(HINT, JSON.stringify({ id: 'a', email: 'a@example.com', phase: 'confirm-discard' }))
   setup(makeAuth({ session: async () => { throw new AuthError('offline') } }))
   expect(await screen.findByRole('button', { name: 'Retry' })).toBeTruthy()
 })
@@ -107,7 +107,7 @@ test('offline cold start with an unfinished prompt does not open the account vie
 test('flow: a failed sign-out cleanup after check_failed keeps the retry state instead of pretending to be guest', async () => {
   const d = {
     auth: {
-      signIn: vi.fn(async () => ({ userId: 'a', email: 'a@b.co' })),
+      signIn: vi.fn(async () => ({ userId: 'a', email: 'a@example.com' })),
       signOut: vi.fn(async () => { throw new AuthError('offline') }),
       signUp: vi.fn(),
       session: vi.fn(),
@@ -115,7 +115,7 @@ test('flow: a failed sign-out cleanup after check_failed keeps the retry state i
     local: { exportAll: vi.fn(), reset: vi.fn() },
     api: { getProfile: vi.fn(async () => { throw new Error('boom') }), importAll: vi.fn() },
   }
-  expect(await signInFlow(d as never, 'a@b.co', 'longenough1')).toBe('upload-failed')
+  expect(await signInFlow(d as never, 'a@example.com', 'longenough1')).toBe('upload-failed')
   expect(d.local.reset).not.toHaveBeenCalled()
   void ProfileNotFoundError
   void AlreadyHasDataError
@@ -134,10 +134,10 @@ test("the previous account's repo is paused before another sign-in is attempted"
     clear: async () => {}, dispose: () => {}, hasOfflineData: async () => true,
     pause: () => order.push('pause'), subscribe: () => () => {},
   }
-  localStorage.setItem(HINT, JSON.stringify({ id: 'a', email: 'a@b.co' }))
+  localStorage.setItem(HINT, JSON.stringify({ id: 'a', email: 'a@example.com' }))
   const auth = makeAuth({
     session: async () => { throw new AuthError('offline') },
-    signIn: vi.fn(async () => { order.push('signIn'); return { userId: 'b', email: 'b@b.co' } }),
+    signIn: vi.fn(async () => { order.push('signIn'); return { userId: 'b', email: 'b@example.com' } }),
   })
   const local = makeLocal()
   render(

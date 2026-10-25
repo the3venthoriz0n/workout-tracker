@@ -60,7 +60,7 @@ describe('env.ts optional settings', () => {
       process.env.SIGNUP_ALLOWLIST = ' Alice@Example.com, ,bob@example.org,'
       expect((await import('../src/env.js')).env.SIGNUP_ALLOWLIST).toEqual(['alice@example.com', 'bob@example.org'])
     })
-    for (const bad of ['not-an-email', 'a@b.co,oops', '@example.com', 'a b@example.com']) {
+    for (const bad of ['not-an-email', 'a@example.com,oops', '@example.com', 'a b@example.com']) {
       it(`rejects ${JSON.stringify(bad)} without echoing it`, async () => {
         process.env.SIGNUP_ALLOWLIST = bad
         const out = await rejects('SIGNUP_ALLOWLIST')

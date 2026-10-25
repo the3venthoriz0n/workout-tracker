@@ -63,7 +63,7 @@ describe('sign up', () => {
 
   it('rejects an invalid email', async () => {
     h = await setupApp()
-    for (const email of ['not-an-email', 'a@', '@b.co', '', 'a b@c.co']) {
+    for (const email of ['not-an-email', 'a@', '@b.co', '', 'a b@example.com']) {
       const res = await h.signUp(email)
       expect(res.status, email).toBeGreaterThanOrEqual(400)
       expect(res.status, email).toBeLessThan(500)

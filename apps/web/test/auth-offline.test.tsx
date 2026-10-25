@@ -40,8 +40,8 @@ function makeOfflineApi(id: string, o: { pending?: number; hasData?: boolean } =
 }
 function makeAuth(session: AuthClient['session'], over: Partial<AuthClient> = {}): AuthClient {
   return {
-    signUp: vi.fn(async () => ({ userId: 'a', email: 'a@b.co' })),
-    signIn: vi.fn(async () => ({ userId: 'a', email: 'a@b.co' })),
+    signUp: vi.fn(async () => ({ userId: 'a', email: 'a@example.com' })),
+    signIn: vi.fn(async () => ({ userId: 'a', email: 'a@example.com' })),
     signOut: vi.fn(async () => {}),
     session,
     ...over,
@@ -55,7 +55,7 @@ function Probe() {
       <p data-testid="s">{`${a.status}|${repo.tag}|${a.pendingChanges}|${a.error ?? ''}`}</p>
       <button onClick={() => void a.signOut()}>out</button>
       <button onClick={() => void a.signOut({ discardPending: true })}>out-force</button>
-      <button onClick={() => void a.signIn('a@b.co', 'longenough1')}>in</button>
+      <button onClick={() => void a.signIn('a@example.com', 'longenough1')}>in</button>
     </div>
   )
 }
@@ -73,7 +73,7 @@ function setup(auth: AuthClient, createApi: (id: string) => unknown, child: Reac
 const state = () => screen.getByTestId('s').textContent
 
 test('offline at startup opens the mirrored view for the hinted account instead of a Retry prompt', async () => {
-  localStorage.setItem('wt-account-hint', JSON.stringify({ id: 'a', email: 'a@b.co' }))
+  localStorage.setItem('wt-account-hint', JSON.stringify({ id: 'a', email: 'a@example.com' }))
   const api = makeOfflineApi('a', { hasData: true })
   const create = vi.fn(() => api)
   setup(makeAuth(async () => { throw new AuthError('offline') }), create)
@@ -83,7 +83,7 @@ test('offline at startup opens the mirrored view for the hinted account instead 
 })
 
 test('offline at startup with nothing mirrored still shows Retry, never guest', async () => {
-  localStorage.setItem('wt-account-hint', JSON.stringify({ id: 'a', email: 'a@b.co' }))
+  localStorage.setItem('wt-account-hint', JSON.stringify({ id: 'a', email: 'a@example.com' }))
   setup(makeAuth(async () => { throw new AuthError('offline') }), () => makeOfflineApi('a', { hasData: false }))
   expect(await screen.findByRole('button', { name: 'Retry' })).toBeTruthy()
   expect(screen.queryByTestId('s')).toBeNull()
@@ -91,7 +91,7 @@ test('offline at startup with nothing mirrored still shows Retry, never guest', 
 
 test('a replay that hits 401 sends the app to the signed-out prompt', async () => {
   const api = makeOfflineApi('a', { pending: 1 })
-  setup(makeAuth(async () => ({ userId: 'a', email: 'a@b.co' })), () => api)
+  setup(makeAuth(async () => ({ userId: 'a', email: 'a@example.com' })), () => api)
   await screen.findByTestId('s')
   act(() => api.emit({ paused: true }))
   expect(await screen.findByText(/signed out/i)).toBeTruthy()
@@ -99,7 +99,7 @@ test('a replay that hits 401 sends the app to the signed-out prompt', async () =
 
 test('signing out with unsent edits needs an explicit discard; then the queue is cleared', async () => {
   const api = makeOfflineApi('a', { pending: 2 })
-  const auth = makeAuth(async () => ({ userId: 'a', email: 'a@b.co' }))
+  const auth = makeAuth(async () => ({ userId: 'a', email: 'a@example.com' }))
   const local = setup(auth, () => api)
   const user = userEvent.setup()
   await screen.findByTestId('s')
@@ -117,7 +117,7 @@ test('signing out with unsent edits needs an explicit discard; then the queue is
 
 test('a failed server sign-out leaves the queue alone', async () => {
   const api = makeOfflineApi('a', { pending: 2 })
-  const auth = makeAuth(async () => ({ userId: 'a', email: 'a@b.co' }), { signOut: vi.fn(async () => { throw new AuthError('offline') }) })
+  const auth = makeAuth(async () => ({ userId: 'a', email: 'a@example.com' }), { signOut: vi.fn(async () => { throw new AuthError('offline') }) })
   setup(auth, () => api)
   const user = userEvent.setup()
   await screen.findByTestId('s')
@@ -135,11 +135,11 @@ async function expire(api: ReturnType<typeof makeOfflineApi>) {
 test('re-signing in as the same account resumes the paused queue', async () => {
   const api = makeOfflineApi('a', { pending: 1 })
   const create = vi.fn(() => api)
-  const auth = makeAuth(async () => ({ userId: 'a', email: 'a@b.co' }))
+  const auth = makeAuth(async () => ({ userId: 'a', email: 'a@example.com' }))
   setup(auth, create, <Probe />)
   await expire(api)
   const user = userEvent.setup()
-  await user.type(screen.getByLabelText(/email/i), 'a@b.co')
+  await user.type(screen.getByLabelText(/email/i), 'a@example.com')
   await user.type(screen.getByLabelText(/password/i), 'longenough1')
   await user.click(screen.getByRole('button', { name: 'Sign in' }))
   await screen.findByTestId('s')
@@ -151,13 +151,13 @@ test("re-signing in as a different account never resumes or replays the old acco
   const apiA = makeOfflineApi('a', { pending: 1 })
   const apiB = makeOfflineApi('b')
   const create = vi.fn((id: string) => (id === 'a' ? apiA : apiB))
-  const auth = makeAuth(async () => ({ userId: 'a', email: 'a@b.co' }), {
-    signIn: vi.fn(async () => ({ userId: 'b', email: 'b@b.co' })),
+  const auth = makeAuth(async () => ({ userId: 'a', email: 'a@example.com' }), {
+    signIn: vi.fn(async () => ({ userId: 'b', email: 'b@example.com' })),
   })
   setup(auth, create)
   await expire(apiA)
   const user = userEvent.setup()
-  await user.type(screen.getByLabelText(/email/i), 'b@b.co')
+  await user.type(screen.getByLabelText(/email/i), 'b@example.com')
   await user.type(screen.getByLabelText(/password/i), 'longenough1')
   await user.click(screen.getByRole('button', { name: 'Sign in' }))
   await screen.findByTestId('s')
@@ -170,7 +170,7 @@ test("re-signing in as a different account never resumes or replays the old acco
 
 test('"Use guest mode instead" with unsent edits asks first', async () => {
   const api = makeOfflineApi('a', { pending: 3 })
-  const auth = makeAuth(async () => ({ userId: 'a', email: 'a@b.co' }))
+  const auth = makeAuth(async () => ({ userId: 'a', email: 'a@example.com' }))
   setup(auth, () => api)
   await expire(api)
   const user = userEvent.setup()
@@ -183,7 +183,7 @@ test('"Use guest mode instead" with unsent edits asks first', async () => {
 
 test('the account card warns about unsent edits before signing out', async () => {
   const api = makeOfflineApi('a', { pending: 2 })
-  const auth = makeAuth(async () => ({ userId: 'a', email: 'a@b.co' }))
+  const auth = makeAuth(async () => ({ userId: 'a', email: 'a@example.com' }))
   setup(auth, () => api, <AccountCard />)
   const user = userEvent.setup()
   await user.click(await screen.findByRole('button', { name: 'Sign out' }))
