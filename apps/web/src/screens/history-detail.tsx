@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router'
 import { Screen } from '@/app/screen'
 import { HistorySetEditor } from '@/components/history-set-editor'
 import { Button } from '@/components/ui/button'
+import { SkeletonRows } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDate, formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
@@ -43,7 +44,7 @@ function HistoryDetailBody({ id }: { id: string }) {
     return (
       <div>
         {back}
-        <p className="text-muted-foreground px-4">Loading…</p>
+        <SkeletonRows className="px-4" />
       </div>
     )
   }
@@ -78,25 +79,25 @@ function HistoryDetailBody({ id }: { id: string }) {
   return (
     <div>
       {back}
-      <div className="flex items-start justify-between gap-2 pr-4">
-        <Screen
-          title={formatDate(session.completed_at ?? session.started_at)}
-          note={`${session.plan_name} · ${session.day_name}`}
-        />
-        {editable && (
-          <Button
-            variant={editMode ? 'default' : 'outline'}
-            className="mt-4 min-h-11"
-            aria-pressed={editMode}
-            onClick={() => {
-              setEditMode((v) => !v)
-              setOpenSet(null)
-            }}
-          >
-            Edit workout
-          </Button>
-        )}
-      </div>
+      <Screen
+        title={formatDate(session.completed_at ?? session.started_at)}
+        note={`${session.plan_name} · ${session.day_name}`}
+        action={
+          editable && (
+            <Button
+              variant={editMode ? 'default' : 'outline'}
+              className="min-h-11"
+              aria-pressed={editMode}
+              onClick={() => {
+                setEditMode((v) => !v)
+                setOpenSet(null)
+              }}
+            >
+              Edit workout
+            </Button>
+          )
+        }
+      />
       <div className="flex flex-col gap-4 p-4 pt-0">
         {editing && (
           <p className="text-muted-foreground text-sm">
@@ -104,13 +105,13 @@ function HistoryDetailBody({ id }: { id: string }) {
           </p>
         )}
         {session.exercises.map((ex) => (
-          <section key={ex.plan_item_id} className="bg-card rounded-lg border p-3">
-            <h2 className="font-medium">{ex.exercise_name}</h2>
-            <ul className="mt-2 flex flex-col gap-1">
+          <section key={ex.plan_item_id}>
+            <h2 className="font-heading text-xl leading-tight font-bold">{ex.exercise_name}</h2>
+            <ul className="mt-1 divide-y border-y">
               {ex.sets.map((s) => (
-                <li key={s.id}>
-                  <div className="flex items-center gap-1">
-                    <span className={s.done ? 'flex-1' : 'text-muted-foreground flex-1 opacity-60'}>
+                <li key={s.id} className="py-1">
+                  <div className="flex min-h-11 items-center gap-2">
+                    <span className={s.done ? 'flex-1 tabular-nums' : 'text-muted-foreground flex-1 tabular-nums'}>
                       {s.set_no}. {s.actual_reps} × {formatWeight(s.weight)} {profile.units}
                       {!s.done && ' · skipped'}
                     </span>

@@ -78,6 +78,8 @@ function GearForm({ gear, onDone }: { gear?: Gear; onDone: () => void }) {
         <Input
           id="gear-name"
           className="min-h-11"
+          autoComplete="off"
+          enterKeyHint="done"
           value={name}
           onChange={(e) => setName(e.target.value)}
           aria-invalid={!!error}
@@ -91,7 +93,7 @@ function GearForm({ gear, onDone }: { gear?: Gear; onDone: () => void }) {
       </label>
 
       <SheetFooter className="p-0">
-        <Button type="submit" className="min-h-11" disabled={save.isPending}>
+        <Button type="submit" size="big" disabled={save.isPending}>
           Save
         </Button>
       </SheetFooter>

@@ -15,7 +15,7 @@ export function RowActions({
   trashRef?: Ref<HTMLButtonElement>
 }) {
   return (
-    <div className="flex items-center">
+    <div className="flex items-center gap-2">
       <Button
         type="button"
         variant="ghost"

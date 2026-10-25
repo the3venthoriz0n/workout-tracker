@@ -105,6 +105,8 @@ function ExerciseForm({ exercise, onDone }: { exercise?: Exercise; onDone: () =>
         <Input
           id="ex-name"
           className="min-h-11"
+          autoComplete="off"
+          enterKeyHint="next"
           value={name}
           onChange={(e) => setName(e.target.value)}
           aria-invalid={!!errors.name}
@@ -118,6 +120,8 @@ function ExerciseForm({ exercise, onDone }: { exercise?: Exercise; onDone: () =>
           id="ex-video"
           className="min-h-11"
           inputMode="url"
+          autoComplete="off"
+          autoCapitalize="off"
           placeholder="https://"
           value={videoUrl}
           onChange={(e) => setVideoUrl(e.target.value)}
@@ -163,7 +167,7 @@ function ExerciseForm({ exercise, onDone }: { exercise?: Exercise; onDone: () =>
       </label>
 
       <SheetFooter className="flex-row flex-wrap gap-2 p-0">
-        <Button type="submit" className="min-h-11 flex-1" disabled={save.isPending}>
+        <Button type="submit" size="big" className="flex-1" disabled={save.isPending}>
           Save
         </Button>
       </SheetFooter>

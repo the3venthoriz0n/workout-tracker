@@ -46,7 +46,7 @@ export function RuleFields({ rule, onSave, idPrefix, showStepHint = true }: Fiel
         <Label htmlFor={`${idPrefix}-action`}>On success</Label>
         <select
           id={`${idPrefix}-action`}
-          className="border-input bg-background min-h-11 rounded-md border px-3 text-sm"
+          className="border-input bg-background min-h-11 rounded-md border px-3 text-base"
           value={rule.success_action}
           onChange={(e) => {
             const success_action = e.target.value as RuleInput['success_action']

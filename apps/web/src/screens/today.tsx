@@ -14,10 +14,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { SkeletonRows } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import { isHttpUrl } from '@/lib/links'
+import { useWakeLock } from '@/lib/wake-lock'
+import { cn } from '@/lib/utils'
 import {
   planQueryOptions,
   useActiveSession,
@@ -33,8 +36,11 @@ import { useRepo } from '@/repo/provider'
 import type { FinishSummary, SessionDetail } from '@/repo/types'
 import { SessionInProgressError } from '@/repo/types'
 
-const selectClass =
-  'border-input bg-background min-h-11 w-full rounded-md border px-3 text-base shadow-xs'
+const selectClass = 'border-input bg-card min-h-12 w-full rounded-md border px-3 text-base'
+
+// Primary action docked above the bottom tab bar (thumb zone); at the page end on md+.
+const actionBarClass =
+  'bg-background sticky bottom-[calc(57px+env(safe-area-inset-bottom))] z-20 -mx-4 border-t px-4 py-3 md:bottom-0'
 
 function summaryLine(row: FinishSummary[number], unit: string): string {
   const { exercise_name: name, before, after } = row
@@ -71,7 +77,7 @@ function Picker() {
   const [dayId, setDayId] = useState('')
 
   if (!plans || trees.some((t) => t.isPending)) {
-    return <p className="text-muted-foreground px-4">Loading…</p>
+    return <SkeletonRows className="px-4" rows={2} />
   }
   const eligible = trees.flatMap((t) => {
     const plan = t.data
@@ -83,7 +89,7 @@ function Picker() {
     return (
       <div className="flex flex-col items-start gap-3 px-4">
         <p>No plans with exercises yet. Create a plan and add a day with exercises to start a workout.</p>
-        <Button asChild className="min-h-11">
+        <Button asChild size="big">
           <Link to="/plans">Go to plans</Link>
         </Button>
       </div>
@@ -105,7 +111,7 @@ function Picker() {
 
   return (
     <div className="flex flex-col gap-4 px-4">
-      <label className="flex flex-col gap-1.5 text-sm">
+      <label className="flex flex-col gap-1.5 text-sm font-medium">
         Plan
         <select
           className={selectClass}
@@ -122,7 +128,7 @@ function Picker() {
           ))}
         </select>
       </label>
-      <label className="flex flex-col gap-1.5 text-sm">
+      <label className="flex flex-col gap-1.5 text-sm font-medium">
         Day
         <select className={selectClass} value={day.id} onChange={(e) => setDayId(e.target.value)}>
           {plan.days.map((d) => (
@@ -132,9 +138,11 @@ function Picker() {
           ))}
         </select>
       </label>
-      <Button size="lg" className="min-h-14 text-lg" disabled={start.isPending} onClick={onStart}>
-        Start workout
-      </Button>
+      <div className={cn(actionBarClass, 'mt-2')}>
+        <Button size="big" className="w-full" disabled={start.isPending} onClick={onStart}>
+          Start workout
+        </Button>
+      </div>
     </div>
   )
 }
@@ -173,6 +181,7 @@ function ActiveSession({
   const updateSet = useUpdateSet()
   const finish = useFinishSession()
   const discard = useDiscardSession()
+  useWakeLock(true)
   const [confirm, setConfirm] = useState<'finish' | 'discard' | null>(null)
   const anyDone = session.exercises.some((e) => e.sets.some((s) => s.done))
   const started = new Date(session.started_at).toLocaleTimeString([], {
@@ -202,11 +211,11 @@ function ActiveSession({
   return (
     <>
       <Screen title={`${session.plan_name} · ${session.day_name}`} note={`Started ${started}`} />
-      <div className="flex flex-col gap-4 px-4 pb-8">
+      <div className="flex flex-col gap-6 px-4">
         <SessionNote key={session.id} session={session} />
         {session.exercises.map((ex) => (
           <section key={ex.plan_item_id} className="flex flex-col gap-2">
-            <h2 className="text-lg font-medium">{ex.exercise_name}</h2>
+            <h2 className="font-heading text-2xl leading-tight font-bold">{ex.exercise_name}</h2>
             {ex.video_url && isHttpUrl(ex.video_url) && (
               <a
                 href={ex.video_url}
@@ -232,19 +241,7 @@ function ActiveSession({
           </section>
         ))}
 
-        {confirm === 'finish' ? (
-          <div className="flex flex-col gap-2 rounded-md border p-3">
-            <p>No sets marked done — finish anyway?</p>
-            <div className="flex gap-2">
-              <Button className="min-h-11 flex-1" onClick={doFinish} disabled={finish.isPending}>
-                Finish anyway
-              </Button>
-              <Button variant="outline" className="min-h-11 flex-1" onClick={() => setConfirm(null)}>
-                Keep going
-              </Button>
-            </div>
-          </div>
-        ) : confirm === 'discard' ? (
+        {confirm === 'discard' ? (
           <div className="flex flex-col gap-2 rounded-md border p-3">
             <p>Discard this workout? All logged sets are deleted.</p>
             <div className="flex gap-2">
@@ -263,19 +260,41 @@ function ActiveSession({
               </Button>
             </div>
           </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <Button
-              size="lg"
-              className="min-h-14 text-lg"
-              disabled={finish.isPending}
-              onClick={() => (anyDone ? doFinish() : setConfirm('finish'))}
-            >
-              Finish workout
-            </Button>
-            <Button variant="ghost" className="min-h-11" onClick={() => setConfirm('discard')}>
-              Discard
-            </Button>
+        ) : confirm === null ? (
+          // Kept away from Finish so the destructive action is never next to the primary one
+          <Button
+            variant="ghost"
+            className="text-destructive hover:text-destructive min-h-11 self-start"
+            onClick={() => setConfirm('discard')}
+          >
+            Discard
+          </Button>
+        ) : null}
+
+        {confirm !== 'discard' && (
+          <div className={cn(actionBarClass, 'mt-4')}>
+            {confirm === 'finish' ? (
+              <div className="flex flex-col gap-2">
+                <p>No sets marked done — finish anyway?</p>
+                <div className="flex gap-2">
+                  <Button size="big" className="flex-1" onClick={doFinish} disabled={finish.isPending}>
+                    Finish anyway
+                  </Button>
+                  <Button variant="outline" className="min-h-14 flex-1" onClick={() => setConfirm(null)}>
+                    Keep going
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                size="big"
+                className="w-full"
+                disabled={finish.isPending}
+                onClick={() => (anyDone ? doFinish() : setConfirm('finish'))}
+              >
+                Finish workout
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -291,7 +310,12 @@ export function TodayScreen() {
 
   let body
   if (active.isPending || !profile) {
-    body = <p className="text-muted-foreground px-4 pt-4">Loading…</p>
+    body = (
+      <>
+        <Screen title="Today" />
+        <SkeletonRows className="px-4" rows={3} />
+      </>
+    )
   } else if (active.data) {
     body = <ActiveSession session={active.data} unit={unit} onFinished={setSummary} />
   } else {
@@ -314,11 +338,13 @@ export function TodayScreen() {
           </SheetHeader>
           <ul className="flex flex-col gap-2 px-4">
             {summary?.map((row, i) => (
-              <li key={i}>{summaryLine(row, unit)}</li>
+              <li key={i} className={cn('tabular-nums', row.outcome === 'success' && 'text-success font-semibold')}>
+                {summaryLine(row, unit)}
+              </li>
             ))}
           </ul>
           <SheetFooter>
-            <Button className="min-h-11" onClick={() => setSummary(null)}>
+            <Button size="big" onClick={() => setSummary(null)}>
               Done
             </Button>
           </SheetFooter>

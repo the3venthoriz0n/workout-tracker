@@ -27,7 +27,7 @@ export function LibraryGear({ onEdit }: { onEdit: (gear: Gear) => void }) {
       <p className="text-muted-foreground text-sm">
         Gear you own decides which exercises appear when you build a plan.
       </p>
-      <ul className="flex flex-col gap-2">
+      <ul className="divide-y border-y">
         {gear.map((g) => (
           <GearRow
             key={g.id}
@@ -72,13 +72,13 @@ function GearRow({
       : "This can't be undone."
 
   return (
-    <li className="bg-card flex flex-col rounded-lg border px-3 py-1">
-      <div className="flex items-center gap-1">
-        <label className="flex min-h-11 flex-1 items-center justify-between gap-3 text-sm">
-          <span className="flex flex-col">
+    <li className="flex flex-col py-1">
+      <div className="flex items-center gap-2">
+        <label className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-3">
+          <span className="flex min-w-0 flex-col font-semibold">
             {g.name}
             {activeCount !== null && (
-              <span className="text-muted-foreground text-xs">
+              <span className="text-muted-foreground text-sm font-normal">
                 {pluralize(activeCount, 'exercise')}
               </span>
             )}

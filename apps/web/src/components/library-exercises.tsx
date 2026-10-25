@@ -2,6 +2,7 @@ import { Video } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
+import { SkeletonRows } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { DeleteConfirm, focusLibraryPanel, RowActions, useRestoreFocus } from '@/components/row-actions'
 import { formatWeight, pluralize } from '@/lib/format'
@@ -27,13 +28,14 @@ export function LibraryExercises({ onEdit }: { onEdit: (exercise: Exercise) => v
 
   return (
     <div className="flex flex-col gap-3 px-4 pb-4">
+      {exercises.isPending && <SkeletonRows />}
       {exercises.isSuccess && list.length === 0 && (
         <p className="text-muted-foreground text-sm">
           No exercises yet. Add your first exercise to get started.
         </p>
       )}
 
-      <ul className="flex flex-col gap-2">
+      <ul className="divide-y border-y">
         {list.map((ex) => (
           <ExerciseRow
             key={ex.id}
@@ -80,15 +82,15 @@ function ExerciseRow({
       : "This can't be undone."
 
   return (
-    <li className="bg-card flex flex-col rounded-lg border p-1">
-      <div className="flex items-center gap-1">
-        <div className="flex min-h-11 flex-1 flex-col items-start gap-1 p-2 text-left">
-          <span className={ex.active ? 'font-medium' : 'text-muted-foreground font-medium'}>
+    <li className="flex flex-col py-1">
+      <div className="flex items-center gap-2">
+        <div className="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 py-2 text-left">
+          <span className={ex.active ? 'font-semibold' : 'text-muted-foreground font-semibold'}>
             {ex.name}
           </span>
           <span className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{gearLabel}</Badge>
-            <span className="text-muted-foreground text-sm">
+            <span className="text-muted-foreground text-sm tabular-nums">
               {ex.default_sets}×{ex.default_reps} @ {formatWeight(ex.default_weight)} {units}
             </span>
           </span>

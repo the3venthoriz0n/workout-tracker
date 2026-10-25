@@ -1,5 +1,7 @@
 import { Link } from 'react-router'
 import { Screen } from '@/app/screen'
+import { Button } from '@/components/ui/button'
+import { SkeletonRows } from '@/components/ui/skeleton'
 import { formatDate, pluralize } from '@/lib/format'
 import { useSession, useSessions } from '@/repo/hooks'
 
@@ -10,13 +12,15 @@ function SessionRow({ id, completedAt, plan, day }: { id: string; completedAt: s
     <li>
       <Link
         to={`/history/${id}`}
-        className="bg-card hover:bg-accent flex min-h-11 flex-col gap-0.5 rounded-lg border p-3"
+        className="hover:bg-accent/60 flex min-h-14 flex-col gap-0.5 rounded-md px-1 py-3"
       >
-        <span className="font-medium">{formatDate(completedAt)}</span>
+        <span className="font-heading text-xl leading-tight font-bold">{formatDate(completedAt)}</span>
         <span className="text-muted-foreground text-sm">
           {plan} · {day}
         </span>
-        {done !== undefined && <span className="text-muted-foreground text-sm">{pluralize(done, 'set')} done</span>}
+        {done !== undefined && (
+          <span className="text-muted-foreground text-sm tabular-nums">{pluralize(done, 'set')} done</span>
+        )}
       </Link>
     </li>
   )
@@ -29,11 +33,16 @@ export function HistoryScreen() {
       <Screen title="History" />
       <div className="px-4 pb-4">
         {isPending || !data ? (
-          <p className="text-muted-foreground">Loading…</p>
+          <SkeletonRows />
         ) : data.length === 0 ? (
-          <p className="text-muted-foreground">No workouts yet. Finish one on the Today tab.</p>
+          <div className="flex flex-col items-start gap-3">
+            <p className="text-muted-foreground">No workouts yet. Finish one on the Today tab.</p>
+            <Button asChild variant="outline" className="min-h-11">
+              <Link to="/">Go to Today</Link>
+            </Button>
+          </div>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="divide-y border-y">
             {data.map((s) => (
               <SessionRow
                 key={s.id}

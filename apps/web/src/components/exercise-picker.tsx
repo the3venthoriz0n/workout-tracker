@@ -52,6 +52,8 @@ function PickerBody({ onPick }: { onPick: (exerciseId: string) => void }) {
       <Input
         className="min-h-11"
         type="search"
+        enterKeyHint="search"
+        autoComplete="off"
         aria-label="Search exercises"
         placeholder="Search"
         value={query}
@@ -65,12 +67,12 @@ function PickerBody({ onPick }: { onPick: (exerciseId: string) => void }) {
       ) : shown.length === 0 ? (
         <p className="text-muted-foreground text-sm">No exercises match your search.</p>
       ) : (
-        <ul className="flex min-h-0 flex-col gap-1 overflow-y-auto">
+        <ul className="flex min-h-0 flex-col divide-y overflow-y-auto overscroll-contain">
           {shown.map((ex) => (
             <li key={ex.id}>
               <button
                 type="button"
-                className="hover:bg-accent flex min-h-11 w-full items-center rounded-md px-3 text-left font-medium"
+                className="hover:bg-accent flex min-h-12 w-full items-center rounded-md px-2 text-left font-semibold"
                 onClick={() => onPick(ex.id)}
               >
                 {ex.name}

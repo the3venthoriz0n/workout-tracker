@@ -53,11 +53,11 @@ export function PlanItemRow({ item, isFirst = false, isLast = false }: Props) {
   }
 
   return (
-    <li aria-label={name} className="bg-card flex flex-col gap-3 rounded-lg border p-3">
-      <div className="flex items-start gap-1">
+    <li aria-label={name} className="flex flex-col gap-3 py-3">
+      <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="font-medium">{name}</p>
-          <p className="text-muted-foreground text-sm">
+          <p className="font-semibold">{name}</p>
+          <p className="text-muted-foreground text-sm tabular-nums">
             Next: {eff.sets}×{eff.targetReps} @ {formatWeight(eff.targetWeight)} {units}
           </p>
         </div>
@@ -138,7 +138,7 @@ export function PlanItemRow({ item, isFirst = false, isLast = false }: Props) {
         ) : (
           <Button
             variant="ghost"
-            className="min-h-11"
+            className="text-destructive hover:text-destructive min-h-11"
             aria-label={`Delete ${name}`}
             onClick={() => setConfirmDelete(true)}
           >

@@ -86,8 +86,10 @@ export function NumberField({
       <div className="flex items-center gap-2">
         <Input
           id={inputId}
-          className="min-h-11"
+          className="min-h-11 tabular-nums"
           inputMode={kind === 'weight' ? 'decimal' : 'numeric'}
+          enterKeyHint="done"
+          autoComplete="off"
           placeholder={placeholder}
           value={text}
           onChange={(e) => {

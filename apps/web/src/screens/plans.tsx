@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { Screen } from '@/app/screen'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SkeletonRows } from '@/components/ui/skeleton'
 import { notifyError } from '@/lib/notify'
 import { useDeletePlan, usePlans, useSavePlan } from '@/repo/hooks'
 
@@ -33,6 +34,8 @@ export function PlansScreen() {
         <form onSubmit={add} className="flex gap-2">
           <Input
             className="min-h-11 flex-1"
+            enterKeyHint="done"
+            autoComplete="off"
             aria-label="New plan name"
             placeholder="New plan name"
             value={name}
@@ -43,19 +46,20 @@ export function PlansScreen() {
           </Button>
         </form>
 
+        {plans.isPending && <SkeletonRows />}
         {plans.isSuccess && list.length === 0 && (
           <p className="text-muted-foreground text-sm">No plans yet. Name one above to start.</p>
         )}
 
-        <ul className="flex flex-col gap-2">
+        <ul className="divide-y border-y">
           {list.map((plan) => (
-            <li key={plan.id} className="bg-card flex items-center gap-1 rounded-lg border p-1">
+            <li key={plan.id} className="flex items-center gap-2 py-1">
               <Link
                 to={`/plans/${plan.id}`}
-                className="flex min-h-11 flex-1 items-center justify-between rounded-md p-2 font-medium"
+                className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-2 rounded-md py-2 text-lg font-semibold"
               >
-                {plan.name}
-                <ChevronRight className="text-muted-foreground size-4" aria-hidden />
+                <span className="min-w-0 break-words">{plan.name}</span>
+                <ChevronRight className="text-muted-foreground size-5 shrink-0" aria-hidden />
               </Link>
               {confirmId === plan.id ? (
                 <>
@@ -79,7 +83,7 @@ export function PlansScreen() {
               ) : (
                 <Button
                   variant="ghost"
-                  className="min-h-11"
+                  className="text-destructive hover:text-destructive min-h-11"
                   aria-label={`Delete ${plan.name}`}
                   onClick={() => setConfirmId(plan.id)}
                 >

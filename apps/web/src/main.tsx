@@ -9,13 +9,10 @@ import { createAuthClient } from './auth/client'
 import { createQueryClient } from './app/query-client'
 import { createRouter } from './app/router'
 import './index.css'
-import { followSystemTheme } from './lib/theme'
 import { AppDb } from './repo/db'
 import { LocalRepo } from './repo/local-repo'
 import { withOffline } from './repo/offline'
 import { OutboxDb, createOutboxStore, dropOtherMirrors } from './repo/outbox'
-
-followSystemTheme()
 
 const queryClient = createQueryClient()
 const repo = new LocalRepo(new AppDb('workout-tracker'))

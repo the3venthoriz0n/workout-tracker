@@ -60,6 +60,8 @@ export function HistorySetEditor({
         aria-label={`Note for set ${set.set_no}`}
         className="min-h-11"
         placeholder="Note"
+        enterKeyHint="done"
+        autoComplete="off"
         value={note}
         onChange={(e) => setNote(e.target.value)}
         onBlur={() => {

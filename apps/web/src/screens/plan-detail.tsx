@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
+import { SettingsLink } from '@/app/screen'
 import { ExercisePicker } from '@/components/exercise-picker'
 import { PlanItemRow } from '@/components/plan-item-row'
 import { Button } from '@/components/ui/button'
@@ -84,13 +85,16 @@ export function PlanDetailScreen() {
   }
 
   return (
-    <div className="flex flex-col gap-3 p-4">
-      <Link to="/plans" className="text-muted-foreground inline-flex min-h-11 items-center text-sm">
-        ← Plans
-      </Link>
+    <div className="flex flex-col gap-3 px-4 pb-4">
+      <div className="bg-background sticky top-0 z-30 -mx-4 flex items-center justify-between pt-[env(safe-area-inset-top)] pr-2 pl-4">
+        <Link to="/plans" className="text-muted-foreground inline-flex min-h-11 items-center text-base font-medium">
+          ← Plans
+        </Link>
+        <SettingsLink />
+      </div>
       <InlineName
         label="Plan name"
-        className="min-h-11 text-xl font-semibold"
+        className="font-heading min-h-12 text-2xl font-bold md:text-2xl"
         value={tree.name}
         onCommit={(name) => savePlan.mutate({ id: tree.id, name }, { onError: (e) => notifyError(e) })}
       />
@@ -105,10 +109,10 @@ export function PlanDetailScreen() {
           aria-label={`Day ${day.name}`}
           className="bg-card flex flex-col gap-3 rounded-lg border p-3"
         >
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <InlineName
               label="Day name"
-              className="min-h-11 flex-1 font-medium"
+              className="font-heading min-h-11 flex-1 text-xl font-bold"
               value={day.name}
               onCommit={(name) =>
                 saveDay.mutate({ id: day.id, plan_id: tree.id, name }, { onError: (e) => notifyError(e) })
@@ -143,7 +147,7 @@ export function PlanDetailScreen() {
           {day.items.length === 0 && (
             <p className="text-muted-foreground text-sm">No exercises on this day yet.</p>
           )}
-          <ul className="flex flex-col gap-2">
+          <ul className="divide-y border-y">
             {day.items.map((item, i) => (
               <PlanItemRow
                 key={item.id}
@@ -185,7 +189,7 @@ export function PlanDetailScreen() {
             ) : (
               <Button
                 variant="ghost"
-                className="min-h-11"
+                className="text-destructive hover:text-destructive min-h-11"
                 aria-label={`Delete ${day.name}`}
                 onClick={() => setConfirmDay(day.id)}
               >

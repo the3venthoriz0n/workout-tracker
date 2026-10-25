@@ -88,11 +88,11 @@ function RuleRow({ row, units }: { row: ProgressionRow; units: string }) {
   const setRule = useSetRule()
   const Icon = expanded ? ChevronUp : ChevronDown
   return (
-    <li aria-label={row.exercise_name} className="flex flex-col gap-2 rounded-lg border p-3">
+    <li aria-label={row.exercise_name} className="flex flex-col gap-2 py-2">
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
-          <p className="font-medium">{row.exercise_name}</p>
-          <p className="text-muted-foreground text-sm">{summarize(row.rule, units)}</p>
+          <p className="font-semibold">{row.exercise_name}</p>
+          <p className="text-muted-foreground text-sm tabular-nums">{summarize(row.rule, units)}</p>
         </div>
         <Button
           variant="ghost"
@@ -156,11 +156,11 @@ function ItemRulesCard() {
         ) : (
           plans.map((plan) => (
             <section key={plan.id} aria-label={plan.name} className="flex flex-col gap-3">
-              <h2 className="font-semibold">{plan.name}</h2>
+              <h2 className="font-heading text-lg leading-tight font-bold">{plan.name}</h2>
               {plan.days.map((day) => (
                 <div key={day.id} className="flex flex-col gap-2">
                   <h3 className="text-muted-foreground text-sm font-medium">{day.name}</h3>
-                  <ul className="flex flex-col gap-2">
+                  <ul className="divide-y border-y">
                     {day.rows.map((r) => (
                       <RuleRow key={r.item_id} row={r} units={units} />
                     ))}

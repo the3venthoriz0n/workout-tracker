@@ -1,5 +1,6 @@
 import { useSearchParams } from 'react-router'
 import { useState } from 'react'
+import { Screen } from '@/app/screen'
 import { AddButton } from '@/components/add-button'
 import { ExerciseSheet } from '@/components/exercise-sheet'
 import { GearSheet } from '@/components/gear-sheet'
@@ -23,14 +24,16 @@ export function LibraryScreen() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 p-4">
-        <h1 className="text-2xl font-semibold">Library</h1>
-        <AddButton
-          label={active === 'gear' ? 'Add gear' : 'Add exercise'}
-          onClick={() => setEditing({ kind: active === 'gear' ? 'gear' : 'exercise' })}
-        />
-      </div>
-      <div role="tablist" aria-label="Library sections" className="mx-4 mb-3 flex gap-1 rounded-lg border p-1">
+      <Screen
+        title="Library"
+        action={
+          <AddButton
+            label={active === 'gear' ? 'Add gear' : 'Add exercise'}
+            onClick={() => setEditing({ kind: active === 'gear' ? 'gear' : 'exercise' })}
+          />
+        }
+      />
+      <div role="tablist" aria-label="Library sections" className="bg-muted mx-4 mb-3 flex gap-1 rounded-md p-1">
         {SECTIONS.map(({ id, label }) => (
           <button
             key={id}
@@ -40,10 +43,10 @@ export function LibraryScreen() {
             aria-selected={active === id}
             aria-controls="library-panel"
             className={cn(
-              'min-h-11 flex-1 rounded-md px-3 text-sm font-medium transition-colors',
+              'min-h-11 flex-1 rounded-sm px-3 text-base font-semibold transition-colors',
               active === id
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-accent',
+                ? 'bg-card text-foreground shadow-sm ring-1 ring-foreground/15'
+                : 'text-muted-foreground hover:text-foreground',
             )}
             onClick={() => {
               const next = new URLSearchParams(params)

@@ -41,6 +41,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           toast: "cn-toast",
         },
       }}
+      mobileOffset={{ bottom: "calc(4.5rem + env(safe-area-inset-bottom))" }}
       {...props}
     />
   )

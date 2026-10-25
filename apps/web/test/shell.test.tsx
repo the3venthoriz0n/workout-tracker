@@ -33,7 +33,7 @@ test('nested paths highlight their tab', async () => {
   )
 })
 
-test('shell renders the Library route with all six tabs', async () => {
+test('shell renders the Library route with five tabs and a Settings gear in the header', async () => {
   const repo = new LocalRepo(new AppDb(`shell-${crypto.randomUUID()}`))
   const router = createMemoryRouter(routes, { initialEntries: ['/library'] })
   render(
@@ -44,24 +44,28 @@ test('shell renders the Library route with all six tabs', async () => {
     </QueryClientProvider>,
   )
   expect(await screen.findByRole('heading', { name: 'Library' })).toBeTruthy()
-  for (const label of ['Today', 'Plans', 'Library', 'Progression', 'History', 'Settings']) {
+  for (const label of ['Today', 'Plans', 'Library', 'Progress', 'History']) {
     expect(screen.getByRole('link', { name: label })).toBeTruthy()
   }
+  const nav = within(screen.getByRole('navigation', { name: 'Main' }))
+  expect(nav.queryByRole('link', { name: 'Settings' })).toBeNull()
+  const gear = screen.getByRole('link', { name: 'Settings' })
+  expect(gear.getAttribute('href')).toBe('/settings')
+  expect(screen.getByRole('heading', { name: 'Library' }).parentElement!.contains(gear)).toBe(true)
 })
 
-test('Progression sits after Library and highlights on /progression', async () => {
+test('Progress sits after Library and highlights on /progression', async () => {
   renderAt('/progression')
   expect(
-    (await screen.findByRole('link', { name: 'Progression' })).getAttribute('aria-current'),
+    (await screen.findByRole('link', { name: 'Progress' })).getAttribute('aria-current'),
   ).toBe('page')
   const nav = within(screen.getByRole('navigation', { name: 'Main' }))
   expect(nav.getAllByRole('link').map((l) => l.textContent)).toEqual([
     'Today',
     'Plans',
     'Library',
-    'Progression',
+    'Progress',
     'History',
-    'Settings',
   ])
   expect(screen.getByRole('link', { name: 'Library' }).getAttribute('aria-current')).toBeNull()
 })
