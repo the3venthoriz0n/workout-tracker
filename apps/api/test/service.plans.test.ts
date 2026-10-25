@@ -229,4 +229,32 @@ describe('service plans', () => {
     expect((await s.getPlan(plan.id))!.days[0]!.items[0]!.rule).toBeNull()
     expect((await s.listProgression())[0]!.rule).toBeNull()
   })
+
+  it('a delete committing while setSuperset waits cannot leave a one-member group', async () => {
+    const { s, userId, ex, plan, day } = await setup()
+    const a = await s.addPlanItem(day.id, ex.id)
+    const b = await s.addPlanItem(day.id, ex.id)
+    const g = newId()
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    let locked!: () => void
+    const hasLock = new Promise<void>((r) => (locked = r))
+    // A concurrent delete: locks and soft-deletes b, then commits after setSuperset has started.
+    const deleter = h.db.transaction(async (tx) => {
+      await tx.update(t.planItem).set({ deletedAt: new Date() }).where(and(eq(t.planItem.userId, userId), eq(t.planItem.id, b.id)))
+      locked()
+      await gate
+    })
+    await hasLock
+    const grouping = s.setSuperset(day.id, g, [a.id, b.id]).then(
+      () => 'ok',
+      (e: unknown) => (e instanceof NotFoundError ? 'not_found' : String(e)),
+    )
+    await new Promise((r) => setTimeout(r, 300))
+    release()
+    await deleter
+    expect(await grouping).toBe('not_found')
+    const items = (await s.getPlan(plan.id))!.days.flatMap((d) => d.items)
+    expect(items.map((i) => i.superset_group)).toEqual([null])
+  })
 })

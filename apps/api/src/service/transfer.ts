@@ -116,7 +116,15 @@ function checkIntegrity(d: ExportData): void {
   }
   for (const g of groups.values()) {
     if (g.days.size !== 1) bad('plan_items: a superset spans days')
-    if (g.count < LIMITS.supersetMin || g.count > LIMITS.supersetMax) bad('plan_items: a superset has the wrong size')
+    if (g.count > LIMITS.supersetMax) bad('plan_items: a superset has the wrong size')
+  }
+  // A group with fewer than 2 live members is a legacy state (a delete raced a regrouping): clear it.
+  for (const r of d.plan_items) {
+    if (r.superset_group !== null && (groups.get(r.superset_group)?.count ?? 0) < LIMITS.supersetMin) r.superset_group = null
+  }
+  const angled = new Set(d.exercises.filter((e) => e.supports_angle).map((e) => e.id))
+  for (const r of d.plan_items) {
+    if (r.deleted_at === null && r.angle !== null && !angled.has(r.exercise_id)) bad('plan_items: an angle is set on an exercise without angles')
   }
   for (const r of d.progression_rules) need('progression_rules', r.plan_item_id, itemIds)
   for (const r of d.item_states) need('item_states', r.plan_item_id, itemIds)

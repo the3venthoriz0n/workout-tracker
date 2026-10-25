@@ -413,6 +413,8 @@ export async function setSuperset(
       .select({ id: planItem.id, day: planItem.planDayId })
       .from(planItem)
       .where(and(live, eq(planItem.supersetGroup, groupId)))
+      .orderBy(planItem.id)
+      .for('update')
     if (inGroup.some((i) => i.day !== planDayId)) throw new ConflictError('Superset group is in use on another day')
     if (itemIds === null) {
       await tx.update(planItem).set({ supersetGroup: null, updatedAt: ts }).where(and(live, eq(planItem.supersetGroup, groupId)))
@@ -422,6 +424,8 @@ export async function setSuperset(
       .select({ id: planItem.id, day: planItem.planDayId, group: planItem.supersetGroup })
       .from(planItem)
       .where(and(live, inArray(planItem.id, itemIds)))
+      .orderBy(planItem.id)
+      .for('update') // waits for a concurrent delete, then re-checks "live" on the committed row
     if (members.length !== itemIds.length) throw new NotFoundError('Plan item')
     if (members.some((m) => m.day !== planDayId)) throw new ValidationError('item_ids', 'Superset items must be in the same day')
     const leaving = inGroup.filter((i) => !itemIds.includes(i.id)).map((i) => i.id)

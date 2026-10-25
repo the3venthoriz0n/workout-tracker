@@ -307,14 +307,15 @@ describe('imports written before day colours, angle, AMRAP, supersets and layere
     expect(logs.every((l) => l.seq === null && l.amrap === false && l.superset_label === null)).toBe(true)
   })
 
-  it('rejects a file whose superset spans days or has one live member', async () => {
+  it('clears a one-member superset on import and rejects one that spans days', async () => {
     const src = await populated()
     const data = await src.s.exportAll()
     const g = newId()
     const spread = structuredClone(data)
     spread.plan_items[0]!.superset_group = g
     const lonely = await makeUser(false)
-    await expect(lonely.s.importAll(spread)).rejects.toBeInstanceOf(ImportInvalidError)
+    await lonely.s.importAll(spread)
+    expect((await lonely.s.exportAll()).plan_items.every((i) => i.superset_group === null)).toBe(true)
     const day2 = { ...spread.plan_days[0]!, id: newId(), position: 1 }
     const across = structuredClone(spread)
     across.plan_days.push(day2)

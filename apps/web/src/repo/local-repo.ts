@@ -292,9 +292,12 @@ export class LocalRepo implements Repo {
         next.weight_increment = DEFAULT_INCREMENT[to]
         const newIncrement = DEFAULT_INCREMENT[to]
         const convAmount = (amount: number) =>
-          amount === current.weight_increment
-            ? newIncrement
-            : Math.max(newIncrement, roundToIncrement(conv(amount), newIncrement))
+          Math.min(
+            LIMITS.weight,
+            amount === current.weight_increment
+              ? newIncrement
+              : Math.max(newIncrement, roundToIncrement(conv(amount), newIncrement)),
+          )
         await d.exercises.toCollection().modify((e) => {
           e.default_weight = conv(e.default_weight)
           if (e.default_rule?.success_action === 'add_weight') {

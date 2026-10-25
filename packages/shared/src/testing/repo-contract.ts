@@ -4,7 +4,8 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { defaultRule } from '../progression.js'
-import { SessionInProgressError } from '../repo.js'
+import { LIMITS } from '../schemas.js'
+import { ImportInvalidError, SessionInProgressError } from '../repo.js'
 import type { ExportData, PlanTree, Repo, SessionDetail } from '../repo.js'
 import type { Exercise, PlanItem, RuleInput } from '../schemas.js'
 import { newId } from '../id.js'
@@ -1117,7 +1118,33 @@ export function runRepoContract(
       expect((await exercise(repo, 'Barbell Row')).default_rule?.success_amount).toBe(2.5) // the old step
     })
 
+    contract('profile', 'a unit switch clamps converted rule amounts to the weight limit', async ({ repo }) => {
+      const bench = await exercise(repo, 'Bench Press')
+      await repo.updateProfile({ units: 'kg' })
+      await repo.setExerciseRule(bench.id, rule({ success_amount: 90_000 }))
+      await repo.updateProfile({ units: 'lb' }) // 90000 kg -> ~198000 lb
+expect((await exercise(repo, 'Bench Press')).default_rule?.success_amount).toBe(LIMITS.weight)
+      expect((await repo.listExercises()).length).toBeGreaterThan(0) // still parses
+    })
+
     // --------------------------------------------------------------- transfer
+    contract('transfer', 'import rejects an angle on an exercise that does not support one', async ({ repo, make: makeAnother, skip }) => {
+      if (!(await makeAnother({ empty: true })).importAll) return skip()
+      const bench = await exercise(repo, 'Bench Press')
+      expect(bench.supports_angle).toBe(false)
+      const { day } = await planWithDay(repo)
+      await repo.addPlanItem(day.id, bench.id)
+      const data = await repo.exportAll()
+      const bad = structuredClone(data)
+      bad.plan_items[0]!.angle = 'incline'
+      const target = await makeAnother({ empty: true })
+      await expect(must(target.importAll, 'importAll')(bad)).rejects.toBeInstanceOf(ImportInvalidError)
+      const ok = structuredClone(data)
+      ok.exercises.find((e) => e.id === bench.id)!.supports_angle = true
+      ok.plan_items[0]!.angle = 'incline'
+      await must((await makeAnother({ empty: true })).importAll, 'importAll')(ok)
+    })
+
     contract(
       'transfer',
       'exportAll then importing into a fresh harness reproduces the data',
