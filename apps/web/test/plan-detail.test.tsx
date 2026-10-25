@@ -329,7 +329,7 @@ test('re-enabling progression restores the profile default rule', async () => {
   view()
   const row = await screen.findByRole('listitem', { name: 'Bench Press' })
   await user.click(within(row).getByRole('button', { name: 'Progression for Bench Press' }))
-  const sw = within(row).getByRole('switch')
+  const sw = within(row).getByRole('switch', { name: 'No progression for Bench Press' })
   await user.click(sw)
   await waitFor(async () =>
     expect((await repo.getPlan(plan.id))?.days[0]?.items[0]?.rule).toBeNull(),

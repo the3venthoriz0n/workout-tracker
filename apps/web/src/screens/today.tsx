@@ -1,10 +1,15 @@
 import { useQueries, useQueryClient } from '@tanstack/react-query'
+import { CheckIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { OfflineError } from '@workout/shared'
+import { OfflineError, type SetLog } from '@workout/shared'
 import { toast } from 'sonner'
 import { Screen } from '@/app/screen'
+import { AngleChip, DayBar, SupersetLabel, nameWithAngle } from '@/components/plan-bits'
 import { SetRow } from '@/components/set-row'
+import { dayColorOf } from '@/lib/day-colors'
+import { sessionBlocks } from '@/lib/session-blocks'
+import { useDayColors } from '@/lib/use-day-colors'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -128,16 +133,38 @@ function Picker() {
           ))}
         </select>
       </label>
-      <label className="flex flex-col gap-1.5 text-sm font-medium">
-        Day
-        <select className={selectClass} value={day.id} onChange={(e) => setDayId(e.target.value)}>
+      <div className="flex flex-col gap-1.5">
+        <span id="day-chooser-label" className="text-sm font-medium">
+          Day
+        </span>
+        <div role="radiogroup" aria-labelledby="day-chooser-label" className="divide-y border-y">
           {plan.days.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
+            <label
+              key={d.id}
+              className="has-checked:bg-card flex min-h-14 cursor-pointer items-stretch gap-3 py-2 pr-2"
+            >
+              <input
+                type="radio"
+                name="day"
+                className="peer sr-only"
+                aria-label={d.name}
+                checked={d.id === day.id}
+                onChange={() => setDayId(d.id)}
+              />
+              <DayBar color={dayColorOf(d)} className="w-2" />
+              <span className="font-heading flex min-w-0 flex-1 items-center text-xl leading-tight font-bold break-words">
+                {d.name}
+              </span>
+              <span className="flex items-center peer-focus-visible:outline-2" aria-hidden>
+                <CheckIcon
+                  strokeWidth={3}
+                  className={cn('size-6', d.id === day.id ? 'text-primary' : 'text-transparent')}
+                />
+              </span>
+            </label>
           ))}
-        </select>
-      </label>
+        </div>
+      </div>
       <div className={cn(actionBarClass, 'mt-2')}>
         <Button size="big" className="w-full" disabled={start.isPending} onClick={onStart}>
           Start workout
@@ -169,6 +196,46 @@ function SessionNote({ session }: { session: SessionDetail }) {
   )
 }
 
+type SessionExercise = SessionDetail['exercises'][number]
+
+function ExerciseHeading({ ex }: { ex: SessionExercise }) {
+  return (
+    <h2 className="font-heading text-2xl leading-tight font-bold">
+      {ex.exercise_name}
+      <AngleChip angle={ex.sets[0]?.angle} />
+    </h2>
+  )
+}
+
+function ExerciseExtras({ ex }: { ex: SessionExercise }) {
+  return (
+    <>
+      {ex.video_url && isHttpUrl(ex.video_url) && (
+        <a
+          href={ex.video_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary inline-flex min-h-11 items-center self-start text-sm underline"
+        >
+          Watch video
+        </a>
+      )}
+      {ex.notes && <p className="text-muted-foreground text-sm">{ex.notes}</p>}
+    </>
+  )
+}
+
+// Finish summary rows follow session.exercises order (LocalRepo and the API both build them from
+// it), so the angle snapshot comes from the same index; on any mismatch the angle is left out.
+function withAngles(summary: FinishSummary, session: SessionDetail): FinishSummary {
+  if (summary.length !== session.exercises.length) return summary
+  return summary.map((row, i) => {
+    const ex = session.exercises[i]!
+    if (ex.exercise_name !== row.exercise_name) return row
+    return { ...row, exercise_name: nameWithAngle(row.exercise_name, ex.sets[0]?.angle) }
+  })
+}
+
 function ActiveSession({
   session,
   unit,
@@ -181,6 +248,7 @@ function ActiveSession({
   const updateSet = useUpdateSet()
   const finish = useFinishSession()
   const discard = useDiscardSession()
+  const dayColors = useDayColors()
   useWakeLock(true)
   const [confirm, setConfirm] = useState<'finish' | 'discard' | null>(null)
   const anyDone = session.exercises.some((e) => e.sets.some((s) => s.done))
@@ -190,7 +258,7 @@ function ActiveSession({
   })
 
   function doFinish() {
-    finish.mutateAsync(session.id).then(onFinished, (err: unknown) => {
+    finish.mutateAsync(session.id).then((summary) => onFinished(withAngles(summary, session)), (err: unknown) => {
       if (err instanceof OfflineError) {
         console.error(err)
         toast.error('Reconnect to finish. Your sets are saved on this device.')
@@ -208,38 +276,59 @@ function ActiveSession({
     )
   }
 
+  const setRow = (s: SetLog, member?: { label: string; name: string }) => (
+    <SetRow
+      key={s.id}
+      set={s}
+      unit={unit}
+      member={member}
+      onToggle={() => save(s.id, { done: !s.done })}
+      onEdit={(patch) => save(s.id, patch)}
+    />
+  )
+
   return (
     <>
-      <Screen title={`${session.plan_name} · ${session.day_name}`} note={`Started ${started}`} />
+      <Screen
+        title={`${session.plan_name} · ${session.day_name}`}
+        note={`Started ${started}`}
+        accent={dayColors.get(session.plan_day_id)}
+      />
       <div className="flex flex-col gap-6 px-4">
         <SessionNote key={session.id} session={session} />
-        {session.exercises.map((ex) => (
-          <section key={ex.plan_item_id} className="flex flex-col gap-2">
-            <h2 className="font-heading text-2xl leading-tight font-bold">{ex.exercise_name}</h2>
-            {ex.video_url && isHttpUrl(ex.video_url) && (
-              <a
-                href={ex.video_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary inline-flex min-h-11 items-center text-sm underline"
-              >
-                Watch video
-              </a>
-            )}
-            {ex.notes && <p className="text-muted-foreground text-sm">{ex.notes}</p>}
-            <ul className="flex flex-col gap-2">
-              {ex.sets.map((s) => (
-                <SetRow
-                  key={s.id}
-                  set={s}
-                  unit={unit}
-                  onToggle={() => save(s.id, { done: !s.done })}
-                  onEdit={(patch) => save(s.id, patch)}
-                />
+        {sessionBlocks(session.exercises).map((block) =>
+          block.kind === 'exercise' ? (
+            <section key={block.exercise.plan_item_id} className="flex flex-col gap-2">
+              <ExerciseHeading ex={block.exercise} />
+              <ExerciseExtras ex={block.exercise} />
+              <ul className="flex flex-col gap-2">{block.exercise.sets.map((s) => setRow(s))}</ul>
+            </section>
+          ) : (
+            <section
+              key={block.group}
+              aria-label={`Superset ${block.letter}`}
+              className="border-muted-foreground flex flex-col gap-2 border-l-4 pl-3"
+            >
+              <p className="font-heading text-muted-foreground text-base leading-none font-bold tracking-wide uppercase">
+                Superset
+              </p>
+              {block.members.map((ex) => (
+                <div key={ex.plan_item_id} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <SupersetLabel label={ex.sets[0]?.superset_label ?? ''} />
+                    <ExerciseHeading ex={ex} />
+                  </div>
+                  <ExerciseExtras ex={ex} />
+                </div>
               ))}
-            </ul>
-          </section>
-        ))}
+              <ul className="flex flex-col gap-2">
+                {block.sets.map(({ set, exercise }) =>
+                  setRow(set, { label: set.superset_label ?? '', name: exercise.exercise_name }),
+                )}
+              </ul>
+            </section>
+          ),
+        )}
 
         {confirm === 'discard' ? (
           <div className="flex flex-col gap-2 rounded-md border p-3">

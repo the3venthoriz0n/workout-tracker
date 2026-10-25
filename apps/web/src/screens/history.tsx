@@ -1,11 +1,26 @@
+import type { DayColor } from '@workout/shared'
 import { Link } from 'react-router'
 import { Screen } from '@/app/screen'
+import { DayBar } from '@/components/plan-bits'
+import { useDayColors } from '@/lib/use-day-colors'
 import { Button } from '@/components/ui/button'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { formatDate, pluralize } from '@/lib/format'
 import { useSession, useSessions } from '@/repo/hooks'
 
-function SessionRow({ id, completedAt, plan, day }: { id: string; completedAt: string; plan: string; day: string }) {
+function SessionRow({
+  id,
+  completedAt,
+  plan,
+  day,
+  color,
+}: {
+  id: string
+  completedAt: string
+  plan: string
+  day: string
+  color: DayColor | undefined
+}) {
   const { data } = useSession(id)
   const done = data?.exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0)
   return (
@@ -15,8 +30,11 @@ function SessionRow({ id, completedAt, plan, day }: { id: string; completedAt: s
         className="hover:bg-accent/60 flex min-h-14 flex-col gap-0.5 rounded-md px-1 py-3"
       >
         <span className="font-heading text-xl leading-tight font-bold">{formatDate(completedAt)}</span>
-        <span className="text-muted-foreground text-sm">
-          {plan} · {day}
+        <span className="text-muted-foreground flex items-stretch gap-2 text-sm">
+          <DayBar color={color} />
+          <span>
+            {plan} · {day}
+          </span>
         </span>
         {done !== undefined && (
           <span className="text-muted-foreground text-sm tabular-nums">{pluralize(done, 'set')} done</span>
@@ -28,6 +46,7 @@ function SessionRow({ id, completedAt, plan, day }: { id: string; completedAt: s
 
 export function HistoryScreen() {
   const { data, isPending } = useSessions()
+  const dayColors = useDayColors()
   return (
     <div>
       <Screen title="History" />
@@ -50,6 +69,7 @@ export function HistoryScreen() {
                 completedAt={s.completed_at ?? s.started_at}
                 plan={s.plan_name}
                 day={s.day_name}
+                color={dayColors.get(s.plan_day_id)}
               />
             ))}
           </ul>

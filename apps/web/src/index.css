@@ -97,6 +97,17 @@
     --sidebar-accent-foreground: #1e2427;
     --sidebar-border: #d5dada;
     --sidebar-ring: #1f4fd8;
+    /* Plan-day colours (DAY_COLORS). Each is >= 4.7:1 against chalk and white, so the bar
+       clears 3:1 and --day-foreground text on it clears 4.5:1 (lowest: amber 4.73 on chalk). */
+    --day-blue: #1f4fd8;
+    --day-red: #c8302b;
+    --day-green: #267a4b;
+    --day-amber: #a35a00;
+    --day-violet: #6b3fc4;
+    --day-teal: #0d7068;
+    --day-pink: #b8286e;
+    --day-slate: #56636b;
+    --day-foreground: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -136,6 +147,17 @@
         --sidebar-accent-foreground: #e8eceb;
         --sidebar-border: #343a3c;
         --sidebar-ring: #6088f1;
+        /* Lighter plates for dark: each >= 4.7:1 against the card (#1f2325) and background
+           (lowest: blue 4.75 on the card); --day-foreground text on them >= 5.29:1. */
+        --day-blue: #6088f1;
+        --day-red: #ef6a60;
+        --day-green: #4fbf80;
+        --day-amber: #e6a23c;
+        --day-violet: #a98bf2;
+        --day-teal: #3cbfb2;
+        --day-pink: #f070b0;
+        --day-slate: #9aa5a8;
+        --day-foreground: #16191a;
     }
 }
 

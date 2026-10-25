@@ -1,6 +1,8 @@
+import type { DayColor } from '@workout/shared'
 import { Settings } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router'
+import { DayBar } from '@/components/plan-bits'
 import { cn } from '@/lib/utils'
 
 // Settings lives in the header on every screen, not in the tab bar.
@@ -22,10 +24,12 @@ export function SettingsLink() {
 }
 
 // Sticky screen header: condensed title left, the screen's action and Settings right.
-export function ScreenHeader({ title, action }: { title: ReactNode; action?: ReactNode }) {
+// `accent`: a plan-day colour bar before the title (the title still names the day).
+export function ScreenHeader({ title, action, accent }: { title: ReactNode; action?: ReactNode; accent?: DayColor | null }) {
   return (
     <header className="bg-background sticky top-0 z-30 pt-[env(safe-area-inset-top)]">
       <div className="flex min-h-14 items-center gap-2 py-1.5 pr-2 pl-4">
+        <DayBar color={accent} className="my-1 w-2" />
         <h1 className="font-heading min-w-0 flex-1 text-[30px] leading-tight font-bold break-words">
           {title}
         </h1>
@@ -38,11 +42,29 @@ export function ScreenHeader({ title, action }: { title: ReactNode; action?: Rea
   )
 }
 
-export function Screen({ title, note, action }: { title: string; note?: string; action?: ReactNode }) {
+// `noteAccent`: a plan-day colour bar before the note (History detail, where the note names the day).
+export function Screen({
+  title,
+  note,
+  action,
+  accent,
+  noteAccent,
+}: {
+  title: string
+  note?: string
+  action?: ReactNode
+  accent?: DayColor | null
+  noteAccent?: DayColor | null
+}) {
   return (
     <>
-      <ScreenHeader title={title} action={action} />
-      {note && <p className="text-muted-foreground -mt-1 px-4 pb-3 text-sm">{note}</p>}
+      <ScreenHeader title={title} action={action} accent={accent} />
+      {note && (
+        <p className="text-muted-foreground -mt-1 flex items-stretch gap-2 px-4 pb-3 text-sm">
+          <DayBar color={noteAccent} className="w-1.5" />
+          <span>{note}</span>
+        </p>
+      )}
       {!note && <div className="h-2" />}
     </>
   )

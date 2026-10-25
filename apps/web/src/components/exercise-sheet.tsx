@@ -61,6 +61,7 @@ function ExerciseForm({
   const [videoUrl, setVideoUrl] = useState(exercise?.video_url ?? '')
   const [gearIds, setGearIds] = useState<string[]>(exercise?.required_gear_ids ?? [])
   const [active, setActive] = useState(exercise?.active ?? true)
+  const [supportsAngle, setSupportsAngle] = useState(exercise?.supports_angle ?? false)
   const [sets, setSets] = useState<number | null>(exercise?.default_sets ?? 3)
   const [reps, setReps] = useState<number | null>(exercise?.default_reps ?? 5)
   const [weight, setWeight] = useState<number | null>(exercise?.default_weight ?? 0)
@@ -70,6 +71,7 @@ function ExerciseForm({
       (!!exercise.notes ||
         !!exercise.video_url ||
         exercise.required_gear_ids.length > 0 ||
+        exercise.supports_angle ||
         !exercise.active),
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -93,6 +95,7 @@ function ExerciseForm({
       default_sets: sets,
       default_reps: reps,
       default_weight: weight,
+      supports_angle: supportsAngle,
     })
     if (!parsed.success) {
       const next: Record<string, string> = {}
@@ -173,6 +176,23 @@ function ExerciseForm({
           </button>
           {detailsOpen && (
             <div id="ex-details" className="flex flex-col gap-4">
+              <div className="flex flex-col">
+                <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
+                  Has angle (flat / incline / decline)
+                  <Switch
+                    checked={supportsAngle}
+                    onCheckedChange={setSupportsAngle}
+                    aria-label="Has angle (flat / incline / decline)"
+                    aria-describedby="ex-angle-help"
+                  />
+                </label>
+                <p id="ex-angle-help" className="text-muted-foreground -mt-1 text-sm">
+                  {exercise?.supports_angle && !supportsAngle
+                    ? 'Turning it off clears the angle on its plan items.'
+                    : 'Pick the angle per plan item, so one exercise covers all three.'}
+                </p>
+              </div>
+
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="ex-video">Video link</Label>
                 <Input

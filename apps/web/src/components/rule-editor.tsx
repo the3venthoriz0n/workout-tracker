@@ -1,9 +1,12 @@
-import { defaultRule, ruleInputSchema, type RuleInput } from '@workout/shared'
+import { ruleInputSchema, type RuleInput, type RuleSource } from '@workout/shared'
+import { useState } from 'react'
 import { NumberField } from '@/components/number-field'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
+import { SOURCE_PHRASES } from '@/lib/rule-summary'
 import { useProfile } from '@/repo/hooks'
 
 // Validates, saves and reports failure. Resolves false when invalid or the write fails,
@@ -104,26 +107,62 @@ export function RuleFields({ rule, onSave, idPrefix, showStepHint = true }: Fiel
 }
 
 type Props = {
+  /** The item's effective rule (null: a "no progression" override). */
   rule: RuleInput | null
+  source: RuleSource
+  /** Stores an item override (null = no progression). */
   onSave: (rule: RuleInput | null) => Promise<void>
+  /** Drops the override: the item inherits again. */
+  onClear: () => Promise<void>
   itemName: string
   idPrefix: string
 }
 
-// The expandable body: "No progression" switch plus the fields when a rule exists
-export function RuleEditor({ rule, onSave, itemName, idPrefix }: Props) {
-  const profile = useProfile().data
+// The expandable body of a plan item's rule. Inheriting items show the inherited rule; editing
+// any field stores an override. "Use default" and switching "No progression" off both go back
+// to inheriting (clearRule), so turning progression back on never freezes a copy of the default.
+export function RuleEditor({ rule, source, onSave, onClear, itemName, idPrefix }: Props) {
   const save = useSaveRule<RuleInput | null>(onSave)
-  // Same rule a new plan item would get
-  const restoredRule = profile?.default_rule ?? defaultRule(profile?.weight_increment ?? 5)
+  const [clearing, setClearing] = useState(false)
+  async function clear() {
+    setClearing(true)
+    try {
+      await onClear()
+    } catch (err) {
+      notifyError(err)
+    } finally {
+      setClearing(false)
+    }
+  }
   return (
     <div className="flex flex-col gap-3">
+      {source === 'item' ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-muted-foreground text-sm">Override for this item.</p>
+          {rule !== null && (
+            <Button
+              variant="outline"
+              className="min-h-11"
+              disabled={clearing}
+              aria-label={`Use default for ${itemName}`}
+              onClick={() => void clear()}
+            >
+              Use default
+            </Button>
+          )}
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-sm">
+          Inherited from {SOURCE_PHRASES[source]}. Changing a value makes an override for this item.
+        </p>
+      )}
       <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
         No progression
         <Switch
           checked={rule === null}
+          disabled={clearing}
           aria-label={`No progression for ${itemName}`}
-          onCheckedChange={(off) => void save(off ? null : restoredRule)}
+          onCheckedChange={(off) => void (off ? save(null) : clear())}
         />
       </label>
       {rule && <RuleFields rule={rule} onSave={onSave} idPrefix={idPrefix} />}

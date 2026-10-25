@@ -258,8 +258,8 @@ test('the picker hides plans and days without items', async () => {
   renderApp(repo)
   await screen.findByRole('button', { name: 'Start workout' })
   expect(screen.queryByRole('option', { name: 'Bare Plan' })).toBeNull()
-  expect(screen.queryByRole('option', { name: 'Empty Day' })).toBeNull()
-  expect(screen.getByRole('option', { name: 'Day A' })).toBeTruthy()
+  expect(screen.queryByRole('radio', { name: 'Empty Day' })).toBeNull()
+  expect(screen.getByRole('radio', { name: 'Day A' })).toBeTruthy()
   void user
 })
 

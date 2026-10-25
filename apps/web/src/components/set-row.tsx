@@ -13,24 +13,40 @@ type Props = {
   unit: string
   onToggle: () => Promise<boolean>
   onEdit: (patch: Patch) => Promise<boolean>
+  /** In a superset block: the member's label (A1) and exercise name, shown on the row. */
+  member?: { label: string; name: string }
 }
 
 const LONG_PRESS_MS = 500
 const MOVE_TOLERANCE_PX = 10
 
-export function SetRow({ set, unit, onToggle, onEdit }: Props) {
+export function SetRow({ set, unit, onToggle, onEdit, member }: Props) {
   const [editing, setEditing] = useState(false)
+  const [focusReps, setFocusReps] = useState(false)
   const [note, setNote] = useState(set.note)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressed = useRef(false)
   const origin = useRef({ x: 0, y: 0 })
   const pending = useRef(false)
+  const repsId = `set-reps-${set.id}`
 
   const cancelPress = () => {
     if (timer.current) clearTimeout(timer.current)
     timer.current = null
   }
   useEffect(() => cancelPress, [])
+  useEffect(() => {
+    if (!editing || !focusReps) return
+    const el = document.getElementById(repsId) as HTMLInputElement | null
+    el?.focus()
+    el?.select()
+    setFocusReps(false)
+  }, [editing, focusReps, repsId])
+
+  // An AMRAP set's reps are the minimum until logged: "5+" while untouched
+  const reps = set.amrap && !set.done && set.actual_reps === set.target_reps ? `${set.actual_reps}+` : String(set.actual_reps)
+  const numbers = `${reps} × ${formatWeight(set.weight)} ${unit}`
+  const label = `Set ${set.set_no}: ${numbers}${set.amrap ? ', AMRAP' : ''}${member ? `, ${member.label} ${member.name}` : ''}`
 
   function commitNote() {
     const next = note.trim()
@@ -43,7 +59,7 @@ export function SetRow({ set, unit, onToggle, onEdit }: Props) {
         <button
           type="button"
           aria-pressed={set.done}
-          aria-label={`Set ${set.set_no}: ${set.actual_reps} × ${formatWeight(set.weight)} ${unit}`}
+          aria-label={label}
           className={cn(
             'flex min-h-16 w-full min-w-0 flex-1 touch-manipulation items-center gap-3 rounded-md border-2 px-3 text-left select-none',
             set.done
@@ -77,10 +93,20 @@ export function SetRow({ set, unit, onToggle, onEdit }: Props) {
             }
             if (pending.current) return
             pending.current = true
-            if (!set.done) tapHaptic()
-            void onToggle().finally(() => {
-              pending.current = false
-            })
+            const markingDone = !set.done
+            if (markingDone) tapHaptic()
+            void onToggle()
+              .then((ok) => {
+                // The AMRAP rep count is the number most likely to change: open it right after
+                // the set is saved as done (the toggle itself never waits on the editor)
+                if (ok && markingDone && set.amrap) {
+                  setEditing(true)
+                  setFocusReps(true)
+                }
+              })
+              .finally(() => {
+                pending.current = false
+              })
           }}
         >
           {/* Set number as a small plate; inverted when done */}
@@ -95,9 +121,30 @@ export function SetRow({ set, unit, onToggle, onEdit }: Props) {
           >
             {set.set_no}
           </span>
-          <span aria-hidden className="font-heading min-w-0 flex-1 truncate text-[24px] leading-none font-bold tabular-nums">
-            {`${set.actual_reps} × ${formatWeight(set.weight)} ${unit}`}
+          <span aria-hidden className="flex min-w-0 flex-1 flex-col gap-1">
+            {member && (
+              <span
+                className={cn(
+                  'truncate text-sm leading-none font-semibold',
+                  set.done ? 'text-primary-foreground' : 'text-muted-foreground',
+                )}
+              >
+                {member.label} · {member.name}
+              </span>
+            )}
+            <span className="font-heading truncate text-[24px] leading-none font-bold tabular-nums">{numbers}</span>
           </span>
+          {set.amrap && (
+            <span
+              aria-hidden
+              className={cn(
+                'font-heading shrink-0 rounded-sm border-2 px-1.5 py-0.5 text-sm leading-none font-bold tracking-wide',
+                set.done ? 'border-primary-foreground text-primary-foreground' : 'border-foreground/70 text-foreground',
+              )}
+            >
+              AMRAP
+            </span>
+          )}
           <CheckIcon
             aria-hidden
             strokeWidth={3}
@@ -119,6 +166,7 @@ export function SetRow({ set, unit, onToggle, onEdit }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <NumberField
               label="Reps"
+              id={repsId}
               kind="reps"
               value={set.actual_reps}
               onCommit={(v) => {

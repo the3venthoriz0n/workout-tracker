@@ -1,13 +1,22 @@
-import { ChevronDown, ChevronUp, Plus } from 'lucide-react'
+import { ChevronDown, ChevronUp, Link2, Plus, Unlink } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Link, useParams } from 'react-router'
 import { SettingsLink } from '@/app/screen'
+import {
+  DayColorButton,
+  DayColorPicker,
+  SupersetPicker,
+  dayBlocks,
+  supersetError,
+} from '@/components/day-parts'
 import { ExercisePicker } from '@/components/exercise-picker'
 import { ExerciseSheet } from '@/components/exercise-sheet'
+import { DayBar } from '@/components/plan-bits'
 import { PlanItemRow } from '@/components/plan-item-row'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { dayColorOf } from '@/lib/day-colors'
 import { notifyError } from '@/lib/notify'
 import {
   useAddPlanItem,
@@ -16,6 +25,7 @@ import {
   usePlan,
   useSavePlan,
   useSavePlanDay,
+  useSetSuperset,
 } from '@/repo/hooks'
 
 // Commits on blur/Enter; empty input reverts to the saved name.
@@ -73,6 +83,9 @@ export function PlanDetailScreen() {
   const [pickerDay, setPickerDay] = useState<string | null>(null)
   const [creating, setCreating] = useState<{ dayId: string; name: string } | null>(null)
   const [confirmDay, setConfirmDay] = useState<string | null>(null)
+  const [colorDay, setColorDay] = useState<string | null>(null)
+  const [linkDay, setLinkDay] = useState<string | null>(null)
+  const setSuperset = useSetSuperset()
 
   if (plan.isPending) return <div className="p-4" aria-busy="true" />
   const tree = plan.data
@@ -115,6 +128,7 @@ export function PlanDetailScreen() {
           className="bg-card flex flex-col gap-3 rounded-lg border p-3"
         >
           <div className="flex items-center gap-2">
+            <DayBar color={dayColorOf(day)} className="w-2 self-stretch" />
             <InlineName
               label="Day name"
               className="font-heading min-h-11 flex-1 text-xl font-bold"
@@ -122,6 +136,11 @@ export function PlanDetailScreen() {
               onCommit={(name) =>
                 saveDay.mutate({ id: day.id, plan_id: tree.id, name }, { onError: (e) => notifyError(e) })
               }
+            />
+            <DayColorButton
+              day={day}
+              open={colorDay === day.id}
+              onToggle={() => setColorDay(colorDay === day.id ? null : day.id)}
             />
             <Button
               variant="ghost"
@@ -149,19 +168,66 @@ export function PlanDetailScreen() {
             </Button>
           </div>
 
+          {colorDay === day.id && <DayColorPicker day={day} planId={tree.id} />}
+
           {day.items.length === 0 && (
             <p className="text-muted-foreground text-sm">No exercises on this day yet.</p>
           )}
-          <ul className="divide-y border-y">
-            {day.items.map((item, i) => (
-              <PlanItemRow
-                key={item.id}
-                item={item}
-                isFirst={i === 0}
-                isLast={i === day.items.length - 1}
-              />
-            ))}
-          </ul>
+          {linkDay === day.id ? (
+            <SupersetPicker day={day} onDone={() => setLinkDay(null)} />
+          ) : (
+            <ul className="divide-y border-y">
+              {dayBlocks(day.items).map((block) =>
+                block.kind === 'item' ? (
+                  <PlanItemRow
+                    key={block.item.id}
+                    item={block.item}
+                    isFirst={block.index === 0}
+                    isLast={block.index === day.items.length - 1}
+                  />
+                ) : (
+                  <li key={block.groupId} className="py-3">
+                    <div
+                      role="group"
+                      aria-label={`Superset ${block.letter}`}
+                      className="border-muted-foreground flex flex-col rounded-sm border-l-4 pl-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="font-heading text-lg leading-none font-bold tracking-wide uppercase">
+                          Superset {block.letter}
+                        </h3>
+                        <Button
+                          variant="ghost"
+                          className="min-h-11"
+                          aria-label={`Unlink superset ${block.letter}`}
+                          disabled={setSuperset.isPending}
+                          onClick={() =>
+                            setSuperset.mutate(
+                              { planDayId: day.id, groupId: block.groupId, itemIds: null },
+                              { onError: supersetError },
+                            )
+                          }
+                        >
+                          <Unlink aria-hidden /> Unlink
+                        </Button>
+                      </div>
+                      <ul className="divide-y">
+                        {block.members.map((m) => (
+                          <PlanItemRow
+                            key={m.item.id}
+                            item={m.item}
+                            supersetLabel={m.label}
+                            isFirst={m.index === 0}
+                            isLast={m.index === day.items.length - 1}
+                          />
+                        ))}
+                      </ul>
+                    </div>
+                  </li>
+                ),
+              )}
+            </ul>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <Button
@@ -172,6 +238,16 @@ export function PlanDetailScreen() {
             >
               <Plus aria-hidden /> Add exercise
             </Button>
+            {day.items.length >= 2 && linkDay !== day.id && (
+              <Button
+                variant="outline"
+                className="min-h-11"
+                aria-label={`Link superset in ${day.name}`}
+                onClick={() => setLinkDay(day.id)}
+              >
+                <Link2 aria-hidden /> Link superset
+              </Button>
+            )}
             {confirmDay === day.id ? (
               <>
                 <Button

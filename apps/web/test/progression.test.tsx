@@ -1,4 +1,4 @@
-import { defaultRule, type RuleInput } from '@workout/shared'
+import { type RuleInput } from '@workout/shared'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -18,19 +18,23 @@ const repsRule: RuleInput = {
   rep_ceiling: 12,
 }
 
+// Two items of Back Squat (Push and Legs) and one of Bench Press
 async function setup(withPlan = true, prepare?: (repo: LocalRepo, items: string[]) => Promise<void>) {
   const repo = new LocalRepo(new AppDb(`prog-${crypto.randomUUID()}`))
   await repo.init()
-  const [ex1, ex2] = await repo.listExercises()
-  if (!ex1 || !ex2) throw new Error('seed missing')
+  const exercises = await repo.listExercises()
+  const squat = exercises.find((e) => e.name === 'Back Squat')!
+  const bench = exercises.find((e) => e.name === 'Bench Press')!
   let planId = ''
   const items: string[] = []
   if (withPlan) {
     const plan = await repo.savePlan({ name: 'PPL' })
     planId = plan.id
-    const day = await repo.savePlanDay({ plan_id: plan.id, name: 'Push' })
-    items.push((await repo.addPlanItem(day.id, ex1.id)).id)
-    items.push((await repo.addPlanItem(day.id, ex2.id)).id)
+    const push = await repo.savePlanDay({ plan_id: plan.id, name: 'Push' })
+    const legs = await repo.savePlanDay({ plan_id: plan.id, name: 'Legs' })
+    items.push((await repo.addPlanItem(push.id, squat.id)).id)
+    items.push((await repo.addPlanItem(push.id, bench.id)).id)
+    items.push((await repo.addPlanItem(legs.id, squat.id)).id)
   }
   await prepare?.(repo, items)
   const router = createMemoryRouter(routes, { initialEntries: ['/progression'] })
@@ -41,11 +45,12 @@ async function setup(withPlan = true, prepare?: (repo: LocalRepo, items: string[
       </RepoProvider>
     </QueryClientProvider>,
   )
-  return { repo, planId, items }
+  return { repo, planId, items, squat, bench }
 }
 
-const ruleOf = async (repo: LocalRepo, planId: string, itemId: string) =>
-  (await repo.getPlan(planId))?.days[0]?.items.find((i) => i.id === itemId)?.rule
+const exerciseRow = (name: string) => screen.findByRole('listitem', { name })
+const progressionOf = async (repo: LocalRepo, id: string) =>
+  (await repo.listProgressionByExercise()).find((e) => e.exercise_id === id)!
 
 test('shows the title and the progression step with helper text', async () => {
   await setup(false)
@@ -74,12 +79,13 @@ test('step rejects 0 (reverts) and persists a valid value', async () => {
   await waitFor(async () => expect((await repo.getProfile()).weight_increment).toBe(2.5))
 })
 
-test('defaults card shows the effective default, persists edits and notes the scope', async () => {
+test('app default card shows the effective default, persists edits and says it applies live', async () => {
   const user = userEvent.setup()
   const { repo } = await setup(false)
-  const heading = await screen.findByText('Defaults for new plan items')
+  const heading = await screen.findByText('App default rule')
   const card = within(heading.closest('[data-slot="card"]') as HTMLElement)
-  expect(card.getByText(/only affects plan items you add afterwards/)).toBeTruthy()
+  expect(card.getByText(/Used by every exercise without its own default/)).toBeTruthy()
+  expect(screen.queryByText(/only affects plan items you add afterwards/)).toBeNull()
   expect((card.getByLabelText('Fail streak limit') as HTMLInputElement).value).toBe('3')
   expect((await repo.getProfile()).default_rule).toBeUndefined()
   const limit = card.getByLabelText('Fail streak limit')
@@ -104,85 +110,12 @@ test('defaults card shows the effective default, persists edits and notes the sc
   expect(card.queryByRole('switch')).toBeNull()
 })
 
-test('lists rules grouped by plan and day with one-line summaries', async () => {
-  await setup(true, async (repo, items) => {
-    await repo.setRule(items[0]!, repsRule)
-    await repo.setRule(items[1]!, null)
-  })
-  expect(await screen.findByRole('heading', { name: 'PPL' })).toBeTruthy()
-  expect(screen.getByRole('heading', { name: 'Push' })).toBeTruthy()
-  expect(
-    await screen.findByText('Adds 1 rep · up to 12 reps · deload 15% after 2 misses'),
-  ).toBeTruthy()
-  expect(screen.getByText('No progression')).toBeTruthy()
-})
-
-test('weight rules summarize in the profile unit', async () => {
-  await setup()
-  const rows = await screen.findAllByRole('listitem')
-  expect(rows).toHaveLength(2)
-  expect(
-    within(rows[0]!).getByText('+5 lb on success · deload 10% after 3 misses'),
-  ).toBeTruthy()
-})
-
-test('expanding a row edits the rule through the shared editor', async () => {
-  const user = userEvent.setup()
-  const { repo, planId, items } = await setup()
-  const row = (await screen.findAllByRole('listitem'))[0]!
-  await user.click(within(row).getByRole('button', { name: /^Edit rule for / }))
-  const limit = within(row).getByLabelText('Fail streak limit')
-  await user.clear(limit)
-  await user.type(limit, '4{Enter}')
-  await waitFor(async () => expect((await ruleOf(repo, planId, items[0]!))?.fail_streak_limit).toBe(4))
-  expect(await within(row).findByText('+5 lb on success · deload 10% after 4 misses')).toBeTruthy()
-})
-
-test('the No progression switch works from the list', async () => {
-  const user = userEvent.setup()
-  const { repo, planId, items } = await setup()
-  const row = (await screen.findAllByRole('listitem'))[0]!
-  await user.click(within(row).getByRole('button', { name: /^Edit rule for / }))
-  await user.click(within(row).getByRole('switch'))
-  await waitFor(async () => expect(await ruleOf(repo, planId, items[0]!)).toBeNull())
-  await waitFor(() => expect(within(row).getAllByText('No progression').length).toBeGreaterThan(0))
-  await user.click(within(row).getByRole('switch'))
-  await waitFor(async () => expect(await ruleOf(repo, planId, items[0]!)).not.toBeNull())
-})
-
-test('re-enabling progression restores the profile default rule (list)', async () => {
-  const user = userEvent.setup()
-  const dflt: RuleInput = { ...repsRule, success_amount: 2, rep_ceiling: 10 }
-  const { repo } = await setup(true, async (r) => {
-    await r.updateProfile({ default_rule: dflt })
-  })
-  const row = (await screen.findAllByRole('listitem'))[0]!
-  await user.click(within(row).getByRole('button', { name: /^Edit rule for / }))
-  await user.click(within(row).getByRole('switch'))
-  await waitFor(async () => expect((await repo.listProgression())[0]?.rule).toBeNull())
-  await user.click(within(row).getByRole('switch'))
-  await waitFor(async () => expect((await repo.listProgression())[0]?.rule).toMatchObject(dflt))
-})
-
-test('re-enabling progression without a default restores defaultRule(step)', async () => {
-  const user = userEvent.setup()
-  const { repo } = await setup()
-  const row = (await screen.findAllByRole('listitem'))[0]!
-  await user.click(within(row).getByRole('button', { name: /^Edit rule for / }))
-  await user.click(within(row).getByRole('switch'))
-  await waitFor(async () => expect((await repo.listProgression())[0]?.rule).toBeNull())
-  await user.click(within(row).getByRole('switch'))
-  await waitFor(async () =>
-    expect((await repo.listProgression())[0]?.rule).toMatchObject(defaultRule(5)),
-  )
-})
-
 test('defaults card rejects deload % of 0 and 101 and clears the rep ceiling to null', async () => {
   const user = userEvent.setup()
   const { repo } = await setup(false, async (r) => {
     await r.updateProfile({ default_rule: repsRule })
   })
-  const heading = await screen.findByText('Defaults for new plan items')
+  const heading = await screen.findByText('App default rule')
   const card = within(heading.closest('[data-slot="card"]') as HTMLElement)
   const deload = card.getByLabelText('Deload %') as HTMLInputElement
   for (const bad of ['0', '101']) {
@@ -198,8 +131,72 @@ test('defaults card rejects deload % of 0 and 101 and clears the rep ceiling to 
   await waitFor(async () => expect((await repo.getProfile()).default_rule?.rep_ceiling).toBeNull())
 })
 
-test('empty state links to Plans', async () => {
-  await setup(false)
-  expect(await screen.findByText('No plans yet')).toBeTruthy()
-  expect(screen.getByRole('link', { name: 'Go to Plans' }).getAttribute('href')).toBe('/plans')
+test('each exercise appears once with its effective rule, its source and how many items inherit', async () => {
+  await setup()
+  const rows = await screen.findAllByRole('listitem', { name: 'Back Squat' })
+  expect(rows).toHaveLength(1)
+  const squat = rows[0]!
+  expect(within(squat).getByText('+5 lb on success · deload 10% after 3 misses')).toBeTruthy()
+  expect(within(squat).getByText('Built-in')).toBeTruthy()
+  expect(within(squat).getByText('2 items inherit')).toBeTruthy()
+  // Exercises in no plan are listed too
+  expect(await exerciseRow('Deadlift')).toBeTruthy()
+  expect(within(await exerciseRow('Deadlift')).getByText('Not in any plan')).toBeTruthy()
+})
+
+test('the app default shows as the source when set', async () => {
+  await setup(true, async (r) => {
+    await r.updateProfile({ default_rule: repsRule })
+  })
+  const squat = await exerciseRow('Back Squat')
+  expect(within(squat).getByText('App default')).toBeTruthy()
+  expect(within(squat).getByText('Adds 1 rep · up to 12 reps · deload 15% after 2 misses')).toBeTruthy()
+})
+
+test('editing the exercise default sets it for inheriting items; Use app default clears it', async () => {
+  const user = userEvent.setup()
+  const { repo, planId, items, squat: ex } = await setup()
+  const squat = await exerciseRow('Back Squat')
+  await user.click(within(squat).getByRole('button', { name: 'Edit default for Back Squat' }))
+  const limit = within(squat).getByLabelText('Fail streak limit')
+  await user.clear(limit)
+  await user.type(limit, '5{Enter}')
+  await waitFor(async () => expect((await progressionOf(repo, ex.id)).source).toBe('exercise'))
+  expect((await repo.listExercises()).find((e) => e.id === ex.id)!.default_rule?.fail_streak_limit).toBe(5)
+  // Inheriting plan items follow it at once
+  const item = (await repo.getPlan(planId))!.days[0]!.items.find((i) => i.id === items[0])!
+  expect(item.ruleSource).toBe('exercise')
+  expect(item.rule?.fail_streak_limit).toBe(5)
+  await waitFor(() => expect(within(squat).getByText('Exercise default')).toBeTruthy())
+
+  await user.click(within(squat).getByRole('button', { name: 'Use app default for Back Squat' }))
+  await waitFor(async () => expect((await progressionOf(repo, ex.id)).source).toBe('builtin'))
+  await waitFor(() => expect(within(squat).getByText('Built-in')).toBeTruthy())
+})
+
+test('overriding items are listed under the exercise with plan · day and Use default', async () => {
+  const user = userEvent.setup()
+  const { repo, items, squat: ex } = await setup(true, async (r, ids) => {
+    await r.setRule(ids[2]!, repsRule)
+  })
+  const squat = await exerciseRow('Back Squat')
+  expect(within(squat).getByText('1 item inherits')).toBeTruthy()
+  const overrides = within(squat).getByRole('list', { name: 'Overrides of Back Squat' })
+  expect(within(overrides).getByText('PPL · Legs')).toBeTruthy()
+  expect(within(overrides).getByText('Adds 1 rep · up to 12 reps · deload 15% after 2 misses')).toBeTruthy()
+  await user.click(within(overrides).getByRole('button', { name: 'Use default for Back Squat in PPL · Legs' }))
+  await waitFor(async () => expect((await progressionOf(repo, ex.id)).overrides).toHaveLength(0))
+  void items
+  await waitFor(() => expect(within(squat).getByText('2 items inherit')).toBeTruthy())
+  expect(within(squat).queryByRole('list', { name: 'Overrides of Back Squat' })).toBeNull()
+})
+
+test('a no-progression override shows as such', async () => {
+  await setup(true, async (r, ids) => {
+    await r.setRule(ids[1]!, null)
+  })
+  const bench = await exerciseRow('Bench Press')
+  const overrides = within(bench).getByRole('list', { name: 'Overrides of Bench Press' })
+  expect(within(overrides).getByText('No progression')).toBeTruthy()
+  expect(within(bench).getByText('No items inherit')).toBeTruthy()
 })
