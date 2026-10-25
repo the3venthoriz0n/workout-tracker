@@ -35,7 +35,13 @@ export async function signInFlow(deps: FlowDeps, email: string, password: string
   } catch (e) {
     if (e instanceof ProfileNotFoundError) return upload(deps) // new, empty account
     // Fail closed: cannot tell whether the account has data, so keep the guest data and the guest session.
-    await deps.auth.signOut().catch(() => undefined)
+    try {
+      await deps.auth.signOut()
+    } catch {
+      // The session cookie survives and we cannot tell what the account holds: stay signed in with the guest
+      // data untouched and let "Retry upload" decide (it lands on the discard prompt if the account has data).
+      return 'upload-failed'
+    }
     throw new AuthError('check_failed')
   }
   return 'confirm-discard'
@@ -48,8 +54,9 @@ export async function confirmDiscard({ local }: FlowDeps): Promise<FlowOutcome> 
   return 'signed-in'
 }
 
+// Throws if the server sign-out failed: the caller must then stay on the prompt, not fall back to guest mode.
 export async function cancelDiscard({ auth }: FlowDeps): Promise<void> {
-  await auth.signOut().catch(() => undefined)
+  await auth.signOut()
 }
 
 // Server sign-out first; on failure nothing local changes and the error surfaces.

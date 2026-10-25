@@ -32,9 +32,11 @@ type S =
 type LocalWithReset = Repo & { reset(): Promise<void> }
 
 const HINT = 'wt-account-hint'
-type Hint = { id: string; email: string }
-// The hint remembers that this device was signed in (and as whom) so a cold start without a
-// connection can open the account's offline mirror instead of guest data.
+type HintPhase = 'pending-upload' | 'confirm-discard'
+type Hint = { id: string; email: string; phase?: HintPhase }
+// The hint remembers that this device is signed in (and as whom) so a cold start without a connection can open
+// the account's offline mirror, and it persists an unfinished upload/discard decision across reloads so guest
+// data is never wiped without an explicit confirmation.
 function setHint(h: Hint | null) {
   try {
     if (h) localStorage.setItem(HINT, h.id ? JSON.stringify(h) : '1')
@@ -43,13 +45,16 @@ function setHint(h: Hint | null) {
     // storage may be blocked; the hint is only a convenience
   }
 }
-function readHint(): { present: boolean; id?: string; email?: string } {
+function readHint(): { present: boolean; id?: string; email?: string; phase?: HintPhase } {
   try {
     const raw = localStorage.getItem(HINT)
     if (!raw) return { present: false }
     try {
       const v = JSON.parse(raw) as Partial<Hint> | null
-      if (v && typeof v.id === 'string' && v.id && typeof v.email === 'string') return { present: true, id: v.id, email: v.email }
+      if (v && typeof v.id === 'string' && v.id && typeof v.email === 'string') {
+        const phase = v.phase === 'pending-upload' || v.phase === 'confirm-discard' ? v.phase : undefined
+        return { present: true, id: v.id, email: v.email, phase }
+      }
     } catch {
       // legacy hint ('1')
     }
@@ -126,7 +131,7 @@ export function AuthProvider({
   const go = useCallback(
     (next: S) => {
       queryClient.clear()
-      if (next.kind === 'signed-in') setHint({ id: accountRef.current, email: next.email })
+      if (next.kind === 'signed-in') setHint({ id: accountRef.current, email: next.email, phase: next.phase === 'ready' ? undefined : next.phase })
       else if (next.kind === 'guest') setHint(null)
       setS(next)
     },
@@ -146,6 +151,8 @@ export function AuthProvider({
         const hint = readHint()
         if (!hint.present) return go({ kind: 'guest' })
         // Offline cold start: if this account's active workout (or unsent edits) is on the device, open on it.
+        // An unfinished upload/discard decision cannot be resolved offline: never skip past it.
+        if (hint.phase) return go({ kind: 'unreachable' })
         if (hint.id && hint.email) {
           accountRef.current = hint.id
           const api = getApi()
@@ -161,7 +168,11 @@ export function AuthProvider({
       accountRef.current = user.userId
       try {
         await getApi().getProfile()
-        if (!cancelled) go({ kind: 'signed-in', email: user.email, phase: 'ready' })
+        if (cancelled) return
+        // Reload mid-decision: restore the prompt; the guest data on this device was never confirmed away.
+        const h = readHint()
+        const phase: Phase = h.id === user.userId && h.phase ? h.phase : 'ready'
+        go({ kind: 'signed-in', email: user.email, phase })
       } catch (e) {
         if (cancelled) return
         if (e instanceof ProfileNotFoundError) go({ kind: 'signed-in', email: user.email, phase: 'pending-upload' })
@@ -195,15 +206,17 @@ export function AuthProvider({
   }, [queryClient, go])
 
   // Sign-in/up flows learn the account id from the auth reply; the API repo is built for that id afterwards.
-  const learn = async (u: Promise<{ userId: string; email: string }>) => {
-    const r = await u
+  const learn = async (call: () => Promise<{ userId: string; email: string }>) => {
+    // Whatever repo is still around belongs to the previous account: stop its replay before the cookie can change.
+    offlineApi()?.pause()
+    const r = await call()
     accountRef.current = r.userId
     return r
   }
   const flowAuth: AuthClient = {
     ...auth,
-    signIn: (e, p) => learn(auth.signIn(e, p)),
-    signUp: (e, p) => learn(auth.signUp(e, p)),
+    signIn: (e, p) => learn(() => auth.signIn(e, p)),
+    signUp: (e, p) => learn(() => auth.signUp(e, p)),
   }
   const deps = (): FlowDeps => ({
     auth: flowAuth,
@@ -257,6 +270,7 @@ export function AuthProvider({
       run(async () => {
         if (sRef.current.kind === 'expired') {
           // Re-authenticating: the local DB was already reset, so there is nothing to confirm or upload.
+          offlineApi()?.pause()
           const u = await auth.signIn(email, password)
           // Same account: its paused queue carries on. Another account: getApi() builds a fresh repo for the
           // new id and drops the old one, so the previous account's queued edits are never replayed here.
@@ -265,11 +279,20 @@ export function AuthProvider({
           if (same) offlineApi()?.resume()
           return go({ kind: 'signed-in', email: u.email || email, phase: 'ready' })
         }
-        applyOutcome(await signInFlow(deps(), email, password), email)
+        try {
+          applyOutcome(await signInFlow(deps(), email, password), email)
+        } catch (e) {
+          if (e instanceof AuthError && e.kind === 'check_failed') {
+            dropApi() // the account check failed: nothing of that account may keep replaying here
+            accountRef.current = ''
+          }
+          throw e
+        }
       }),
     signOut: (opts) =>
       run(async () => {
         const off = offlineApi()
+        const cur = sRef.current
         if (off && !opts?.discardPending) {
           if (sRef.current.kind === 'signed-in' && off.pending() > 0) await off.flush() // try to send them first
           if (off.pending() > 0) throw new AuthError('unsynced_changes')
@@ -277,6 +300,9 @@ export function AuthProvider({
         if (sRef.current.kind === 'expired') {
           await auth.signOut().catch(() => undefined) // session is already gone
           await local.reset()
+        } else if (cur.kind === 'signed-in' && cur.phase === 'confirm-discard') {
+          // The guest data was never confirmed away: only end the server session, keep the local data.
+          await auth.signOut()
         } else {
           await signOutFlow(deps())
         }

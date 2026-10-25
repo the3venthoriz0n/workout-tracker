@@ -27,6 +27,7 @@ function makeOfflineApi(id: string, o: { pending?: number; hasData?: boolean } =
     paused: () => false,
     flush: vi.fn(async () => {}),
     resume: vi.fn(),
+    pause: vi.fn(),
     clear: vi.fn(async () => { pending = 0 }),
     dispose: vi.fn(),
     hasOfflineData: vi.fn(async () => o.hasData ?? false),

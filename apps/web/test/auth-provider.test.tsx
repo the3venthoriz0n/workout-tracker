@@ -2,10 +2,12 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ProfileNotFoundError, UnauthenticatedError, OfflineError } from '@workout/shared'
-import { expect, test, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import { AuthError, type AuthClient } from '../src/auth/client'
 import { AuthProvider, useAuth } from '../src/auth/auth-provider'
 import { useRepo } from '../src/repo/provider'
+
+afterEach(() => localStorage.clear()) // the hint persists the discard/upload phase between tests
 
 function makeLocal() {
   return { tag: 'local', init: vi.fn(async () => {}), exportAll: vi.fn(async () => ({ version: 1 })), reset: vi.fn(async () => {}) }

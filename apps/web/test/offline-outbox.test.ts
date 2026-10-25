@@ -408,3 +408,74 @@ test('clear() forgets the account queue and mirror', async () => {
   expect(repo.pending()).toBe(0)
   expect(await repo.hasOfflineData()).toBe(false)
 })
+
+test('finishSession checks the store, not a per-instance counter (another tab queued an edit)', async () => {
+  const server = makeServer()
+  const tabA = make(server).repo
+  await seedMirror(server, tabA)
+  const tabB = make(server, 'acct-a', vi.fn(), new OutboxDb(dbName)).repo // opened while the queue was empty
+  await tabB.ready
+  server.online = false
+  await tabA.updateSet('a', { done: true, updated_at: t(1) })
+  server.online = true
+  server.calls.length = 0
+  await tabB.finishSession('s1')
+  const order = server.calls.map((c) => c.method + ' ' + c.path)
+  expect(order.findIndex((c) => c === 'PATCH /sets/a')).toBeGreaterThanOrEqual(0)
+  expect(order.findIndex((c) => c === 'PATCH /sets/a')).toBeLessThan(order.findIndex((c) => c.endsWith('/complete')))
+})
+
+test('two tabs replaying the same queue never drive the pending count negative', async () => {
+  const server = makeServer()
+  const tabA = make(server).repo
+  await seedMirror(server, tabA)
+  server.online = false
+  await tabA.updateSet('a', { done: true, updated_at: t(1) })
+  await tabA.updateSet('b', { done: true, updated_at: t(2) })
+  const tabB = make(server, 'acct-a', vi.fn(), new OutboxDb(dbName)).repo
+  await tabB.ready
+  server.online = true
+  await Promise.all([tabA.flush(), tabB.flush()])
+  await Promise.all([tabA.flush(), tabB.flush()])
+  expect(tabA.pending()).toBe(0)
+  expect(tabB.pending()).toBe(0)
+})
+
+test('discardSession waits for an in-flight replay and leaves nothing queued', async () => {
+  const server = makeServer()
+  const { repo } = make(server)
+  await seedMirror(server, repo)
+  server.online = false
+  await repo.updateSet('a', { done: true, updated_at: t(1) })
+  await repo.updateSet('b', { done: true, updated_at: t(2) })
+  server.online = true
+  const inner = server.fetch
+  let release!: () => void
+  const gate = new Promise<void>((r) => (release = r))
+  server.fetch = (async (u: string, i?: RequestInit) => {
+    if (i?.method === 'PATCH') await gate
+    return inner(u, i)
+  }) as typeof fetch
+  const { repo: slow } = make(server, 'acct-a', vi.fn(), new OutboxDb(dbName))
+  await slow.ready // starts replaying; blocked at the first PATCH
+  const discard = slow.discardSession('s1')
+  release()
+  await discard
+  await slow.flush()
+  expect(slow.pending()).toBe(0)
+  expect(await createOutboxStore(db, 'acct-a').list()).toHaveLength(0)
+})
+
+test('a 502/503/504 on a direct edit is queued like being offline; 403 on replay is kept, not dropped', async () => {
+  const server = makeServer()
+  const { repo, onDropped } = make(server)
+  await seedMirror(server, repo)
+  server.statusFor = () => 503
+  const row = await repo.updateSet('a', { done: true, updated_at: t(1) })
+  expect(row.done).toBe(true)
+  expect(repo.pending()).toBe(1)
+  server.statusFor = () => 403
+  await repo.flush()
+  expect(repo.pending()).toBe(1)
+  expect(onDropped).not.toHaveBeenCalled()
+})

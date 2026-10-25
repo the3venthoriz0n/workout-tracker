@@ -37,6 +37,8 @@ export type OfflineControls = {
   flush(): Promise<void>
   /** After a 401 and a successful re-sign-in as the SAME account. */
   resume(): void
+  /** Stop replaying (a sign-in for another account is about to change the cookie). */
+  pause(): void
   subscribe(cb: (s: OfflineState) => void): () => void
   hasOfflineData(): Promise<boolean>
   /** Forget this account's queue and mirror (only after the user confirmed). */
@@ -49,10 +51,12 @@ export function isOfflineRepo(r: unknown): r is OfflineRepo {
   return !!r && typeof (r as OfflineRepo).pending === 'function' && typeof (r as OfflineRepo).flush === 'function'
 }
 
-// 4xx other than 401 is permanent for that op; 408/429 are "try later".
+// 4xx other than 401 is permanent for that op; 403 (proxy/origin trouble), 408 and 429 are "try later".
+// 502/503/504 on a direct edit mean the server is unreachable, like being offline.
+const isGatewayDown = (e: unknown) => e instanceof ApiError && (e.status === 502 || e.status === 503 || e.status === 504)
 function isPermanent(e: unknown): boolean {
   if (e instanceof NotFoundError || e instanceof ConflictError) return true
-  if (e instanceof ApiError) return e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429
+  if (e instanceof ApiError) return e.status >= 400 && e.status < 500 && e.status !== 403 && e.status !== 408 && e.status !== 429
   return false
 }
 
@@ -82,7 +86,10 @@ const findSet = (session: SessionDetail | null | undefined, id: string) =>
 
 export function withOffline(api: ApiRepo, store: OutboxStore, opts: OfflineOptions = {}): OfflineRepo {
   const now = opts.now ?? (() => new Date())
+  // `count` only caches the store's size for the synchronous pending(); every decision re-reads the store,
+  // because another tab can add or remove ops at any time.
   let count = 0
+  let holding = false // discard/clear in progress: replay must not run
   let paused = false
   let failures = 0
   let version = 0
@@ -123,17 +130,21 @@ export function withOffline(api: ApiRepo, store: OutboxStore, opts: OfflineOptio
 
   async function replay() {
     await ready
-    while (!paused && !disposed) {
+    while (!paused && !disposed && !holding) {
       const [op] = await store.list()
       if (!op) {
         failures = 0
         cancelTimer()
+        if (count !== 0) {
+          count = 0 // another tab may have drained the queue
+          emit()
+        }
         return
       }
       try {
         const row = await api.updateSet(op.setId, { ...op.patch, updated_at: op.updated_at })
         await store.remove(op.seq!)
-        count--
+        count = await store.count()
         version++
         // The server's row is authoritative unless a later queued edit of the same set still has to go out.
         if (!(await store.list()).some((o) => o.setId === op.setId)) await updateMirrorSet(row)
@@ -146,7 +157,7 @@ export function withOffline(api: ApiRepo, store: OutboxStore, opts: OfflineOptio
           emit()
         } else if (isPermanent(e)) {
           await store.remove(op.seq!)
-          count--
+          count = await store.count()
           version++
           emit()
           try {
@@ -190,7 +201,7 @@ export function withOffline(api: ApiRepo, store: OutboxStore, opts: OfflineOptio
 
   async function drainBeforeRead() {
     await ready
-    if (count > 0 && !paused) await flush()
+    if (!paused && (await store.count()) > 0) await flush()
   }
 
   async function enqueue(setId: string, fields: SetPatch, stamp: string, cause: unknown): Promise<SetLog> {
@@ -199,7 +210,7 @@ export function withOffline(api: ApiRepo, store: OutboxStore, opts: OfflineOptio
     // Only sets of the mirrored active session can be queued; anything else needs a connection.
     if (!cur || !m?.session) throw cause instanceof Error ? cause : new OfflineError()
     await store.add({ opId: newId(), setId, patch: fields, updated_at: stamp })
-    count++
+    count = await store.count()
     const next: SetLog = { ...cur, ...fields, updated_at: stamp }
     await store.putMirror({ session: mapSet(m.session, setId, () => next) })
     emit()
@@ -217,6 +228,11 @@ export function withOffline(api: ApiRepo, store: OutboxStore, opts: OfflineOptio
     pending: () => count,
     paused: () => paused,
     flush,
+    pause() {
+      paused = true
+      cancelTimer()
+      emit()
+    },
     resume() {
       paused = false
       failures = 0
@@ -229,14 +245,20 @@ export function withOffline(api: ApiRepo, store: OutboxStore, opts: OfflineOptio
     },
     async hasOfflineData() {
       await ready
-      if (count > 0) return true
+      if ((await store.count()) > 0) return true
       const m = await store.getMirror()
       return !!m?.session
     },
     async clear() {
       cancelTimer()
-      await store.clear()
-      count = 0
+      holding = true
+      try {
+        await running // let an in-flight replay finish first
+        await store.clear()
+        count = 0
+      } finally {
+        holding = false
+      }
       emit()
     },
     dispose() {
@@ -290,9 +312,9 @@ export function withOffline(api: ApiRepo, store: OutboxStore, opts: OfflineOptio
     async updateSet(id, patch) {
       await ready
       const { stamp = now().toISOString(), fields } = strip(patch)
-      if (count > 0 && !paused) await flush()
+      if (!paused && (await store.count()) > 0) await flush()
       if (paused) return enqueue(id, fields, stamp, new UnauthenticatedError())
-      if (count === 0) {
+      if ((await store.count()) === 0) {
         try {
           const row = await api.updateSet(id, { ...fields, updated_at: stamp })
           await updateMirrorSet(row).catch(() => undefined)
@@ -305,7 +327,7 @@ export function withOffline(api: ApiRepo, store: OutboxStore, opts: OfflineOptio
             emit()
             throw e
           }
-          if (!(e instanceof OfflineError)) throw e
+          if (!(e instanceof OfflineError) && !isGatewayDown(e)) throw e
           failures++
           const r = await enqueue(id, fields, stamp, e)
           schedule()
@@ -319,18 +341,25 @@ export function withOffline(api: ApiRepo, store: OutboxStore, opts: OfflineOptio
     },
     async finishSession(id) {
       await ready
-      if (count > 0) await flush()
-      if (count > 0) throw paused ? new UnauthenticatedError() : new OfflineError() // never finish on stale sets
+      if ((await store.count()) > 0) await flush()
+      if ((await store.count()) > 0) throw paused ? new UnauthenticatedError() : new OfflineError() // never finish on stale sets
       const r = await api.finishSession(id)
       await store.putMirror({ session: null }).catch(() => undefined)
       return r
     },
     async discardSession(id) {
-      await api.discardSession(id)
-      await store.removeAllOps().catch(() => undefined)
-      count = 0
-      await store.putMirror({ session: null }).catch(() => undefined)
+      holding = true
+      try {
+        await running // never race an in-flight replay
+        await api.discardSession(id)
+        await store.removeAllOps().catch(() => undefined)
+        count = 0
+        await store.putMirror({ session: null }).catch(() => undefined)
+      } finally {
+        holding = false
+      }
       emit()
+      kick()
     },
   }
 }

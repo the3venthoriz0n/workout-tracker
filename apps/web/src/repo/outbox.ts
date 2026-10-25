@@ -37,6 +37,7 @@ export interface OutboxStore {
   add(op: Omit<OutboxOp, 'seq' | 'account'>): Promise<OutboxOp>
   remove(seq: number): Promise<void>
   removeAllOps(): Promise<void>
+  count(): Promise<number>
   getMirror(): Promise<MirrorRow | undefined>
   putMirror(part: Partial<Omit<MirrorRow, 'account'>>): Promise<void> // merges into the single row
   clear(): Promise<void> // this account's ops and mirror
@@ -56,6 +57,7 @@ export function createOutboxStore(db: OutboxDb, account: string): OutboxStore {
     async remove(seq) {
       await mine().and((o) => o.seq === seq).delete()
     },
+    count: () => mine().count(),
     async removeAllOps() {
       await mine().delete()
     },
