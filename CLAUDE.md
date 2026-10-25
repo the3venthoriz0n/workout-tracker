@@ -56,6 +56,10 @@ Rejected options: Supabase, Next.js/SSR, a separate frontend container (v1), App
 - Migrations: the committed `apps/api/drizzle/` folder is applied by the API on boot (and by `migrate.js` in the deploy script); both are idempotent and a failure stops the process. Migrations must stay backward compatible with the previous release.
 - Outbox (M2): only set edits are queued while offline (`PATCH /sets/:id` with the client `updated_at`); replay is in order, the server applies a set update only if it is newer, a 4xx other than 401 drops the item and tells the user, a 401 pauses the queue. Never queue starting or finishing a workout.
 
+- Environments: local dev, self-hosted staging (`deploy/self-hosted/`, behind the owner's existing Cloudflare Tunnel, pulled by `update.sh`), production on DigitalOcean (on hold). CI's staging workflow only publishes `:staging`; it never deploys and uses no secrets beyond `GITHUB_TOKEN`. The self-hosted compose publishes no ports and does not include `cloudflared`.
+- Public repo: no real domain, hostname, IP, network or tunnel name, token, email, server path or hardware name in any tracked file. Site-specific values are `${VAR:?}` placeholders or live in the host's gitignored `.env`; use `example.invalid` in examples. `just public-check` enforces it and is a CI job.
+- `SIGNUP_ALLOWLIST` (invite-only sign-up, empty = open) and `CLIENT_IP_HEADER` (set only behind a trusted proxy) are API settings in `apps/api/src/env.ts`.
+
 ## Open questions (ask before assuming)
 
 See the spec's "Open questions" section. The exercise library is decided: each user owns their own, seeded from a starter list.

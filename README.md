@@ -56,6 +56,10 @@ Builds and deploys run only in GitHub Actions:
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
+## Staging (self-hosted)
+
+Every push to `main` publishes `ghcr.io/<owner>/<repo>:staging` (`.github/workflows/staging.yml`; no deploy step, no secrets beyond `GITHUB_TOKEN`). A self-hosted Docker host that already runs a Cloudflare Tunnel pulls it on a schedule with `deploy/self-hosted/update.sh`. The stack there (`deploy/self-hosted/compose.yaml`) is the app and Postgres only, publishes no ports, joins the tunnel's existing Docker network, and limits sign-up to `SIGNUP_ALLOWLIST`. Setup: [deploy/self-hosted/README.md](deploy/self-hosted/README.md). Site-specific values (domain, network name, secrets) live only in the host's `.env`; `just public-check` fails if personal info slips into a tracked file.
+
 ## First-time infrastructure setup
 
 You need `gh` (logged in), an SSH key at `~/.ssh/id_ed25519.pub` (or set `WORKOUT_ADMIN_SSH_KEY`), and a DigitalOcean API token. A custom-scoped token is best.

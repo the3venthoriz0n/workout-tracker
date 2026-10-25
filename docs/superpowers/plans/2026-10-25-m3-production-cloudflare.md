@@ -2,6 +2,8 @@
 
 > **For agentic workers:** Use superpowers:subagent-driven-development (lean variant: one implementer per task, tests or validation commands first, controller reads the diff; independent review only for Tasks 2, 3 and the final pass) to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Nothing in this plan is applied to a real account until the owner says so**: agents write code, tests and docs only; `terraform apply`, DNS changes, tags and pushes are manual steps in the runbook.
 
+> Note: a self-hosted staging environment exists (`deploy/self-hosted/`); this plan is still on hold.
+
 **Goal:** Run the app on one DigitalOcean Droplet that is reachable only through Cloudflare, with the real client IP preserved for rate limiting, Resend mail configured, and every secret seeded through scripted, no-echo commands.
 
 **Architecture:** Cloudflare proxies the domain (SSL mode Full (strict)). Caddy keeps its own Let's Encrypt certificate (HTTP-01 validates through the proxy; bring-up order below avoids the chicken-and-egg), trusts Cloudflare's published ranges and rewrites `X-Forwarded-For` to the real client IP, which the API already uses for rate limiting. The DigitalOcean firewall accepts 80/443 only from Cloudflare's ranges. Cloudflare settings and DNS are managed by Terraform (provider token stays local, like the DigitalOcean one). Runtime secrets live in the server's `.env`; CI secrets live in the GitHub `production` environment.

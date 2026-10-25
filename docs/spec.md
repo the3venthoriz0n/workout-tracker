@@ -75,7 +75,7 @@ apps/api          Hono server; Drizzle schema + migrations (M2)
 apps/web          React SPA: routes/, components/, repo/ (LocalRepo, later ApiRepo)
 packages/shared   zod schemas + types, progression engine, effective-value helpers,
                   seed data, units, entitlements
-deploy/           production compose stack, Caddyfile, deploy.sh
+deploy/           production compose stack, Caddyfile, deploy.sh; self-hosted/ staging stack
 infra/terraform   Droplet, firewall, reserved IP
 ```
 
@@ -232,6 +232,8 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 
 **CI/CD** (exists): PRs and `main` run typecheck, tests, build, Docker build, dependency review and CodeQL. A `vX.Y.Z` tag pushes to GHCR with provenance and an SBOM, then deploys by digest over SSH to the `production` environment, which only `v*` tags may use. Actions are pinned by SHA and images by digest, and Dependabot keeps them current.
 
+**Environments**: local dev (`just dev`), staging on a self-hosted Docker host behind the owner's existing Cloudflare Tunnel, and production on DigitalOcean (M3, on hold). Staging: every push to `main` builds `ghcr.io/<repo>:staging` and `:sha-<commit>` (`.github/workflows/staging.yml`, `GITHUB_TOKEN` only, no deploy step). The host runs `deploy/self-hosted/update.sh` from cron or any scheduler; it compares the registry digest of `:staging` with `IMAGE_REF` in the host's `.env` and, when different, calls `deploy/deploy.sh` (backup, migrate, bring up, roll back on failure) with `COMPOSE_FILE` pointing at `deploy/self-hosted/compose.yaml`. That stack is `app` + `db`, publishes no ports, does not include `cloudflared`, and joins the tunnel's existing external Docker network (`TUNNEL_NETWORK`). The repo is public: every site-specific value is a `${VAR:?}` placeholder or lives in the host's gitignored `.env`; `scripts/check-public-safe.sh` (`just public-check`, CI job `public-safe`) fails on IPs, tokens, non-example emails, `/home` or `/root` paths and the name of the owner's hardware in tracked files.
+
 **Production (M3)**: one DigitalOcean Droplet running Caddy, the app and Postgres via compose. `infra/terraform` creates the Droplet, a firewall and a reserved IP, and is safe to re-run. cloud-init creates an `admin` user (sudo) and a `deploy` user (docker only), disables root and password SSH, and installs Docker, fail2ban and unattended upgrades. The DO token stays local in env vars and is never sent to GitHub. Production secrets are generated on the server on the first deploy. Before launch: nightly `pg_dump` to DO Spaces.
 
 **Future frontend/backend split** (only if scaling requires it): Caddy serves `apps/web/dist` and proxies `/api/*` to several API replicas, which are already stateless because sessions live in Postgres. Then move to Managed Postgres and serve the SPA from Spaces + CDN. To keep this cheap: every API route lives under `/api/*`, the SPA reads its API base URL from env, and routing stays same-origin.
@@ -275,6 +277,10 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | Cloudflare proxy in front of the Droplet, Full (strict), origin firewall limited to Cloudflare's ranges (owner's choice) | Hides the origin and absorbs abuse. Caddy keeps its own Let's Encrypt certificate (HTTP-01 works through the proxy), so no origin certificate secret is needed |
 | Keep the API's own auth rate limits on in production, with a development-only off switch | Second layer if the origin is ever reached directly; Caddy forwards the real client IP so limits are per user, not per Cloudflare node |
 | Account responses never reveal whether an email exists (M2b) | Uniform wording for sign-up, resend and reset |
+| Three environments: local dev, self-hosted staging behind an existing Cloudflare Tunnel, production on DigitalOcean (on hold) (owner's choice) | Staging costs nothing and exercises the real image and deploy script before any production spend |
+| Staging updates by pull: CI only publishes `:staging`; the host's `update.sh` polls the digest and deploys | CI holds no credentials for the home network and nothing inbound is opened; a lock and digest compare make repeated runs harmless |
+| `SIGNUP_ALLOWLIST` (comma separated emails, exact match after lowercasing, enforced in a Better Auth before-hook): blocked sign-up is `403 {"code":"SIGNUP_CLOSED","message":"signup_closed"}` and writes nothing; empty means open sign-up; sign-in is unaffected | Staging is invite-only without an invite system; the web client shows "Sign-up is invite-only" |
+| `CLIENT_IP_HEADER` replaces the client-IP header used for auth rate limits (`cf-connecting-ip` behind the tunnel) | The tunnel sets it and the app has no published ports, so it is trustworthy; set it only when the app is reachable solely through such a proxy, otherwise clients can pick their own IP |
 | Composite primary keys `(user_id, id)` | Client-generated ids can't collide across accounts or reveal another user's rows |
 | 404 (not 403) for ids owned by someone else | Doesn't leak which ids exist |
 | Guest import only into an account with no profile; logging into an existing account discards local guest data after confirmation | Seed data would duplicate on merge; a JSON export is offered first |

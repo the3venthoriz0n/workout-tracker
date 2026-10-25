@@ -8,7 +8,7 @@ Nothing here is automated: do it in the GitHub and DigitalOcean UIs. Deploy acce
 
 - [ ] **Tag ruleset** for `refs/tags/v*`: restrict creation, update and deletion to repository admins, with no bypass list. Anyone who can push a `v*` tag can ship code to the Droplet.
 - [ ] **`production` environment** (created by `just github-setup`): add a required reviewer and confirm the deployment policy allows only `v*` tags. Re-running `just github-setup` can reset UI-configured settings, so verify both again afterwards.
-- [ ] **Branch protection on `main`**: require a pull request; require the checks `check`, `docker`, `prod-config`, `deploy-script` and `analyze`; block force pushes and deletion.
+- [ ] **Branch protection on `main`**: require a pull request; require the checks `check`, `docker`, `prod-config`, `self-hosted-config`, `deploy-script`, `public-safe` and `analyze`; block force pushes and deletion.
 - [ ] **Actions settings**: default workflow token read-only; "Allow GitHub Actions to create and approve pull requests" off; require approval for fork pull requests.
 - [ ] **Security settings**: secret scanning and push protection on; private vulnerability reporting on; Dependabot alerts and security updates on. Leave CodeQL "default setup" off, because `.github/workflows/codeql.yml` already runs it.
 - [ ] **GHCR package**: after the first image push the package is private and the first deploy's pull is denied. Make it public (Package settings, Danger zone; this is one-way) and link it to the repository. Then re-run the failed deploy job.
@@ -57,6 +57,17 @@ A rollback does not undo migrations. Restore from a pre-deploy dump only if a mi
 - `deploy.sh` takes a `pg_dump -Fc` into `/opt/workout-tracker/backups/` before each migration (newest 5 kept). That lives on the same disk as the database, so it protects against bad migrations only.
 - **TODO before real users (accounts are live in M2):** nightly `pg_dump` to DigitalOcean Spaces (or another off-box location) with a restore test.
 - **Back up `/opt/workout-tracker/.env` off the server** (password manager or encrypted storage). Losing the Droplet loses `BETTER_AUTH_SECRET`, which invalidates all sessions, and the database password.
+
+## Staging (self-hosted, separate from production)
+
+Staging runs on a self-hosted Docker host behind an existing Cloudflare Tunnel; see `deploy/self-hosted/README.md`. Nothing here deploys to production.
+
+- [ ] **GHCR package access**: the first push of `:staging` creates a private package. Either make it public (Package settings, Danger zone; one-way), or create a read-only token (`read:packages`) yourself and run `docker login ghcr.io` on the host. Without one of these, `update.sh` cannot resolve or pull the image.
+- [ ] **Host `.env`** created from `deploy/self-hosted/.env.example` (mode 600, never committed): `DOMAIN`, `TUNNEL_NETWORK`, generated secrets, `SIGNUP_ALLOWLIST`. Back it up privately.
+- [ ] **Tunnel public hostname** points at `http://app:3000` on the shared network. Do not publish any port on the host.
+- [ ] **Branch protection**: add the checks `self-hosted-config` and `public-safe` to the required list for `main`.
+- [ ] **Scheduler** runs `update.sh` with `REPO=<owner>/<repo>`; check its log after the first merge to `main`.
+- [ ] **Backups**: copy a `pg_dump` off the host before trusting staging with data you care about.
 
 ## Later
 
