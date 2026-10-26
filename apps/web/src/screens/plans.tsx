@@ -1,15 +1,38 @@
 import { ChevronRight, Plus } from 'lucide-react'
 import { useState } from 'react'
+import type { Plan } from '@workout/shared'
 import { Link } from 'react-router'
 import { Screen } from '@/app/screen'
+import { PlansToggle } from '@/components/plans-toggle'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { notifyError } from '@/lib/notify'
 import { listGroup } from '@/lib/styles'
 import { cn } from '@/lib/utils'
-import { useDeletePlan, usePlans, useSavePlan } from '@/repo/hooks'
+import { useCommunityPlan, useDeletePlan, usePlans, useSavePlan } from '@/repo/hooks'
 
+/**
+ * "Based on X by Y · v1" for copies of community plans, plus "Update available" when the public
+ * latest version is newer. The check is lazy, cached per listing and silent when it fails (offline,
+ * unpublished): the line itself comes from the plan and is always shown.
+ */
+function SourceLine({ source }: { source: NonNullable<Plan['source']> }) {
+  const latest = useCommunityPlan(source.shared_plan_id, { quiet: true })
+  const newer = (latest.data?.listing.version ?? 0) > source.version
+  return (
+    <span className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-normal">
+      <span className="min-w-0 break-words">
+        Based on {source.title} by {source.author} · v{source.version}
+      </span>
+      {newer && (
+        <span className="bg-brand/12 text-foreground inline-flex h-6 items-center rounded-full px-2.5 text-xs font-medium">
+          Update available
+        </span>
+      )}
+    </span>
+  )
+}
 
 export function PlansScreen() {
   const plans = usePlans()
@@ -33,6 +56,7 @@ export function PlansScreen() {
     <div>
       <Screen title="Plans" />
       <div className="flex flex-col gap-4 px-4 pb-6">
+        <PlansToggle />
         <form onSubmit={add} className="flex gap-2">
           <Input
             className="flex-1"
@@ -60,7 +84,10 @@ export function PlansScreen() {
                 to={`/plans/${plan.id}`}
                 className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-2 py-2 text-[17px] font-semibold"
               >
-                <span className="min-w-0 break-words">{plan.name}</span>
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="break-words">{plan.name}</span>
+                  {plan.source && <SourceLine source={plan.source} />}
+                </span>
                 <ChevronRight className="text-muted-foreground size-5 shrink-0" aria-hidden />
               </Link>
               {confirmId === plan.id ? (

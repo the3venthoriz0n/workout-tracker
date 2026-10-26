@@ -1,4 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { PublicListQuery } from '@workout/shared'
+import { publicApi } from '@/lib/community'
 import { useRepo } from './provider'
 import type { Repo } from './types'
 
@@ -14,6 +16,10 @@ export const keys = {
   progression: ['progression'] as const,
   progressionByExercise: ['progression', 'by-exercise'] as const,
   exerciseUsage: (id: string) => ['exercise-usage', id] as const,
+  communityList: (q: Omit<PublicListQuery, 'cursor'>) => ['community', 'list', q] as const,
+  communityPlan: (id: string) => ['community', 'plan', id] as const,
+  voted: (id: string) => ['community', 'voted', id] as const,
+  myShared: ['community', 'mine'] as const,
 }
 
 export const useProfile = () => {
@@ -136,3 +142,39 @@ export const useUpdateSessionNote = () =>
   useRepoMutation((r, v: { id: string; note: string }) => r.updateSessionNote(v.id, v.note))
 export const useFinishSession = () => useRepoMutation((r, id: string) => r.finishSession(id))
 export const useDiscardSession = () => useRepoMutation((r, id: string) => r.discardSession(id))
+
+// Community (spec §3). Public reads use plain fetch (no session) and work in guest mode; they are
+// not retried automatically (the screens offer "Try again") and stay fresh for 30 s like the API's cache.
+export const useCommunityList = (q: Omit<PublicListQuery, 'cursor'>) =>
+  useInfiniteQuery({
+    queryKey: keys.communityList(q),
+    queryFn: ({ pageParam }) => publicApi.list({ ...q, cursor: pageParam ?? undefined }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
+    retry: false,
+    staleTime: 30_000,
+  })
+/** The listing and its latest version. `quiet`: a background check (plans list) that keeps results for 10 min. */
+export const useCommunityPlan = (id: string, opts: { enabled?: boolean; quiet?: boolean } = {}) =>
+  useQuery({
+    queryKey: keys.communityPlan(id),
+    queryFn: () => publicApi.plan(id),
+    enabled: opts.enabled ?? true,
+    retry: false,
+    staleTime: opts.quiet ? 10 * 60_000 : 30_000,
+    refetchOnWindowFocus: !opts.quiet,
+  })
+export const useHasVoted = (id: string, enabled: boolean) => {
+  const repo = useRepo()
+  return useQuery({ queryKey: keys.voted(id), queryFn: () => repo.hasVoted(id), enabled, retry: false })
+}
+export const useMyShared = (enabled: boolean) => {
+  const repo = useRepo()
+  return useQuery({ queryKey: keys.myShared, queryFn: () => repo.listMyShared(), enabled, retry: false })
+}
+type ListingMetaT = Parameters<Repo['publishPlan']>[1]
+export const usePublishPlan = () =>
+  useRepoMutation((r, v: { planId: string; meta: ListingMetaT }) => r.publishPlan(v.planId, v.meta))
+export const useUnpublishPlan = () => useRepoMutation((r, planId: string) => r.unpublishPlan(planId))
+export const useAdoptSharedPlan = () =>
+  useRepoMutation((r, input: Parameters<Repo['adoptSharedPlan']>[0]) => r.adoptSharedPlan(input))
