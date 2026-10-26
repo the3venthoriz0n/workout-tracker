@@ -77,6 +77,49 @@ const checkRule = (r: { success_action: string; success_amount: number }, ctx: z
 export const ruleInputSchema = z.object(ruleFields).superRefine(checkRule)
 export type RuleInput = z.infer<typeof ruleInputSchema>
 
+// C0/C1 control characters and bidi overrides/isolates (they can disguise text). Public text is
+// stripped of them; MULTILINE keeps the newline.
+const CONTROLS = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g
+const CONTROLS_MULTILINE = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g
+
+/** Strips control and bidi-override characters, then trims. */
+export function cleanText(s: string, multiline = false): string {
+  return s.replace(multiline ? CONTROLS_MULTILINE : CONTROLS, '').trim()
+}
+
+/** The only identity shown publicly (community plans). */
+export const displayNameSchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(30)
+  .regex(/^[\p{L}\p{M}\p{N} _.-]+$/u, 'Use letters, digits, spaces, _ - . only')
+
+export const LEVELS = ['beginner', 'intermediate', 'advanced'] as const
+export const levelSchema = z.enum(LEVELS)
+export type Level = z.infer<typeof levelSchema>
+
+/** `hidden` is set by the service owner in the database; the sharer cannot reverse it. */
+export const listingStatusSchema = z.enum(['published', 'unpublished', 'hidden'])
+export type ListingStatus = z.infer<typeof listingStatusSchema>
+
+/** "Based on <title> by <author>": where an adopted plan came from. */
+export const planSourceSchema = z.object({
+  shared_plan_id: id,
+  version: z.number().int().min(1).max(1_000_000),
+  title: z.string().min(1).max(60),
+  author: z.string().min(1).max(30),
+})
+export type PlanSource = z.infer<typeof planSourceSchema>
+
+/** The plan's own community listing (server only; always null on the device). */
+export const planPublishedSchema = z.object({
+  shared_plan_id: id,
+  version: z.number().int().min(1).max(1_000_000),
+  status: listingStatusSchema,
+})
+export type PlanPublished = z.infer<typeof planPublishedSchema>
+
 export const profileSchema = z.object({
   user_id: userId,
   plan: planTierSchema,
@@ -84,6 +127,8 @@ export const profileSchema = z.object({
   weight_increment: stepAmount,
   // Rule new plan items start with; absent means defaultRule(weight_increment)
   default_rule: ruleInputSchema.optional(),
+  // Public name for community plans; required to publish.
+  display_name: displayNameSchema.nullable().default(null),
   ...base,
 })
 export type Profile = z.infer<typeof profileSchema>
@@ -124,6 +169,10 @@ export const planSchema = z.object({
   id,
   name,
   archived: z.boolean(),
+  // Set on copies of community plans; null on the user's own plans.
+  source: planSourceSchema.nullable().default(null),
+  // The user's own listing of this plan, if any (computed by the server; not imported).
+  published: planPublishedSchema.nullable().default(null),
   ...owned,
 })
 export type Plan = z.infer<typeof planSchema>

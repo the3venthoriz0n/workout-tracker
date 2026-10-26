@@ -15,6 +15,13 @@
       "when": 1792906768060,
       "tag": "0001_violet_bill_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793044144328,
+      "tag": "0002_outgoing_argent",
+      "breakpoints": true
     }
   ]
 }

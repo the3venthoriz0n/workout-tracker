@@ -155,6 +155,9 @@ describe('sign-up allowlist', () => {
       getService: () => {
         throw new Error('unused')
       },
+      getPublic: () => {
+        throw new Error('unused')
+      },
     })
     const res = await app.request('/api/auth/sign-in/email', {
       method: 'POST',

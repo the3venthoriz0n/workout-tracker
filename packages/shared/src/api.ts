@@ -1,8 +1,10 @@
 import { z } from 'zod'
 import { exportDataSchema } from './export.js'
+import { listingMetaSchema } from './community.js'
 import {
   LIMITS,
   angleSchema,
+  displayNameSchema,
   dayColorSchema,
   stepAmount,
   exerciseInputSchema,
@@ -34,6 +36,7 @@ export const PatchProfileBody = z.object({
   units: unitsSchema.optional(),
   weight_increment: stepAmount.optional(),
   default_rule: ruleInputSchema.optional(),
+  display_name: displayNameSchema.optional(),
 })
 export const AddItemBody = z.object({ exercise_id: idSchema, id: idSchema.optional() })
 export const PatchItemBody = planItemSchema
@@ -62,4 +65,7 @@ export const PatchSetBody = setLogSchema
       .refine((v) => Date.parse(v) <= Date.now() + MAX_CLOCK_SKEW_MS, 'Timestamp is in the future')
       .optional() })
 export const ImportBody = exportDataSchema
+export const PublishBody = listingMetaSchema
+// Only the version: the snapshot is always loaded from the database, never taken from the client.
+export const AdoptBody = z.object({ version: z.number().int().min(1).max(1_000_000).optional() })
 export const EmptyBody = z.object({})

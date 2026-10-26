@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { createApp } from '../src/app.js'
 import { createAuth } from '../src/auth.js'
+import { createPublicService } from '../src/service/community.js'
 import { createService } from '../src/service/index.js'
 import type { OriginEnv } from '../src/origins.js'
 import { withTestDb, type TestDb } from './harness.js'
@@ -42,7 +43,12 @@ export async function setupApp(over: Partial<TestEnv> = {}) {
   const t: TestDb = await withTestDb()
   const env = testEnv(over)
   const auth = createAuth(t.db, env, { clientIpHeader: 'x-test-client-ip' })
-  const app = createApp({ auth, env, getService: (userId) => createService(t.db, userId) })
+  const app = createApp({
+    auth,
+    env,
+    getService: (userId) => createService(t.db, userId),
+    getPublic: () => createPublicService(t.db),
+  })
   const origin = env.BETTER_AUTH_URL
   const ip = `10.${randomBytes(1)[0]}.${randomBytes(1)[0]}.${randomBytes(1)[0]}`
 

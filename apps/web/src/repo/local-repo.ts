@@ -30,8 +30,14 @@ import {
   gearSchema,
   profileSchema,
   seedExercises,
+  UnauthenticatedError,
+  displayNameSchema,
+  planFromSnapshot,
 } from '@workout/shared'
 import type {
+  AdoptInput,
+  ListingMeta,
+  SharedListing,
   Angle,
   DayColor,
   Exercise,
@@ -274,9 +280,16 @@ export class LocalRepo implements Repo {
     units?: Units
     weight_increment?: number
     default_rule?: RuleInput
+    display_name?: string
   }): Promise<Profile> {
     if (patch.weight_increment !== undefined && !(patch.weight_increment > 0)) {
       throw new Error('weight_increment must be greater than 0')
+    }
+    let displayName: string | undefined
+    if (patch.display_name !== undefined) {
+      const r = displayNameSchema.safeParse(patch.display_name)
+      if (!r.success) throw new ValidationError('display_name', r.error.issues[0]?.message ?? 'Invalid public name')
+      displayName = r.data
     }
     const d = this.db
     return d.transaction('rw', [d.profile, d.exercises, d.planItems, d.setLogs, d.rules], async () => {
@@ -329,6 +342,7 @@ export class LocalRepo implements Repo {
       }
       if (patch.weight_increment !== undefined) next.weight_increment = patch.weight_increment
       if (patch.default_rule !== undefined) next.default_rule = ruleInputSchema.parse(patch.default_rule)
+      if (displayName !== undefined) next.display_name = displayName
       const profile = profileSchema.parse(next)
       await d.profile.put(profile)
       return profile
@@ -902,6 +916,58 @@ export class LocalRepo implements Repo {
         }
       }
       return rows
+    })
+  }
+
+  // Community plans: guests have no account, so they cannot publish or vote (spec §3).
+  async publishPlan(_planId: string, _meta: ListingMeta): Promise<{ shared_plan_id: string; version: number }> {
+    throw new UnauthenticatedError()
+  }
+
+  async unpublishPlan(_planId: string): Promise<void> {
+    throw new UnauthenticatedError()
+  }
+
+  async listMyShared(): Promise<SharedListing[]> {
+    return []
+  }
+
+  async setVote(_sharedPlanId: string, _voted: boolean): Promise<{ upvotes: number }> {
+    throw new UnauthenticatedError()
+  }
+
+  async hasVoted(_sharedPlanId: string): Promise<boolean> {
+    return false
+  }
+
+  /**
+   * A local copy from the snapshot the guest fetched from the public API (with its listing's
+   * title and author). Nothing is counted for guests. All rows are written in one transaction.
+   */
+  async adoptSharedPlan(input: AdoptInput): Promise<{ plan_id: string }> {
+    if (input.snapshot === undefined) throw new ValidationError('snapshot', 'A guest copy needs the shared snapshot')
+    const source = { shared_plan_id: input.shared_plan_id, version: input.version, title: input.title, author: input.author }
+    const d = this.db
+    const tables = [d.profile, d.gear, d.exercises, d.plans, d.planDays, d.planItems, d.rules, d.itemStates]
+    return d.transaction('rw', tables, async () => {
+      const profile = await this.getProfile()
+      const rows = planFromSnapshot(input.snapshot, source, {
+        userId: profile.user_id,
+        units: profile.units,
+        increment: profile.weight_increment,
+        exercises: await d.exercises.toArray(),
+        gear: await d.gear.toArray(),
+        now: now(),
+        newId,
+      })
+      await d.gear.bulkAdd(rows.newGear)
+      await d.exercises.bulkAdd(rows.newExercises)
+      await d.plans.add(rows.plan)
+      await d.planDays.bulkAdd(rows.days)
+      await d.planItems.bulkAdd(rows.items)
+      await d.rules.bulkAdd(rows.rules)
+      await d.itemStates.bulkAdd(rows.itemStates)
+      return { plan_id: rows.plan.id }
     })
   }
 

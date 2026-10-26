@@ -4,7 +4,7 @@ export type Units = 'lb' | 'kg'
 
 export const DEFAULT_INCREMENT: Record<Units, number> = { lb: 5, kg: 2.5 }
 
-const KG_PER_LB = 0.45359237
+export const KG_PER_LB = 0.45359237
 
 export function roundToIncrement(weight: number, increment: number): number {
   const rounded = Math.round(weight / increment) * increment

@@ -21,6 +21,7 @@ import type {
   ItemState,
   Plan,
   PlanDay,
+  PlanPublished,
   PlanItem,
   Profile,
   ProgressionRule,
@@ -78,6 +79,7 @@ export function toProfile(row: typeof profile.$inferSelect): Profile {
     units: row.units,
     weight_increment: clampStep(num(row.weightIncrement)),
     ...(row.defaultRule === null ? {} : { default_rule: readRule(row.defaultRule) }),
+    display_name: row.displayName,
     created_at: iso(row.createdAt),
     updated_at: iso(row.updatedAt),
     deleted_at: isoOrNull(row.deletedAt),
@@ -124,11 +126,14 @@ const syncOf = (row: { createdAt: Date; updatedAt: Date; deletedAt: Date | null 
   deleted_at: isoOrNull(row.deletedAt),
 })
 
-export function toPlan(row: typeof plan.$inferSelect): Plan {
+/** `published` is the caller's own listing (see community.publishedOf); exports leave it null. */
+export function toPlan(row: typeof plan.$inferSelect, published: PlanPublished | null = null): Plan {
   return planSchema.parse({
     id: row.id,
     name: row.name,
     archived: row.archived,
+    source: row.source,
+    published,
     user_id: row.userId,
     ...syncOf(row),
   })

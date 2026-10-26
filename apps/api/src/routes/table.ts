@@ -2,6 +2,9 @@
 // A test enumerates the Hono router and fails when a registered /api/v1 route is missing here,
 // so a new route cannot skip the 401 / 404 / cross-user checks.
 import {
+  publicListPageSchema,
+  publicPlanDetailSchema,
+  sharedListingSchema,
   exerciseSchema,
   exportDataSchema,
   gearSchema,
@@ -20,7 +23,19 @@ import { z } from 'zod'
 export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 /** Kinds of owned ids a path param or body field can carry. */
 // `item2`: a second item on the same day (supersets need two); `group`: a superset group id on that day.
-export type Kind = 'gear' | 'exercise' | 'plan' | 'day' | 'item' | 'item2' | 'group' | 'session' | 'set'
+// `shared`: a published community listing of the user; `publishedPlan`: the plan behind it.
+export type Kind =
+  | 'gear'
+  | 'exercise'
+  | 'plan'
+  | 'day'
+  | 'item'
+  | 'item2'
+  | 'group'
+  | 'session'
+  | 'set'
+  | 'shared'
+  | 'publishedPlan'
 
 /** Ids of one user's data. The tests build it by calling the API as that user. */
 export type Fixture = Record<Kind, string> & {
@@ -47,8 +62,10 @@ export type RouteSpec = {
    *  - `not_found`: 404 {"error":"not_found"}, identical to a random unknown id, nothing changes;
    *  - `upsert`: a PUT that creates the caller's own row under that id (composite keys);
    *  - `none`: takes no ids; only the caller's own data is reachable.
+   *  - `public`: takes a community listing id; another user's PUBLISHED listing is reachable by
+   *    design (vote, adopt), an unpublished or hidden one is the same 404 as a random id.
    */
-  foreign: 'not_found' | 'upsert' | 'none'
+  foreign: 'not_found' | 'upsert' | 'none' | 'public'
   /**
    * PUT whose foreign id with the CALLER's own parents creates the caller's own row (days:
    * `PUT /days/<A's day>` with B's plan). `foreign` still describes A's parents (404).
@@ -311,6 +328,77 @@ export const ROUTES: RouteSpec[] = [
     foreign: 'not_found',
   },
 
+  {
+    method: 'POST',
+    path: `${V1}/plans/:id/publish`,
+    params: { id: 'plan' },
+    body: () => ({ title: 'Strength Basics', description: 'Three days a week', level: 'beginner' }),
+    status: 200,
+    response: z.object({ shared_plan_id: z.uuid(), version: z.number().int().min(1) }).strict(),
+    foreign: 'not_found',
+  },
+  { method: 'DELETE', path: `${V1}/plans/:id/publish`, params: { id: 'publishedPlan' }, status: 204, foreign: 'not_found' },
+  { method: 'GET', path: `${V1}/shared-plans/mine`, status: 200, response: z.array(sharedListingSchema.strict()), foreign: 'none' },
+  {
+    method: 'GET',
+    path: `${V1}/shared-plans/:id/vote`,
+    params: { id: 'shared' },
+    status: 200,
+    response: z.object({ voted: z.boolean() }).strict(),
+    foreign: 'public',
+  },
+  {
+    method: 'PUT',
+    path: `${V1}/shared-plans/:id/vote`,
+    params: { id: 'shared' },
+    status: 200,
+    response: z.object({ upvotes: z.number().int().min(0) }).strict(),
+    foreign: 'public',
+  },
+  {
+    method: 'DELETE',
+    path: `${V1}/shared-plans/:id/vote`,
+    params: { id: 'shared' },
+    status: 200,
+    response: z.object({ upvotes: z.number().int().min(0) }).strict(),
+    foreign: 'public',
+  },
+  {
+    method: 'POST',
+    path: `${V1}/shared-plans/:id/adopt`,
+    params: { id: 'shared' },
+    body: () => ({}),
+    status: 201,
+    response: z.object({ plan_id: z.uuid() }).strict(),
+    foreign: 'public',
+  },
+
   { method: 'GET', path: `${V1}/export`, status: 200, response: exportDataSchema, foreign: 'none' },
   { method: 'POST', path: `${V1}/import`, body: (f) => f.export, status: 204, foreign: 'none', freshAccount: true },
+]
+
+/**
+ * The public, session-less area (spec §9). GET only, never reads a session, never under /api/v1,
+ * and never in ROUTES. A test enumerates the router and fails when a registered /api/public route
+ * is missing here, and walks every response against a key whitelist.
+ */
+export type PublicRouteSpec = {
+  method: 'GET'
+  path: string
+  /** A concrete URL for the happy path, given a published listing id. */
+  sample: (listingId: string) => string
+  response: z.ZodType
+}
+
+const PUBLIC = '/api/public'
+
+export const PUBLIC_ROUTES: PublicRouteSpec[] = [
+  { method: 'GET', path: `${PUBLIC}/plans`, sample: () => `${PUBLIC}/plans`, response: publicListPageSchema },
+  { method: 'GET', path: `${PUBLIC}/plans/:id`, sample: (id) => `${PUBLIC}/plans/${id}`, response: publicPlanDetailSchema },
+  {
+    method: 'GET',
+    path: `${PUBLIC}/plans/:id/versions/:n`,
+    sample: (id) => `${PUBLIC}/plans/${id}/versions/1`,
+    response: publicPlanDetailSchema,
+  },
 ]

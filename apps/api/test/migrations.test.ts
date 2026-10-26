@@ -61,3 +61,26 @@ describe('migration 0001 (day colour, angle, AMRAP, supersets, layered rules)', 
     }
   })
 })
+
+describe('migration 0002 (community plans)', () => {
+  it('loads profiles and plans written by the previous release with display_name and source null', async () => {
+    const { withTestDb } = await import('./harness.js')
+    const { createService } = await import('../src/service/index.js')
+    const t = await withTestDb({ upTo: 2 })
+    try {
+      const u = 'u_before_community'
+      const plan = '00000000-0000-4000-8000-000000000013'
+      await t.sql(`insert into "user" (id, name, email) values ('${u}', 'old', 'old2@example.test')`)
+      await t.sql(`insert into profile (user_id, weight_increment) values ('${u}', 5)`)
+      await t.sql(`insert into plan (id, user_id, name) values ('${plan}', '${u}', 'Old plan')`)
+      await t.migrateRest()
+      const repo = createService(t.db, u)
+      expect((await repo.getProfile()).display_name).toBeNull()
+      expect(await repo.getPlan(plan)).toMatchObject({ source: null, published: null })
+      expect((await repo.listPlans())[0]).toMatchObject({ source: null, published: null })
+      expect(await repo.listMyShared()).toEqual([])
+    } finally {
+      await t.cleanup()
+    }
+  })
+})

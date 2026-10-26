@@ -16,6 +16,7 @@ import type {
   WorkoutSession,
 } from './schemas.js'
 import type { ExerciseProgression } from './rules.js'
+import type { ListingMeta, SharedListing, SharedSnapshot } from './community.js'
 import type { Effective } from './effective.js'
 import type { Outcome } from './progression.js'
 import type { Units } from './units.js'
@@ -153,6 +154,27 @@ export class ValidationError extends ApiError {
     this.name = 'ValidationError'
   }
 }
+/** Too many publish operations in 24 hours or too many live listings (429 publish_limit). */
+export class PublishLimitError extends ApiError {
+  constructor() {
+    super(429, 'publish_limit')
+    this.message = 'Publish limit reached'
+    this.name = 'PublishLimitError'
+  }
+}
+
+/**
+ * "Use this plan". Signed in (service, ApiRepo): the snapshot is loaded on the server by id
+ * (`version` defaults to the latest) and `snapshot`, `title` and `author` are ignored. Guests
+ * (LocalRepo): all of them are required, taken from the public API's plan detail.
+ */
+export type AdoptInput = {
+  shared_plan_id: string
+  version?: number
+  snapshot?: SharedSnapshot
+  title?: string
+  author?: string
+}
 
 export interface Repo {
   init(): Promise<void> // idempotent: guest profile + seeds on first run
@@ -161,6 +183,8 @@ export interface Repo {
     units?: Units
     weight_increment?: number
     default_rule?: RuleInput
+    /** Public name (2-30 letters, digits, spaces, _ - .); it can be changed but not removed. */
+    display_name?: string
   }): Promise<Profile>
   listGear(): Promise<Gear[]>
   saveGear(input: { id?: string; name: string; owned: boolean }): Promise<Gear>
@@ -208,4 +232,16 @@ export interface Repo {
   exportAll(): Promise<ExportData>
   listProgression(): Promise<ProgressionRow[]> // live plan items with their rules, in plan/day/item order
   listProgressionByExercise(): Promise<ExerciseProgression[]> // every live exercise once, sorted by name
+
+  // Community plans (spec §3, §9). Guests (LocalRepo) cannot publish, unpublish or vote
+  // (UnauthenticatedError); they have no listings and no votes, and adopt from a fetched snapshot.
+  /** Publishes the plan as a new listing or a new version of its listing (ValidationError, PublishLimitError). */
+  publishPlan(planId: string, meta: ListingMeta): Promise<{ shared_plan_id: string; version: number }>
+  /** Takes the plan's listing out of the public area (idempotent; a hidden listing stays hidden). */
+  unpublishPlan(planId: string): Promise<void>
+  listMyShared(): Promise<SharedListing[]>
+  /** A new, independent copy every time; NotFoundError for unpublished/hidden listings. */
+  adoptSharedPlan(input: AdoptInput): Promise<{ plan_id: string }>
+  setVote(sharedPlanId: string, voted: boolean): Promise<{ upvotes: number }>
+  hasVoted(sharedPlanId: string): Promise<boolean>
 }

@@ -9,6 +9,7 @@ import { ImportInvalidError, SessionInProgressError } from '../repo.js'
 import type { ExportData, PlanTree, Repo, SessionDetail } from '../repo.js'
 import type { Exercise, PlanItem, RuleInput } from '../schemas.js'
 import { newId } from '../id.js'
+import { snapshotFromPlanTree } from '../community.js'
 
 export type RepoHarness = {
   repo: Repo
@@ -28,6 +29,7 @@ export type ContractGroup =
   | 'progression'
   | 'sessions'
   | 'transfer'
+  | 'community'
 
 /** `empty`: the account must NOT be initialised (no profile, no seeds); used for the import target. */
 export type MakeOptions = { empty?: boolean }
@@ -126,7 +128,7 @@ export function runRepoContract(
 ): void {
   const pending = new Set(opts?.pending ?? [])
   const enabled = new Set<ContractGroup>(
-    opts?.groups ?? ['profile', 'gear', 'exercises', 'plans', 'progression', 'sessions', 'transfer'],
+    opts?.groups ?? ['profile', 'gear', 'exercises', 'plans', 'progression', 'sessions', 'transfer', 'community'],
   )
 
   describe(label, () => {
@@ -1126,6 +1128,104 @@ export function runRepoContract(
 expect((await exercise(repo, 'Bench Press')).default_rule?.success_amount).toBe(LIMITS.weight)
       expect((await repo.listExercises()).length).toBeGreaterThan(0) // still parses
     })
+
+    // -------------------------------------------------------------- community
+    contract('community', 'display_name is validated and trimmed, and can be changed', async ({ repo }) => {
+      expect((await repo.getProfile()).display_name).toBeNull()
+      await expectInvalid(repo.updateProfile({ display_name: 'x' }))
+      await expectInvalid(repo.updateProfile({ display_name: 'no@links' }))
+      expect((await repo.getProfile()).display_name).toBeNull()
+      expect((await repo.updateProfile({ display_name: '  Jo Lifts ' })).display_name).toBe('Jo Lifts')
+      expect((await repo.updateProfile({ display_name: 'Jo_2' })).display_name).toBe('Jo_2')
+      expect((await repo.updateProfile({ units: 'kg' })).display_name).toBe('Jo_2')
+    })
+
+    contract(
+      'community',
+      'adoptSharedPlan makes an independent copy: names matched, missing ones recreated, units converted, source kept',
+      async ({ repo }) => {
+        await repo.updateProfile({ display_name: 'Jo Lifts' })
+        const bench = await exercise(repo, 'Bench Press')
+        await repo.saveExercise({ ...bench, supports_angle: true })
+        const deadlift = await exercise(repo, 'Deadlift')
+        const sledGear = await repo.saveGear({ name: 'Sled', owned: true })
+        const sled = await repo.saveExercise({
+          name: 'Sled Push', notes: 'private note', video_url: 'https://video.example.invalid/x', required_gear_ids: [sledGear.id],
+          active: true, default_sets: 4, default_reps: 20, default_weight: 90,
+        })
+        const { plan, day } = await planWithDay(repo, 'Strength', 'Push')
+        await repo.savePlanDay({ id: day.id, plan_id: plan.id, name: 'Push', color: 'red' })
+        const a = await repo.addPlanItem(day.id, bench.id)
+        await repo.updatePlanItem(a.id, { sets: 3, reps: 5, weight: 135, angle: 'incline', amrap_last: true })
+        await repo.setRule(a.id, rule({ success_amount: 10 }))
+        const b = await repo.addPlanItem(day.id, sled.id)
+        await repo.setRule(b.id, null)
+        await repo.setSuperset(day.id, newId(), [a.id, b.id])
+        await repo.addPlanItem(day.id, deadlift.id) // inherits the built-in rule (5 lb)
+        await repo.savePlanDay({ plan_id: plan.id, name: 'Empty day' }) // normalized away
+
+        const meta = { title: 'Strong 5x5', description: '', level: 'beginner' as const }
+        const snapshot = snapshotFromPlanTree(await tree(repo, plan.id), 'lb', await repo.listGear())
+        let listing: { shared_plan_id: string; version: number }
+        try {
+          listing = await repo.publishPlan(plan.id, meta)
+        } catch (e) {
+          // Guests cannot publish; they adopt from a snapshot fetched from the public API.
+          if ((e as Error).name !== 'UnauthenticatedError') throw e
+          listing = { shared_plan_id: newId(), version: 1 }
+        }
+        expect(listing.version).toBe(1)
+        const input = { ...listing, snapshot, title: meta.title, author: 'Jo Lifts' }
+
+        // The original changes after sharing; the shared version does not.
+        await repo.savePlan({ id: plan.id, name: 'Renamed' })
+        await repo.updatePlanItem(a.id, { weight: 200 })
+        await repo.deleteExercise(sled.id)
+        await repo.deleteGear(sledGear.id)
+        await repo.updateProfile({ units: 'kg' })
+
+        const { plan_id } = await repo.adoptSharedPlan(input)
+        const copy = await tree(repo, plan_id)
+        expect(copy.name).toBe('Strength')
+        expect(copy.source).toEqual({ shared_plan_id: listing.shared_plan_id, version: 1, title: 'Strong 5x5', author: 'Jo Lifts' })
+        expect(copy.published).toBeNull()
+        expect(copy.days.map((d) => [d.name, d.color])).toEqual([['Push', 'red']])
+        const [ca, cb, cc] = must(copy.days[0], 'day').items
+        // 135 lb = 61.2 kg -> 60 on the 2.5 kg step; 10 lb = 4.5 kg -> 5; 5 lb = 2.3 kg -> 2.5
+        expect(ca).toMatchObject({ exercise_id: bench.id, sets: 3, reps: 5, weight: 60, angle: 'incline', amrap_last: true })
+        expect(ca).toMatchObject({ target_reps: null, target_weight: null, ruleSource: 'item', rule: rule({ success_amount: 5 }) })
+        expect(cb!.exercise).toMatchObject({ name: 'Sled Push', notes: '', video_url: null, default_sets: 4 })
+        expect(cb!.exercise_id).not.toBe(sled.id)
+        expect(cb).toMatchObject({ sets: 4, reps: 20, weight: 40, rule: null, ruleSource: 'item' })
+        expect(cc).toMatchObject({ exercise_id: deadlift.id, rule: rule({ success_amount: 2.5 }), ruleSource: 'item' })
+        expect(ca!.superset_group).not.toBeNull()
+        expect(cb!.superset_group).toBe(ca!.superset_group)
+        expect(cc!.superset_group).toBeNull()
+        const newSled = must((await repo.listGear()).find((g) => g.name === 'Sled'), 'Sled gear')
+        expect(newSled).toMatchObject({ owned: false })
+        expect(newSled.id).not.toBe(sledGear.id)
+        expect(cb!.exercise.required_gear_ids).toEqual([newSled.id])
+
+        // Copy and original are independent.
+        await repo.updatePlanItem(ca!.id, { sets: 9 })
+        expect((await planItem(repo, plan.id, a.id)).sets).toBe(3)
+        expect((await tree(repo, plan.id)).name).toBe('Renamed')
+
+        // A second adopt is a second, independent copy that reuses what the first one created.
+        const again = await repo.adoptSharedPlan(input)
+        expect(again.plan_id).not.toBe(plan_id)
+        const copy2 = must((await tree(repo, again.plan_id)).days[0], 'day').items
+        expect(copy2[0]!.sets).toBe(3)
+        expect(copy2[1]!.exercise_id).toBe(cb!.exercise_id)
+        expect(copy2[0]!.superset_group).not.toBe(ca!.superset_group)
+        expect((await repo.listExercises()).filter((e) => e.name === 'Sled Push')).toHaveLength(1)
+        expect((await repo.listGear()).filter((g) => g.name === 'Sled')).toHaveLength(1)
+
+        const exported = await repo.exportAll()
+        expect(exported.profile.display_name).toBe('Jo Lifts')
+        expect(exported.plans.find((p) => p.id === plan_id)?.source).toEqual(copy.source)
+      },
+    )
 
     // --------------------------------------------------------------- transfer
     contract('transfer', 'import rejects an angle on an exercise that does not support one', async ({ repo, make: makeAnother, skip }) => {

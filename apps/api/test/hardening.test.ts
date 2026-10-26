@@ -184,6 +184,9 @@ describe('logs carry no secrets', () => {
       getService: () => {
         throw new Error('unused')
       },
+      getPublic: () => {
+        throw new Error('unused')
+      },
     })
     const res = await app.request('/api/auth/ok')
     expect(res.status).toBe(500)

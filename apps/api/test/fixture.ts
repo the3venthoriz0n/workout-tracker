@@ -32,8 +32,34 @@ const must = <T>(v: T | undefined | null, what: string): T => {
 type Opts = { active?: boolean }
 
 /**
+ * One published listing per client, reused by later fixtures: publishing is limited to 5 a day
+ * per account (spec §9), and the route tests build a fixture for every case.
+ */
+const listings = new WeakMap<Client, { shared: string; publishedPlan: string }>()
+
+async function ensureListing(c: Client, ok: (m: string, p: string, b?: unknown) => Promise<unknown>, plan: string) {
+  const me = (await ok('GET', '/api/v1/me')) as { display_name: string | null }
+  if (!me.display_name) await ok('PATCH', '/api/v1/me', { display_name: 'Fixture Lifter' })
+  const cached = listings.get(c)
+  if (cached) {
+    const mine = (await ok('GET', '/api/v1/shared-plans/mine')) as { id: string; plan_id: string | null; status: string }[]
+    const row = mine.find((l) => l.id === cached.shared)
+    if (row?.status === 'published') return cached
+    if (row?.plan_id) {
+      await ok('POST', `/api/v1/plans/${row.plan_id}/publish`, { title: 'Fixture plan' })
+      return cached
+    }
+  }
+  const made = (await ok('POST', `/api/v1/plans/${plan}/publish`, { title: 'Fixture plan' })) as { shared_plan_id: string }
+  const next = { shared: made.shared_plan_id, publishedPlan: plan }
+  listings.set(c, next)
+  return next
+}
+
+/**
  * Builds one user's data through the public API: gear, exercise (with a default rule), plan, day,
- * an item with a rule plus a second item in a superset with it, a finished session and (unless `active: false`) a second, active session with its sets.
+ * an item with a rule plus a second item in a superset with it, a finished session and (unless `active: false`) a second, active session with its sets,
+ * a public name and a published community listing (the first fixture's plan, reused afterwards).
  */
 export async function buildFixture(c: Client, opts: Opts = {}): Promise<Fixture> {
   const ok = async (method: string, path: string, body?: unknown) => {
@@ -89,8 +115,9 @@ export async function buildFixture(c: Client, opts: Opts = {}): Promise<Fixture>
     session = first.id
     set = must(done.exercises[0]?.sets[0]?.id, 'set')
   }
+  const listing = await ensureListing(c, ok, f.plan)
   const exported = (await ok('GET', '/api/v1/export')) as ExportData
-  return { ...f, item: item.id, item2: item2.id, group, session, set, completedSession: first.id, export: exported }
+  return { ...f, item: item.id, item2: item2.id, group, session, set, completedSession: first.id, ...listing, export: exported }
 }
 
 /** A fixture whose ids all belong to nobody. */
@@ -106,6 +133,8 @@ export function randomFixture(like: Fixture): Fixture {
     session: newId(),
     set: newId(),
     completedSession: newId(),
+    shared: newId(),
+    publishedPlan: newId(),
     export: like.export,
   }
 }

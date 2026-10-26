@@ -6,6 +6,7 @@ import {
   ImportInvalidError,
   NotFoundError,
   ProfileNotFoundError,
+  PublishLimitError,
   SessionInProgressError,
   ValidationError,
 } from '@workout/shared'
@@ -69,5 +70,6 @@ export function mapDomainError(err: unknown, c: Context): Response | undefined {
   if (err instanceof SessionInProgressError) return c.json({ error: 'session_in_progress' }, 409)
   if (err instanceof AlreadyHasDataError) return c.json({ error: 'already_has_data' }, 409)
   if (err instanceof ConflictError) return c.json({ error: 'conflict' }, 409)
+  if (err instanceof PublishLimitError) return c.json({ error: 'publish_limit' }, 429)
   return undefined
 }

@@ -43,6 +43,9 @@ describe('app', () => {
       getService: () => {
         throw new Error('unused')
       },
+      getPublic: () => {
+        throw new Error('unused')
+      },
       sqlHealth: async () => false,
     })
     const res = await down.request('/healthz')
@@ -71,6 +74,9 @@ describe('app', () => {
       } as never,
       env: h.env,
       getService: () => {
+        throw new Error('unused')
+      },
+      getPublic: () => {
         throw new Error('unused')
       },
     })
