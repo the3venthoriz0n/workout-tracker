@@ -1,18 +1,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource/barlow/400.css";
-@import "@fontsource/barlow/500.css";
-@import "@fontsource/barlow/600.css";
-@import "@fontsource/barlow-condensed/600.css";
-@import "@fontsource/barlow-condensed/700.css";
+@import "@fontsource-variable/inter";
 
 /* Follow the OS colour scheme in CSS, so there is no light flash before JS runs. */
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
 @theme inline {
-    --font-heading: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
-    --font-sans: 'Barlow', system-ui, sans-serif;
+    --font-heading: 'Inter Variable', system-ui, sans-serif;
+    --font-sans: 'Inter Variable', system-ui, sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -29,6 +25,11 @@
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
+    --color-border-strong: var(--border-strong);
+    --color-field: var(--field);
+    --color-control: var(--control);
+    --color-brand: var(--brand);
+    --color-brand-foreground: var(--brand-foreground);
     --color-success: var(--success);
     --color-success-foreground: var(--success-foreground);
     --color-destructive: var(--destructive);
@@ -47,7 +48,6 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
-    /* Small radius (6px) for rows and inputs; `rounded-big` only for sheets and primary buttons. */
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -55,118 +55,150 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
-    --radius-big: 15px;
+    /* Named radii: inputs, list rows and set rows, cards, sheets. Buttons, chips and tabs are pills. */
+    --radius-field: 14px;
+    --radius-row: 16px;
+    --radius-card: 22px;
+    --radius-sheet: 24px;
 }
 
-/* Gym signage palette: chalk, iron, steel and competition plate colours.
-   Text pairs are checked against WCAG AA (4.5:1); see the commit for the numbers. */
+/* Warm minimal: off-white page, soft filled surfaces, near-black pill buttons and one blue
+   accent (focus, active, done, links). Every pair is checked against WCAG AA; numbers in the
+   spec (section 8). */
 :root {
     color-scheme: light;
-    --background: #f2f4f3; /* chalk */
-    --foreground: #1e2427; /* iron */
-    --card: #ffffff;
-    --card-foreground: #1e2427;
-    --popover: #ffffff;
-    --popover-foreground: #1e2427;
-    --primary: #1f4fd8; /* plate blue */
-    --primary-foreground: #ffffff;
-    --secondary: #e3e7e6;
-    --secondary-foreground: #1e2427;
-    --muted: #e3e7e6;
-    --muted-foreground: #5e686b; /* steel, AA on chalk */
-    --accent: #e3e7e6;
-    --accent-foreground: #1e2427;
-    --destructive: #c8302b; /* plate red */
+    --background: #fdfcfc;
+    --foreground: #090f15;
+    --card: #f5f3f1; /* soft surface */
+    --card-foreground: #090f15;
+    --popover: #fdfcfc;
+    --popover-foreground: #090f15;
+    --primary: #090f15; /* near-black pill buttons */
+    --primary-foreground: #fdfcfc;
+    --secondary: #ebe8e4;
+    --secondary-foreground: #090f15;
+    --muted: #ebe8e4;
+    --muted-foreground: #6b655d; /* warm grey, darkened from #777169: 4.72:1 on --muted */
+    --accent: #efece8; /* hover fill */
+    --accent-foreground: #090f15;
+    --destructive: #c2362b;
     --destructive-foreground: #ffffff;
-    --success: #267a4b; /* plate green, darkened from #2D8A55 to pass AA as text */
+    --success: #1f7a4d;
     --success-foreground: #ffffff;
-    --border: #d5dada;
-    --input: #7d878a; /* steel; 3:1 against chalk for input outlines */
-    --ring: #1f4fd8;
-    --chart-1: #1f4fd8;
-    --chart-2: #c8302b;
-    --chart-3: #267a4b;
-    --chart-4: #8a9497;
-    --chart-5: #1e2427;
-    --radius: 0.375rem;
-    --sidebar: #ffffff;
-    --sidebar-foreground: #1e2427;
-    --sidebar-primary: #1f4fd8;
-    --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #e3e7e6;
-    --sidebar-accent-foreground: #1e2427;
-    --sidebar-border: #d5dada;
-    --sidebar-ring: #1f4fd8;
-    /* Plan-day colours (DAY_COLORS). Each is >= 4.7:1 against chalk and white, so the bar
-       clears 3:1 and --day-foreground text on it clears 4.5:1 (lowest: amber 4.73 on chalk). */
-    --day-blue: #1f4fd8;
-    --day-red: #c8302b;
-    --day-green: #267a4b;
-    --day-amber: #a35a00;
-    --day-violet: #6b3fc4;
-    --day-teal: #0d7068;
-    --day-pink: #b8286e;
-    --day-slate: #56636b;
+    --brand: #1a66e0; /* the accent as text and as a fill under white text (>= 4.72:1) */
+    --brand-foreground: #ffffff;
+    --border: #ebe8e4; /* hairlines */
+    --border-strong: #d7d2cc;
+    --field: #f5f3f1; /* input fill on the page; surfaces swap it for the page colour */
+    --control: #8a847c; /* switch track off, checkbox edge: >= 3.34:1 on page and surface */
+    --input: #d7d2cc;
+    --ring: #2b7fff; /* bright accent, focus only: 3.40:1 on the surface */
+    --chart-1: #1a66e0;
+    --chart-2: #c2362b;
+    --chart-3: #1f7a4d;
+    --chart-4: #a59f97;
+    --chart-5: #090f15;
+    --radius: 0.75rem;
+    --sidebar: #fdfcfc;
+    --sidebar-foreground: #090f15;
+    --sidebar-primary: #090f15;
+    --sidebar-primary-foreground: #fdfcfc;
+    --sidebar-accent: #efece8;
+    --sidebar-accent-foreground: #090f15;
+    --sidebar-border: #ebe8e4;
+    --sidebar-ring: #2b7fff;
+    --shadow-float: 0 10px 30px -8px rgb(9 15 21 / 0.18), 0 2px 6px rgb(9 15 21 / 0.06);
+    /* Plan-day colours (DAY_COLORS): dots next to the day name. Each is >= 4.37:1 on the page
+       and surface, and --day-foreground on a swatch is >= 4.83:1 (lowest: amber). */
+    --day-blue: #3567d6;
+    --day-red: #c2453a;
+    --day-green: #2b7d52;
+    --day-amber: #a8600c;
+    --day-violet: #7553c4;
+    --day-teal: #1a7770;
+    --day-pink: #b8467b;
+    --day-slate: #66707a;
     --day-foreground: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
     :root {
         color-scheme: dark;
-        --background: #16191a;
-        --foreground: #e8eceb;
-        --card: #1f2325;
-        --card-foreground: #e8eceb;
-        --popover: #1f2325;
-        --popover-foreground: #e8eceb;
-        --primary: #6088f1; /* nudged from #5B83F0 so primary text passes AA on cards */
-        --primary-foreground: #16191a; /* white is only 3.5:1 on this blue */
-        --secondary: #2a2f31;
-        --secondary-foreground: #e8eceb;
-        --muted: #2a2f31;
-        --muted-foreground: #9aa5a8;
-        --accent: #2a2f31;
-        --accent-foreground: #e8eceb;
-        --destructive: #ef6a60;
-        --destructive-foreground: #16191a;
-        --success: #4fbf80;
-        --success-foreground: #16191a;
-        --border: #343a3c;
-        --input: #737d80;
-        --ring: #6088f1;
-        --chart-1: #6088f1;
-        --chart-2: #ef6a60;
-        --chart-3: #4fbf80;
-        --chart-4: #9aa5a8;
-        --chart-5: #e8eceb;
-        --sidebar: #1f2325;
-        --sidebar-foreground: #e8eceb;
-        --sidebar-primary: #6088f1;
-        --sidebar-primary-foreground: #16191a;
-        --sidebar-accent: #2a2f31;
-        --sidebar-accent-foreground: #e8eceb;
-        --sidebar-border: #343a3c;
-        --sidebar-ring: #6088f1;
-        /* Lighter plates for dark: each >= 4.7:1 against the card (#1f2325) and background
-           (lowest: blue 4.75 on the card); --day-foreground text on them >= 5.29:1. */
-        --day-blue: #6088f1;
-        --day-red: #ef6a60;
-        --day-green: #4fbf80;
-        --day-amber: #e6a23c;
-        --day-violet: #a98bf2;
-        --day-teal: #3cbfb2;
-        --day-pink: #f070b0;
-        --day-slate: #9aa5a8;
-        --day-foreground: #16191a;
+        --background: #090f15;
+        --foreground: #f5f3f1;
+        --card: #11181f;
+        --card-foreground: #f5f3f1;
+        --popover: #11181f;
+        --popover-foreground: #f5f3f1;
+        --primary: #f5f3f1; /* off-white pill, near-black text */
+        --primary-foreground: #090f15;
+        --secondary: #1b232c;
+        --secondary-foreground: #f5f3f1;
+        --muted: #1b232c;
+        --muted-foreground: #a59f97; /* 6.05:1 on --muted */
+        --accent: #1b232c;
+        --accent-foreground: #f5f3f1;
+        --destructive: #ff7b6b;
+        --destructive-foreground: #090f15;
+        --success: #4cc38a;
+        --success-foreground: #090f15;
+        --brand: #4d93ff; /* 5.90:1 on the surface; near-black text on it 6.36:1 */
+        --brand-foreground: #090f15;
+        --border: rgb(255 255 255 / 0.09);
+        --border-strong: rgb(255 255 255 / 0.16);
+        --field: #1b232c;
+        --control: #6b737c; /* 3.30:1 on --muted, 3.72:1 on the surface */
+        --input: rgb(255 255 255 / 0.16);
+        --ring: #4d93ff;
+        --chart-1: #4d93ff;
+        --chart-2: #ff7b6b;
+        --chart-3: #4cc38a;
+        --chart-4: #a59f97;
+        --chart-5: #f5f3f1;
+        --sidebar: #090f15;
+        --sidebar-foreground: #f5f3f1;
+        --sidebar-primary: #f5f3f1;
+        --sidebar-primary-foreground: #090f15;
+        --sidebar-accent: #1b232c;
+        --sidebar-accent-foreground: #f5f3f1;
+        --sidebar-border: rgb(255 255 255 / 0.09);
+        --sidebar-ring: #4d93ff;
+        --shadow-float: 0 10px 30px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
+        /* Lighter dots for dark: each >= 6.53:1 on the page, surface and --muted;
+           --day-foreground on a swatch >= 7.92:1. */
+        --day-blue: #7aa7f5;
+        --day-red: #f08a7e;
+        --day-green: #6cc79a;
+        --day-amber: #e6ae5c;
+        --day-violet: #b49cf0;
+        --day-teal: #5cc6ba;
+        --day-pink: #ee8dbb;
+        --day-slate: #a3abb5;
+        --day-foreground: #090f15;
     }
 }
 
+/* A soft surface (card, day section, superset block): fields and rows inside it use the page
+   colour so they still stand out. */
+@utility surface {
+  background-color: var(--card);
+  color: var(--card-foreground);
+  --field: var(--background);
+  --row: var(--background);
+}
+
 @layer base {
+  :root {
+    /* Space the floating tab bar takes at the bottom of the screen (phones). */
+    --nav-space: calc(5.75rem + env(safe-area-inset-bottom));
+    --row: var(--card);
+  }
   * {
     @apply border-border outline-ring;
   }
   html {
     @apply font-sans;
+    font-feature-settings: 'cv11';
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
@@ -174,14 +206,24 @@
   body {
     @apply bg-background text-foreground;
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
   }
   /* Keyboard focus stays visible in both themes; components with their own ring set outline-none. */
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  input[type='checkbox'], input[type='radio'] {
+    accent-color: var(--brand);
+  }
   a, button, input, select, textarea, label, summary, [role="button"], [role="tab"] {
     touch-action: manipulation;
+  }
+  /* The only motion besides sheets: a short colour change on interactive states. */
+  :where(a, button, select, input, textarea, [role="button"], [role="tab"]) {
+    transition-property: color, background-color, border-color, box-shadow, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
   }
   /* Pressed state replaces the tap highlight. */
   :where(a, button, [role="button"], [role="tab"]):not(:disabled):active {

@@ -30,10 +30,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }}
       style={
         {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
-          "--border-radius": "var(--radius)",
+          // Dark pills (inverse in dark mode): a 22px radius is a full pill on one line
+          "--normal-bg": "var(--primary)",
+          "--normal-text": "var(--primary-foreground)",
+          "--normal-border": "transparent",
+          "--border-radius": "22px",
         } as React.CSSProperties
       }
       toastOptions={{
@@ -41,7 +42,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           toast: "cn-toast",
         },
       }}
-      mobileOffset={{ bottom: "calc(4.5rem + env(safe-area-inset-bottom))" }}
+      mobileOffset={{ bottom: "var(--nav-space)" }}
       {...props}
     />
   )
