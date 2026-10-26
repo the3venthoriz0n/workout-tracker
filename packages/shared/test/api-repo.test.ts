@@ -181,3 +181,12 @@ describe('ApiRepo: community plans', () => {
     expect(err).toMatchObject({ status: 429, code: 'publish_limit' })
   })
 })
+
+describe('ApiRepo: own listing', () => {
+  it('maps 409 own_listing to OwnListingError', async () => {
+    const { OwnListingError } = await import('../src/repo.js')
+    const err = await stub(409, { error: 'own_listing' }).repo.setVote('l1', true).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(OwnListingError)
+    expect(err).toMatchObject({ status: 409, code: 'own_listing' })
+  })
+})

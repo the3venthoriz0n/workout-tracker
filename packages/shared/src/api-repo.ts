@@ -5,6 +5,7 @@ import {
   ImportInvalidError,
   NotFoundError,
   OfflineError,
+  OwnListingError,
   ProfileNotFoundError,
   PublishLimitError,
   SessionInProgressError,
@@ -53,6 +54,7 @@ export function responseError(status: number, data: unknown, notFound?: () => Er
     if (code === 'session_in_progress') return new SessionInProgressError()
     if (code === 'already_has_data') return new AlreadyHasDataError()
     if (code === 'conflict') return new ConflictError()
+    if (code === 'own_listing') return new OwnListingError()
   }
   if (status === 429 && code === 'publish_limit') return new PublishLimitError()
   if (status === 400 && code === 'invalid') {

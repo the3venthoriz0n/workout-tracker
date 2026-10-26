@@ -77,23 +77,58 @@ const checkRule = (r: { success_action: string; success_amount: number }, ctx: z
 export const ruleInputSchema = z.object(ruleFields).superRefine(checkRule)
 export type RuleInput = z.infer<typeof ruleInputSchema>
 
-// C0/C1 control characters and bidi overrides/isolates (they can disguise text). Public text is
-// stripped of them; MULTILINE keeps the newline.
-const CONTROLS = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g
-const CONTROLS_MULTILINE = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g
+// C0/C1 control characters (MULTILINE keeps the newline), and format characters (zero-width,
+// bidi overrides, soft hyphen) plus the Unicode line/paragraph separators, which can disguise text.
+const CONTROLS = /[\u0000-\u001f\u007f-\u009f]/g
+const CONTROLS_MULTILINE = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g
+const FORMAT = /[\p{Cf}\u00ad\u2028\u2029]/gu
 
-/** Strips control and bidi-override characters, then trims. */
+/** Strips format and control characters, applies NFKC (full-width letters become ASCII), then trims. */
 export function cleanText(s: string, multiline = false): string {
-  return s.replace(multiline ? CONTROLS_MULTILINE : CONTROLS, '').trim()
+  return s
+    .replace(FORMAT, '')
+    .normalize('NFKC')
+    .replace(FORMAT, '')
+    .replace(multiline ? CONTROLS_MULTILINE : CONTROLS, '')
+    .trim()
+}
+
+// Links and their usual disguises: http(s)://, hxxp(s)://, www., and bare domains (a letter or
+// digit, a dot, then two or more letters: "spam.com", "shop.example.co.uk"). Checked on cleaned text.
+const LINK = /(h[tx]{2}ps?:\/\/|www\.|[\p{L}\p{N}]\.\p{L}{2,})/iu
+
+/** True when cleaned public text holds no link. */
+export const isLinkFree = (s: string): boolean => !LINK.test(s)
+export const LINK_MESSAGE = 'Links are not allowed'
+
+/**
+ * Every string shown publicly (titles, descriptions, names, snapshot text): cleaned with
+ * `cleanText`, length-bounded and free of links. The cleaned form is what gets stored.
+ */
+export const publicText = (min: number, max: number, multiline = false) =>
+  z
+    .string()
+    .transform((s) => cleanText(s, multiline))
+    .pipe(z.string().min(min).max(max).refine(isLinkFree, LINK_MESSAGE))
+
+/** Matching key for exercise and gear names: NFKC, trimmed, inner whitespace collapsed, lowercase. */
+export function nameKey(s: string): string {
+  return s.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
 /** The only identity shown publicly (community plans). */
 export const displayNameSchema = z
   .string()
-  .trim()
-  .min(2)
-  .max(30)
-  .regex(/^[\p{L}\p{M}\p{N} _.-]+$/u, 'Use letters, digits, spaces, _ - . only')
+  .transform((s) => cleanText(s))
+  .pipe(
+    z
+      .string()
+      .min(2)
+      .max(30)
+      .regex(/^[\p{L}\p{M}\p{N} _-]+$/u, 'Use letters, digits, spaces, _ and - only')
+      .refine((s) => !/\p{M}{3}/u.test(s), 'Too many accents on one letter')
+      .refine(isLinkFree, LINK_MESSAGE),
+  )
 
 export const LEVELS = ['beginner', 'intermediate', 'advanced'] as const
 export const levelSchema = z.enum(LEVELS)
@@ -107,8 +142,8 @@ export type ListingStatus = z.infer<typeof listingStatusSchema>
 export const planSourceSchema = z.object({
   shared_plan_id: id,
   version: z.number().int().min(1).max(1_000_000),
-  title: z.string().min(1).max(60),
-  author: z.string().min(1).max(30),
+  title: publicText(1, 60),
+  author: publicText(1, 30),
 })
 export type PlanSource = z.infer<typeof planSourceSchema>
 

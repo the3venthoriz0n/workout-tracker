@@ -48,6 +48,8 @@ export async function setupApp(over: Partial<TestEnv> = {}) {
     env,
     getService: (userId) => createService(t.db, userId),
     getPublic: () => createPublicService(t.db),
+    // Tests call the public area far more often than a client would; the limiter has its own test.
+    publicRateLimit: { enabled: false },
   })
   const origin = env.BETTER_AUTH_URL
   const ip = `10.${randomBytes(1)[0]}.${randomBytes(1)[0]}.${randomBytes(1)[0]}`

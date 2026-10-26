@@ -8,7 +8,6 @@ import { ruleFieldsOf } from './rules.js'
 import {
   LIMITS,
   angleSchema,
-  cleanText,
   dayColorSchema,
   exerciseSchema,
   gearSchema,
@@ -16,11 +15,13 @@ import {
   itemStateSchema,
   levelSchema,
   listingStatusSchema,
+  nameKey,
   planDaySchema,
   planItemSchema,
   planSchema,
   planSourceSchema,
   progressionRuleSchema,
+  publicText,
   ruleInputSchema,
   unitsSchema,
 } from './schemas.js'
@@ -33,7 +34,9 @@ export const COMMUNITY = {
   descriptionMax: 500,
   maxDays: 14,
   maxItemsPerDay: 40,
-  maxGearPerItem: 20,
+  maxGearPerItem: 5,
+  /** Serialized snapshot size (UTF-8 bytes); publish and adopt reject anything larger. */
+  maxSnapshotBytes: 200_000,
   /** Publish operations (a new listing or a new version) per account per rolling 24 hours. */
   publishesPerDay: 5,
   /** Published listings per account at a time. */
@@ -42,31 +45,16 @@ export const COMMUNITY = {
   queryMax: 100,
 } as const
 
-const LINK = /(https?:\/\/|www\.)/i
-const noLink = (s: string) => !LINK.test(s)
-const LINK_MESSAGE = 'Links are not allowed'
-
 /** Title, description and level of a listing (publish request). Text is cleaned before the checks. */
 export const listingMetaSchema = z.object({
-  title: z
-    .string()
-    .transform((s) => cleanText(s))
-    .pipe(z.string().min(COMMUNITY.titleMin).max(COMMUNITY.titleMax).refine(noLink, LINK_MESSAGE)),
-  description: z
-    .string()
-    .transform((s) => cleanText(s, true))
-    .pipe(z.string().max(COMMUNITY.descriptionMax).refine(noLink, LINK_MESSAGE))
-    .default(''),
+  title: publicText(COMMUNITY.titleMin, COMMUNITY.titleMax),
+  description: publicText(0, COMMUNITY.descriptionMax, true).default(''),
   level: levelSchema.nullable().default(null),
 })
 export type ListingMeta = z.input<typeof listingMetaSchema>
 
-// Every snapshot string is cleaned and length-bounded.
-const snapText = (max: number) =>
-  z
-    .string()
-    .transform((s) => cleanText(s))
-    .pipe(z.string().min(1).max(max))
+// Every snapshot string is public text: cleaned, length-bounded, no links.
+const snapText = (max: number) => publicText(1, max)
 
 const snapshotItemSchema = z
   .object({
@@ -105,11 +93,15 @@ const snapshotDaySchema = z
  * A published plan version: names and numbers only. No ids, notes, video URLs, history or
  * anything personal. Unknown keys are stripped on parse.
  */
-export const sharedSnapshotSchema = z.object({
-  name: snapText(LIMITS.name),
-  units: unitsSchema,
-  days: z.array(snapshotDaySchema).min(1).max(COMMUNITY.maxDays),
-})
+export const sharedSnapshotSchema = z
+  .object({
+    name: snapText(LIMITS.name),
+    units: unitsSchema,
+    days: z.array(snapshotDaySchema).min(1).max(COMMUNITY.maxDays),
+  })
+  .refine((s) => new TextEncoder().encode(JSON.stringify(s)).length <= COMMUNITY.maxSnapshotBytes, {
+    message: `A shared plan can be at most ${COMMUNITY.maxSnapshotBytes / 1000} KB`,
+  })
 export type SharedSnapshot = z.infer<typeof sharedSnapshotSchema>
 
 const count = z.number().int().min(0)
@@ -261,7 +253,9 @@ export type AdoptedPlan = {
  * The rows of an independent copy of a shared plan (pure). Weights and add_weight amounts are
  * converted to the adopter's units and rounded to their step (an amount never below one step);
  * a value over the limit after conversion is a ValidationError, never clamped. Exercises and gear
- * are matched by case-insensitive name and created when missing (new gear is not marked owned).
+ * are matched by `nameKey` (NFKC, spacing, case) and created when missing (new gear is not marked
+ * owned); an existing exercise is reused as is, even when inactive. Spelling variants inside one
+ * snapshot share one new exercise, whose required gear is the union.
  * Item values are stored as overrides and each item's rule as an override (null: no progression),
  * so the copy behaves like the original whatever the adopter's defaults are. An angle on an
  * existing exercise without angle support is dropped.
@@ -287,7 +281,7 @@ export function planFromSnapshot(snapshot: unknown, source: unknown, ctx: AdoptC
   }
 
   const sync = { created_at: ctx.now, updated_at: ctx.now, deleted_at: null }
-  const key = (s: string) => s.trim().toLowerCase()
+  const key = nameKey
   const oldestFirst = <T extends { created_at: string; id: string }>(rows: T[]) =>
     [...rows].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
   const gearByName = new Map<string, Gear>()
@@ -314,9 +308,14 @@ export function planFromSnapshot(snapshot: unknown, source: unknown, ctx: AdoptC
     return g.id
   }
   const allItems = snap.days.flatMap((d) => d.items)
+  const created = new Set<string>()
   const exerciseFor = (item: SharedSnapshot['days'][number]['items'][number]): Exercise => {
     const k = key(item.exercise)
     let e = exByName.get(k)
+    if (e && created.has(e.id)) {
+      // A spelling variant of an exercise this copy creates: merge its required gear.
+      e.required_gear_ids = [...new Set([...e.required_gear_ids, ...item.gear.map(gearId)])]
+    }
     if (!e) {
       e = parseOr(
         exerciseSchema,
@@ -338,6 +337,7 @@ export function planFromSnapshot(snapshot: unknown, source: unknown, ctx: AdoptC
         'exercise',
       )
       exByName.set(k, e)
+      created.add(e.id)
       out.newExercises.push(e)
     }
     return e

@@ -310,7 +310,13 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | Snapshot values are the effective base values (not the sharer's progressed targets) and rules the effective rule, stored as item overrides on the copy | The copy behaves like the original whatever the adopter's defaults are, without carrying someone else's progress |
 | Publish limits counted from stored rows (5 versions per rolling 24 h, 20 live listings), checked under a lock on the profile row | Survives restarts and multiple processes; no in-memory state |
 | `display_name` can be changed but not removed; listings show the current name | Every live listing always has an author; unpublishing is how a sharer leaves |
-| Search uses `ILIKE` over the latest snapshot without a trigram index | `pg_trgm` would need an extension outside drizzle-kit migrations; listings are capped at 20 per account and pages at 20, so the scan stays small. Revisit if the list grows large |
+| Search uses `LIKE` on a stored `search_text` column (title, description and exercise names through `nameKey`), with `no_gear` and `day_count` columns for the filters; no trigram index | The public list never expands snapshot jsonb per request. `pg_trgm` would need an extension outside drizzle-kit migrations; listings are capped at 20 per account and pages at 20. Revisit if the list grows large |
+| One public-text rule for every public string (title, description, display_name, every snapshot string, imported `source`): format characters (`\p{Cf}`, soft hyphen, U+2028/2029) and controls stripped, NFKC applied, then links rejected (`http(s)://`, `hxxp(s)://`, `www.`, bare domains like `spam.com`); the cleaned form is stored. `display_name` allows letters, digits, spaces, `_` and `-` (no dots) and at most two combining marks in a row | Zero-width, full-width and look-alike tricks cannot smuggle links or spoof names. Ordinary abbreviations with a dot and a space ("Mon. and Thu.") still pass |
+| Exercise and gear names match by `nameKey` (NFKC, trimmed, inner whitespace collapsed, lowercase) in `LocalRepo` and on the server; spelling variants inside one snapshot share one new exercise with the union of their gear; an existing exercise is reused as is, even when inactive | No near-duplicate exercises; adoption never changes existing rows. An inactive match stays inactive (hidden from the picker) until the user turns it on |
+| Server adoption reads the library inside its transaction after `pg_advisory_xact_lock` on the user | Concurrent adopts by one user cannot create duplicate exercises or gear |
+| Snapshots are capped at 200 KB serialized and 5 gear names per exercise | Bounds storage and every public response |
+| Owners cannot upvote their own listing (`409 own_listing`); their own copies are allowed but never counted | Counts reflect other people |
+| The public area is rate limited per client IP (60 requests a minute, in memory, the same client-IP header rules as the auth limits; one shared bucket without such a header), `429 {"error":"rate_limited"}`; `AUTH_RATE_LIMIT=off` disables it outside production | Cheap protection for the only unauthenticated data endpoints |
 
 ## 14. Open questions
 
@@ -320,6 +326,8 @@ None block M3, but resolve these before opening sign-up to real users (sign-up i
 
 - Account deletion and per-account data export endpoints, off-box database backups, CSV export.
 - M3: Domain name (not yet bought; Cloudflare Registrar sells at cost), the Resend sending subdomain, and the DigitalOcean region (`sfo2` in Terraform may not accept new Droplets; `just infra-plan` will tell).
+
+**Known limits (community plans)**: deleting an account (not built yet) would cascade its votes and download rows without decrementing the counters on other users' listings; a copy's `source.title` is the listing's title when copied and is not updated; two publishes of the same new plan racing each other are serialized by the profile lock but a plan edited between reading its tree and that lock is published as read; nothing stops a sharer from choosing a public name that imitates someone else (moderation is hiding a listing by hand).
 
 **Unverified; check before building the part that depends on them**: Capacitor origin strings for CORS and `trustedOrigins`; Apple's in-app payment rules; App Store stance on web wrappers; Gemini free-tier terms and limits; Capacitor live-update terms; whether Dependabot supports the pnpm 12 lockfile; whether new GHCR packages default to private.
 

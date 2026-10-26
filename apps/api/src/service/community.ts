@@ -7,9 +7,11 @@ import {
   COMMUNITY,
   ConflictError,
   NotFoundError,
+  OwnListingError,
   PublishLimitError,
   ValidationError,
   listingMetaSchema,
+  nameKey,
   newId,
   planFromSnapshot,
   sharedSnapshotSchema,
@@ -18,6 +20,7 @@ import {
 import type {
   AdoptInput,
   ListingMeta,
+  SharedSnapshot,
   PlanPublished,
   PublicListPage,
   PublicListing,
@@ -41,10 +44,10 @@ import {
   sharedPlanVersion,
 } from '../db/schema.js'
 import type { Db } from '../db/types.js'
-import { listExercises } from './exercises.js'
 import { listGear } from './gear.js'
 import type { Tx } from './items.js'
-import { dec, isUuid, now } from './mappers.js'
+import { byName, dec, isUuid, now, toExercise, toGear } from './mappers.js'
+import { pgCode } from './pg-error.js'
 import { getPlan, profileOf } from './plans.js'
 
 const live = (userId: string) => and(eq(plan.userId, userId), isNull(plan.deletedAt))
@@ -68,6 +71,16 @@ export async function publishedOf(
     if (l) out.set(r.id, { shared_plan_id: l.id, version: l.version, status: l.status as PlanPublished['status'] })
   }
   return out
+}
+
+/** Search and filter columns of a version (spec §9): the public list never expands the jsonb. */
+function searchColumns(meta: { title: string; description: string }, snapshot: SharedSnapshot) {
+  const items = snapshot.days.flatMap((d) => d.items)
+  return {
+    searchText: nameKey([meta.title, meta.description, ...items.map((i) => i.exercise)].join(' ')),
+    noGear: items.every((i) => i.gear.length === 0),
+    dayCount: snapshot.days.length,
+  }
 }
 
 function parseMeta(raw: ListingMeta) {
@@ -131,13 +144,13 @@ export async function publishPlan(
     const fields = { title: meta.title, description: meta.description, level: meta.level, status: 'published', updatedAt: ts }
     if (existing) {
       const version = existing.latestVersion + 1
-      await tx.insert(sharedPlanVersion).values({ sharedPlanId: existing.id, version, snapshot, createdAt: ts })
+      await tx.insert(sharedPlanVersion).values({ sharedPlanId: existing.id, version, snapshot, ...searchColumns(meta, snapshot), createdAt: ts })
       await tx.update(sharedPlan).set({ ...fields, latestVersion: version }).where(eq(sharedPlan.id, existing.id))
       return { shared_plan_id: existing.id, version }
     }
     const id = newId()
     await tx.insert(sharedPlan).values({ id, ownerId: userId, ...fields, latestVersion: 1, createdAt: ts })
-    await tx.insert(sharedPlanVersion).values({ sharedPlanId: id, version: 1, snapshot, createdAt: ts })
+    await tx.insert(sharedPlanVersion).values({ sharedPlanId: id, version: 1, snapshot, ...searchColumns(meta, snapshot), createdAt: ts })
     await tx.update(plan).set({ sharedPlanId: id }).where(and(eq(plan.userId, userId), eq(plan.id, planId)))
     return { shared_plan_id: id, version: 1 }
   })
@@ -187,19 +200,21 @@ export async function listMyShared(db: Db, userId: string): Promise<SharedListin
 }
 
 /** Locks a published listing (or 404): serializes votes, downloads and status changes on it. */
-async function lockPublished(tx: Tx, id: string) {
+async function lockPublished(tx: Tx, id: string): Promise<{ ownerId: string }> {
   const [row] = await tx
-    .select({ id: sharedPlan.id })
+    .select({ ownerId: sharedPlan.ownerId })
     .from(sharedPlan)
     .where(and(eq(sharedPlan.id, id), eq(sharedPlan.status, 'published')))
     .for('update')
   if (!row) throw new NotFoundError('Shared plan')
+  return row
 }
 
 export async function setVote(db: Db, userId: string, id: string, voted: boolean): Promise<{ upvotes: number }> {
   if (!isUuid(id)) throw new NotFoundError('Shared plan')
   return db.transaction(async (tx) => {
-    await lockPublished(tx, id)
+    const { ownerId } = await lockPublished(tx, id)
+    if (voted && ownerId === userId) throw new OwnListingError()
     const changed = voted
       ? await tx.insert(planVote).values({ userId, sharedPlanId: id, createdAt: now() }).onConflictDoNothing().returning({ id: planVote.sharedPlanId })
       : await tx
@@ -252,23 +267,25 @@ export async function adoptSharedPlan(db: Db, userId: string, input: AdoptInput)
     .where(and(eq(sharedPlanVersion.sharedPlanId, id), eq(sharedPlanVersion.version, version)))
   if (!stored) throw new NotFoundError('Shared plan version')
 
-  const rows = planFromSnapshot(
-    stored.snapshot,
-    { shared_plan_id: id, version, title: listing.title, author: listing.author },
-    {
+  const source = { shared_plan_id: id, version, title: listing.title, author: listing.author }
+
+  return db.transaction(async (tx) => {
+    // Unpublished meanwhile: no copy, no count.
+    const { ownerId } = await lockPublished(tx, id)
+    // One adopt at a time per user, and the library is read inside the transaction, so
+    // concurrent adopts reuse each other's new exercises and gear instead of duplicating them.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`adopt:${userId}`}))`)
+    const exercises = await tx.select().from(exercise).where(and(eq(exercise.userId, userId), isNull(exercise.deletedAt)))
+    const gearRows = await tx.select().from(gear).where(and(eq(gear.userId, userId), isNull(gear.deletedAt)))
+    const rows = planFromSnapshot(stored.snapshot, source, {
       userId,
       units: prof.units,
       increment: prof.weight_increment,
-      exercises: await listExercises(db, userId),
-      gear: await listGear(db, userId),
+      exercises: exercises.map(toExercise).sort(byName),
+      gear: gearRows.map(toGear).sort(byName),
       now: now().toISOString(),
       newId,
-    },
-  )
-
-  await db.transaction(async (tx) => {
-    // Unpublished meanwhile: no copy, no count.
-    await lockPublished(tx, id)
+    })
     const sync = (r: { created_at: string; updated_at: string }) => ({ createdAt: new Date(r.created_at), updatedAt: new Date(r.updated_at) })
     if (rows.newGear.length > 0) {
       await tx.insert(gear).values(rows.newGear.map((g) => ({ id: g.id, userId, name: g.name, owned: g.owned, ...sync(g) })))
@@ -331,6 +348,8 @@ export async function adoptSharedPlan(db: Db, userId: string, input: AdoptInput)
       )
     }
     await tx.insert(itemState).values(rows.itemStates.map((s) => ({ userId, planItemId: s.plan_item_id, failStreak: 0, ...sync(s) })))
+    // The owner's own copies are never counted.
+    if (ownerId === userId) return { plan_id: rows.plan.id }
     const counted = await tx
       .insert(planDownload)
       .values({ userId, sharedPlanId: id, firstVersion: version, createdAt: now() })
@@ -342,8 +361,8 @@ export async function adoptSharedPlan(db: Db, userId: string, input: AdoptInput)
         .set({ downloadCount: sql`${sharedPlan.downloadCount} + 1` })
         .where(eq(sharedPlan.id, id))
     }
+    return { plan_id: rows.plan.id }
   })
-  return { plan_id: rows.plan.id }
 }
 
 // ------------------------------------------------------------------- public area (no user)
@@ -357,10 +376,8 @@ export type PublicService = {
 }
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`)
-const items = (snapshot: typeof sharedPlanVersion.snapshot) =>
-  sql`jsonb_array_elements(${snapshot}->'days') as d(day) cross join jsonb_array_elements(d.day->'items') as i(item)`
 // Postgres' own text form of a timestamptz keeps microseconds, so the cursor is exact.
-const PG_TIMESTAMP = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,6})?[+-]\d{2}(:\d{2})?$/
+const PG_TIMESTAMP = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?:\.\d{1,6})?[+-]\d{2}(?::\d{2})?$/
 const MAX_INT = 2_147_483_647
 
 type Cursor = { a: number; b: number; ts: string; id: string }
@@ -381,8 +398,12 @@ function decodeCursor(raw: string): Cursor {
   const [a, b, ts, id] = v as unknown[]
   const okInt = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= MAX_INT
   if (!okInt(a) || !okInt(b) || typeof ts !== 'string' || typeof id !== 'string' || !isUuid(id)) throw bad()
-  const iso = ts.replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00')
-  if (!PG_TIMESTAMP.test(ts) || Number.isNaN(Date.parse(iso))) throw bad()
+  const m = PG_TIMESTAMP.exec(ts)
+  if (!m) throw bad()
+  // Round trip: the date and time must exist as written (no Feb 30, no hour 25).
+  const [, date, time] = m
+  const d = new Date(`${date}T${time}Z`)
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 19) !== `${date}T${time}`) throw bad()
   return { a, b, ts, id }
 }
 
@@ -392,7 +413,7 @@ const listingColumns = {
   description: sharedPlan.description,
   level: sharedPlan.level,
   author: profile.displayName,
-  dayCount: sql<number>`jsonb_array_length(${sharedPlanVersion.snapshot}->'days')`.mapWith(Number),
+  dayCount: sharedPlanVersion.dayCount,
   version: sharedPlan.latestVersion,
   upvotes: sharedPlan.upvoteCount,
   downloads: sharedPlan.downloadCount,
@@ -446,18 +467,12 @@ export function createPublicService(db: Db): PublicService {
   return {
     async listPlans(query) {
       const conds: (SQL | undefined)[] = [visible]
-      const q = query.q?.trim()
-      if (q) {
-        const p = `%${escapeLike(q)}%`
-        conds.push(
-          sql`(${sharedPlan.title} ilike ${p} or ${sharedPlan.description} ilike ${p} or exists (select 1 from ${items(sharedPlanVersion.snapshot)} where i.item->>'exercise' ilike ${p}))`,
-        )
-      }
-      if (query.days !== undefined) conds.push(sql`jsonb_array_length(${sharedPlanVersion.snapshot}->'days') = ${query.days}`)
+      // Same normalization as the stored search_text (nameKey), so case, width and spacing match.
+      const q = query.q === undefined ? '' : nameKey(query.q)
+      if (q) conds.push(sql`${sharedPlanVersion.searchText} like ${`%${escapeLike(q)}%`}`)
+      if (query.days !== undefined) conds.push(eq(sharedPlanVersion.dayCount, query.days))
       if (query.level !== undefined) conds.push(eq(sharedPlan.level, query.level))
-      if (query.gear === 'none') {
-        conds.push(sql`not exists (select 1 from ${items(sharedPlanVersion.snapshot)} where jsonb_array_length(i.item->'gear') > 0)`)
-      }
+      if (query.gear === 'none') conds.push(eq(sharedPlanVersion.noGear, true))
       const keys =
         query.sort === 'new'
           ? [sharedPlan.updatedAt, sharedPlan.id]
@@ -471,10 +486,17 @@ export function createPublicService(db: Db): PublicService {
         const values = query.sort === 'new' ? [ts, id] : [sql`${c.a}::int`, sql`${c.b}::int`, ts, id]
         conds.push(sql`(${sql.join(keys, sql`, `)}) < (${sql.join(values, sql`, `)})`)
       }
-      const rows = await listingQuery(db)
-        .where(and(...conds))
-        .orderBy(...keys.map((k) => desc(k)))
-        .limit(query.limit + 1)
+      let rows
+      try {
+        rows = await listingQuery(db)
+          .where(and(...conds))
+          .orderBy(...keys.map((k) => desc(k)))
+          .limit(query.limit + 1)
+      } catch (err) {
+        // A cursor that passed the checks but still is no valid timestamp (data exception).
+        if (query.cursor !== undefined && pgCode(err)?.startsWith('22')) throw new ValidationError('cursor', 'Invalid cursor')
+        throw err
+      }
       const page = rows.slice(0, query.limit)
       const last = page.at(-1)
       const next =

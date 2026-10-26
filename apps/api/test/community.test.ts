@@ -280,11 +280,15 @@ describe('votes', () => {
     expect(await ok(b, 'PUT', `/api/v1/shared-plans/${id}/vote`)).toEqual({ upvotes: 1 })
     expect(await ok(b, 'PUT', `/api/v1/shared-plans/${id}/vote`)).toEqual({ upvotes: 1 })
     expect(await ok(b, 'GET', `/api/v1/shared-plans/${id}/vote`)).toEqual({ voted: true })
-    expect(await ok(a, 'PUT', `/api/v1/shared-plans/${id}/vote`)).toEqual({ upvotes: 2 })
-    expect(((await pub(`/plans/${id}`)).json as Detail).listing.upvotes).toBe(2)
-    expect(await ok(b, 'DELETE', `/api/v1/shared-plans/${id}/vote`)).toEqual({ upvotes: 1 })
-    expect(await ok(b, 'DELETE', `/api/v1/shared-plans/${id}/vote`)).toEqual({ upvotes: 1 })
-    expect((await mine(a)).find((l) => l.id === id)?.upvotes).toBe(1)
+    // Owners cannot upvote their own listing.
+    const own = await a.call('PUT', `/api/v1/shared-plans/${id}/vote`)
+    expect(own.status).toBe(409)
+    expect(own.text).toBe('{"error":"own_listing"}')
+    expect(await ok(a, 'GET', `/api/v1/shared-plans/${id}/vote`)).toEqual({ voted: false })
+    expect(((await pub(`/plans/${id}`)).json as Detail).listing.upvotes).toBe(1)
+    expect(await ok(b, 'DELETE', `/api/v1/shared-plans/${id}/vote`)).toEqual({ upvotes: 0 })
+    expect(await ok(b, 'DELETE', `/api/v1/shared-plans/${id}/vote`)).toEqual({ upvotes: 0 })
+    expect((await mine(a)).find((l) => l.id === id)?.upvotes).toBe(0)
     await expectCountersMatchRows()
   })
 
@@ -338,6 +342,10 @@ describe('adopting', () => {
     await ok(b, 'PUT', `/api/v1/plans/${first.json.plan_id}`, { name: 'Mine now' })
     expect(((await ok(b, 'GET', `/api/v1/plans/${second.json.plan_id}`)) as Json).name).toBe('Shared')
     expect(JSON.stringify(((await ok(a, 'GET', '/api/v1/export')) as ExportData).plans)).toBe(before)
+    // The owner may take a copy of their own listing; it is not counted.
+    const ownCopy = await a.call('POST', `/api/v1/shared-plans/${id}/adopt`, {})
+    expect(ownCopy.status).toBe(201)
+    expect(((await pub(`/plans/${id}`)).json as Detail).listing.downloads).toBe(2)
     await expectCountersMatchRows()
   })
 
@@ -363,6 +371,29 @@ describe('adopting', () => {
     expect(((await ok(b, 'GET', `/api/v1/plans/${latest.plan_id}`)) as { days: { items: { weight: number }[] }[] }).days[0]!.items[0]!.weight).toBe(150)
     expect((await b.call('POST', `/api/v1/shared-plans/${id}/adopt`, { version: 3 })).text).toBe('{"error":"not_found"}')
     expect((await b.call('POST', `/api/v1/shared-plans/${id}/adopt`, { version: 0 })).status).toBe(400)
+    expect(((await pub(`/plans/${id}`)).json as Detail).listing.downloads).toBe(1)
+  })
+})
+
+describe('adopting: concurrency and name matching', () => {
+  it('concurrent adopts by one user never duplicate exercises or gear; spacing and NFD variants match', async () => {
+    const a = await account('Variant Maker')
+    const b = await account()
+    const gearId = newId()
+    await ok(a, 'PUT', `/api/v1/gear/${gearId}`, { name: 'Prowler', owned: true })
+    const { plan } = await makePlan(a, 'Variants', ['Prowler Push', 'Cafe\u0301 Squat', 'Bench  Press'], { required_gear_ids: [gearId] })
+    const { shared_plan_id: id } = await published(a, plan)
+    // B already has "Café Squat" (NFC) and the seeded "Bench Press".
+    await ok(b, 'PUT', `/api/v1/exercises/${newId()}`, exerciseBody('Café Squat'))
+    const results = await Promise.all([1, 2, 3].map(() => b.call('POST', `/api/v1/shared-plans/${id}/adopt`, {})))
+    for (const r of results) expect(r.status, r.text).toBe(201)
+    const exercises = (await ok(b, 'GET', '/api/v1/exercises')) as { name: string }[]
+    const count = (n: string) => exercises.filter((e) => e.name.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ') === n).length
+    expect(count('prowler push')).toBe(1)
+    expect(count('café squat')).toBe(1)
+    expect(count('bench press')).toBe(1)
+    const gearRows = (await ok(b, 'GET', '/api/v1/gear')) as { name: string }[]
+    expect(gearRows.filter((g) => g.name === 'Prowler')).toHaveLength(1)
     expect(((await pub(`/plans/${id}`)).json as Detail).listing.downloads).toBe(1)
   })
 })
@@ -510,6 +541,24 @@ describe('the public area', () => {
     expect(all.items.length).toBeLessThanOrEqual(20)
     expect((await pub('/plans?cursor=bogus')).status).toBe(400)
     expect((await pub('/plans?limit=21')).status).toBe(400)
+    // Tampered cursors are 400 invalid, never a database error.
+    const enc = (v: unknown) => encodeURIComponent(Buffer.from(JSON.stringify(v)).toString('base64url'))
+    for (const bad of [
+      [0, 0, '2026-02-30 10:00:00+00', ids[0]],
+      [0, 0, '2026-13-01 10:00:00+00', ids[0]],
+      [0, 0, '2026-01-01 25:00:00+00', ids[0]],
+      [0, 0, '99999-01-01 10:00:00+00', ids[0]],
+      [-1, 0, '2026-01-01 10:00:00+00', ids[0]],
+      [1e12, 0, '2026-01-01 10:00:00+00', ids[0]],
+      [0, 0, '2026-01-01 10:00:00+00', 'not-a-uuid'],
+      { a: 1 },
+    ]) {
+      for (const sort of ['top', 'new', 'used']) {
+        const r = await pub(`/plans?sort=${sort}&cursor=${enc(bad)}`)
+        expect(r.status, `${sort} ${JSON.stringify(bad)} ${r.text}`).toBe(400)
+        expect((r.json as { error: string }).error).toBe('invalid')
+      }
+    }
   })
 })
 
@@ -537,6 +586,24 @@ describe('export and import', () => {
     expect(((await ok(carol, 'GET', `/api/v1/plans/${plan}`)) as Json).published).toBeNull()
   })
 
+  it('import cleans plan source title and author and rejects links in them', async () => {
+    const a = await account()
+    await makePlan(a)
+    const exported = (await ok(a, 'GET', '/api/v1/export')) as ExportData
+    const withSource = (title: string, author: string) => {
+      const d = JSON.parse(JSON.stringify(exported)) as ExportData
+      d.plans[0]!.source = { shared_plan_id: newId(), version: 1, title, author }
+      return d
+    }
+    const bad = await signUpClient(h, `src-${newId()}@example.com`)
+    expect((await bad.call('POST', '/api/v1/import', withSource('Visit spam.com', 'Jo'))).status).toBe(400)
+    expect((await bad.call('POST', '/api/v1/import', withSource('Fine', 'www\u200b.x.com'))).status).toBe(400)
+    const good = await signUpClient(h, `src-${newId()}@example.com`)
+    expect((await good.call('POST', '/api/v1/import', withSource('Strong\u0000 5x5\u200b', 'Ｊｏ Lifts'))).status).toBe(204)
+    const back = (await ok(good, 'GET', '/api/v1/export')) as ExportData
+    expect(back.plans[0]!.source).toMatchObject({ title: 'Strong 5x5', author: 'Jo Lifts' })
+  })
+
   it('an export written before community plans still imports', async () => {
     const a = await account()
     await makePlan(a)
@@ -553,5 +620,48 @@ describe('export and import', () => {
     const back = (await ok(fresh, 'GET', '/api/v1/export')) as ExportData
     expect(back.profile.display_name).toBeNull()
     expect(back.plans.every((p) => p.source === null)).toBe(true)
+  })
+})
+
+describe('public rate limit', () => {
+  const appWith = async (deps: { env?: Record<string, unknown>; publicRateLimit?: { max?: number; ipHeaders?: string[]; enabled?: boolean } }) => {
+    const { createApp } = await import('../src/app.js')
+    const { createPublicService } = await import('../src/service/community.js')
+    const { createService } = await import('../src/service/index.js')
+    return createApp({
+      auth: h.auth,
+      env: { ...h.env, ...deps.env } as typeof h.env,
+      getService: (u) => createService(h.db, u),
+      getPublic: () => createPublicService(h.db),
+      ...(deps.publicRateLimit ? { publicRateLimit: deps.publicRateLimit } : {}),
+    })
+  }
+  const hit = (app: Awaited<ReturnType<typeof appWith>>, ip?: string) =>
+    app.request('/api/public/plans', ip ? { headers: { 'x-test-client-ip': ip } } : undefined)
+
+  it('allows a burst per client IP, then 429 rate_limited; other IPs and /api/v1 are unaffected', async () => {
+    const app = await appWith({ publicRateLimit: { max: 3, ipHeaders: ['x-test-client-ip'] } })
+    for (let i = 0; i < 3; i++) expect((await hit(app, '198.51.100.1')).status).toBe(200)
+    const limited = await hit(app, '198.51.100.1')
+    expect(limited.status).toBe(429)
+    expect(await limited.json()).toEqual({ error: 'rate_limited' })
+    expect((await hit(app, '198.51.100.2')).status).toBe(200)
+    expect((await app.request('/api/v1/me')).status).toBe(401)
+  })
+
+  it('defaults to 60 a minute in one shared bucket without an IP header; AUTH_RATE_LIMIT=off disables it outside production only', async () => {
+    const statuses = async (app: Awaited<ReturnType<typeof appWith>>, n: number) => {
+      const out: number[] = []
+      for (let i = 0; i < n; i++) out.push((await hit(app)).status)
+      return out
+    }
+    const dev = await appWith({ env: { NODE_ENV: 'development' } })
+    const s = await statuses(dev, 61)
+    expect(s.slice(0, 60).every((x) => x === 200)).toBe(true)
+    expect(s[60]).toBe(429)
+    const off = await appWith({ env: { NODE_ENV: 'development', AUTH_RATE_LIMIT: 'off' } })
+    expect((await statuses(off, 61)).every((x) => x === 200)).toBe(true)
+    const prod = await appWith({ env: { NODE_ENV: 'production', AUTH_RATE_LIMIT: 'off' }, publicRateLimit: { max: 2 } })
+    expect(await statuses(prod, 3)).toEqual([200, 200, 429])
   })
 })

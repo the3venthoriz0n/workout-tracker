@@ -186,7 +186,7 @@ describe('community listings of another user (foreign: public)', () => {
     ])
   })
 
-  it('B can vote on and adopt A\'s published listing without touching A\'s data', async () => {
+  it('B can vote on and adopt another user\'s published listing without touching A\'s data', async () => {
     const beforeA = await snapshot(a)
     for (const spec of specs) {
       const res = await b.call(spec.method, fill(spec, fa), spec.body?.(fa))

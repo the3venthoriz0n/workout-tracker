@@ -16,6 +16,7 @@ import {
   NotFoundError,
   OfflineError,
   ApiError,
+  nameKey,
 } from '../src/index.js'
 import type { AdoptContext, Exercise, Gear, PlanItemView, PlanSource, PlanTree, SharedSnapshot } from '../src/index.js'
 import { defaultRule } from '../src/progression.js'
@@ -59,12 +60,15 @@ function tree(days: { name: string; items: PlanItemView[]; color?: PlanTree['day
 
 describe('schemas', () => {
   it('display_name: 2-30 letters, digits, spaces, _ - .', () => {
-    for (const ok of ['Al', 'Jo Lifts', 'iron_maiden-2.0', 'Zoë Ström', 'x'.repeat(30)]) {
+    for (const ok of ['Al', 'Jo Lifts', 'iron_maiden-2', 'Zoë Ström', 'Zoe\u0308', 'x'.repeat(30)]) {
       expect(displayNameSchema.safeParse(ok).success, ok).toBe(true)
     }
-    for (const bad of ['A', 'x'.repeat(31), 'bob@mail', 'a/b', '<script>', '', '   ', 'Tab\there']) {
+    for (const bad of ['A', 'x'.repeat(31), 'bob@mail', 'a/b', '<script>', '', '   ', 'Jo.Lifts', 'spam.com', 'Zx\u0301\u0302\u0303\u0304']) {
       expect(displayNameSchema.safeParse(bad).success, bad).toBe(false)
     }
+    // Stored cleaned: control and format characters stripped, NFKC applied.
+    expect(displayNameSchema.parse('Tab\there')).toBe('Tabhere')
+    expect(displayNameSchema.parse('Ｊｏ\u200b Lifts')).toBe('Jo Lifts')
   })
 
   it('listing meta: title 3-60, description 0-500, level enum, no links, control characters stripped', () => {
@@ -123,6 +127,71 @@ describe('schemas', () => {
     for (const bad of [{ limit: '21' }, { limit: '0' }, { days: 'x' }, { sort: 'hot' }, { gear: 'some' }, { q: 'x'.repeat(101) }]) {
       expect(publicListQuerySchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false)
     }
+  })
+})
+
+describe('public text: one link check for every public string', () => {
+  const BYPASSES = ['www\u200b.spam.com', 'ｗｗｗ．x．com', 'hxxp://x', 'HXXPS://x', 'http://x', 'spam.com', 'see Spam.Com now', 'shop.example.co.uk', 'w\u00adww.spam.com', 'line\u2028www.spam.com']
+  const item = (exercise: string, gear: string[] = []) => ({
+    exercise, gear, supports_angle: false, sets: 3, reps: 5, weight: 100, angle: null, amrap_last: false, superset: null, rule: null,
+  })
+  const snap = (over: { name?: string; day?: string; exercise?: string; gear?: string[] }) => ({
+    name: over.name ?? 'Plan', units: 'lb',
+    days: [{ name: over.day ?? 'Day', color: null, items: [item(over.exercise ?? 'Squat', over.gear ?? [])] }],
+  })
+
+  it('rejects links and their bypasses in titles, descriptions, names and every snapshot string', () => {
+    for (const b of BYPASSES) {
+      expect(listingMetaSchema.safeParse({ title: `Plan ${b}` }).success, `title ${b}`).toBe(false)
+      expect(listingMetaSchema.safeParse({ title: 'Good title', description: `x ${b}` }).success, `description ${b}`).toBe(false)
+      expect(displayNameSchema.safeParse(b).success, `name ${b}`).toBe(false)
+      for (const over of [{ name: b }, { day: b }, { exercise: b }, { gear: [b] }]) {
+        expect(sharedSnapshotSchema.safeParse(snap(over)).success, `snapshot ${JSON.stringify(over)}`).toBe(false)
+      }
+    }
+    // Ordinary text with dots or abbreviations still passes.
+    for (const ok of ['5x5 v2. Heavy', 'Mon. and Thu.', 'D.B. Press', '3.5 kg plates', 'e.g. squats']) {
+      expect(listingMetaSchema.safeParse({ title: 'Good title', description: ok }).success, ok).toBe(true)
+    }
+  })
+
+  it('stores the cleaned, NFKC-normalized form', () => {
+    expect(listingMetaSchema.parse({ title: 'Ｓｔｒｏｎｇ\u200b 5x5\u00ad' }).title).toBe('Strong 5x5')
+    expect(sharedSnapshotSchema.parse(snap({ exercise: 'Ｂｅｎｃｈ\u200d Press' })).days[0]!.items[0]!.exercise).toBe('Bench Press')
+  })
+
+  it('caps gear at 5 names per exercise and the whole snapshot at 200 KB', () => {
+    expect(sharedSnapshotSchema.safeParse(snap({ gear: ['a', 'b', 'c', 'd', 'e'] })).success).toBe(true)
+    expect(sharedSnapshotSchema.safeParse(snap({ gear: ['a', 'b', 'c', 'd', 'e', 'f'] })).success).toBe(false)
+    const long = (i: number) => `${'x'.repeat(190)}${i}`
+    const huge = {
+      name: 'Huge', units: 'lb',
+      days: Array.from({ length: COMMUNITY.maxDays }, (_, d) => ({
+        name: `D${d}`, color: null,
+        items: Array.from({ length: COMMUNITY.maxItemsPerDay }, (_, i) => item(long(d * 100 + i), [long(1), long(2), long(3), long(4), long(5)])),
+      })),
+    }
+    expect(JSON.stringify(huge).length).toBeGreaterThan(COMMUNITY.maxSnapshotBytes)
+    expect(sharedSnapshotSchema.safeParse(huge).success).toBe(false)
+    expect(() => planFromSnapshot(huge, { shared_plan_id: id(), version: 1, title: 'Huge plan', author: 'Jo' }, {
+      userId: U, units: 'lb', increment: 5, exercises: [], gear: [], now: ts, newId: id,
+    })).toThrow(ValidationError)
+  })
+
+  it('plan source title and author are cleaned and checked like any public text (imports)', () => {
+    const base = { id: id(), name: 'P', archived: false, user_id: U, ...sync }
+    const src = { shared_plan_id: id(), version: 1, title: 'Strong\u0000 5x5', author: 'Jo\u200b Lifts' }
+    expect(planSchema.parse({ ...base, source: src }).source).toEqual({ ...src, title: 'Strong 5x5', author: 'Jo Lifts' })
+    expect(planSchema.safeParse({ ...base, source: { ...src, title: 'Visit spam.com' } }).success).toBe(false)
+    expect(planSchema.safeParse({ ...base, source: { ...src, author: 'x'.repeat(31) } }).success).toBe(false)
+  })
+})
+
+describe('nameKey', () => {
+  it('matches NFC/NFD, width, case and inner whitespace', () => {
+    expect(nameKey('Cafe\u0301 Squat')).toBe(nameKey('Café squat'))
+    expect(nameKey('  Bench   Press ')).toBe(nameKey('bench press'))
+    expect(nameKey('Ｂｅｎｃｈ Press')).toBe('bench press')
   })
 })
 
@@ -257,6 +326,32 @@ describe('planFromSnapshot', () => {
     expect(out.days[0]).toMatchObject({ name: 'Push', color: 'blue', position: 0, plan_id: out.plan.id })
     const ids = new Set([out.plan.id, ...out.days.map((d) => d.id), ...out.items.map((i) => i.id), ...out.newGear.map((g) => g.id), ...out.newExercises.map((e) => e.id)])
     expect(ids.size).toBe(1 + 1 + 3 + 1 + 2)
+  })
+
+  it('matches NFC/NFD and spacing variants; variants inside one snapshot share one new exercise and merge gear; inactive exercises are reused as is', () => {
+    const cafe = exercise('Cafe\u0301 Squat') // NFD
+    const row = exercise('Row', { active: false })
+    const s: SharedSnapshot = {
+      name: 'Variants', units: 'lb',
+      days: [{ name: 'D', color: null, items: [
+        { exercise: 'Café Squat', gear: [], supports_angle: false, sets: 3, reps: 5, weight: 100, angle: null, amrap_last: false, superset: null, rule: null },
+        { exercise: 'bench  press', gear: ['Bench'], supports_angle: false, sets: 3, reps: 5, weight: 100, angle: null, amrap_last: false, superset: null, rule: null },
+        { exercise: 'Bench Press', gear: ['Barbell', 'bench'], supports_angle: true, sets: 3, reps: 5, weight: 100, angle: 'flat', amrap_last: false, superset: null, rule: null },
+        { exercise: 'ROW', gear: ['Rower'], supports_angle: false, sets: 3, reps: 5, weight: 100, angle: null, amrap_last: false, superset: null, rule: null },
+      ] }],
+    }
+    const out = planFromSnapshot(s, source, ctx({ exercises: [cafe, row] }))
+    expect(out.items[0]!.exercise_id).toBe(cafe.id)
+    expect(out.items[3]!.exercise_id).toBe(row.id)
+    expect(row.active).toBe(false)
+    expect(out.newExercises).toHaveLength(1)
+    const bench = out.newExercises[0]!
+    expect(out.items[1]!.exercise_id).toBe(bench.id)
+    expect(out.items[2]!.exercise_id).toBe(bench.id)
+    expect(bench.supports_angle).toBe(true)
+    expect(out.items[2]!.angle).toBe('flat')
+    expect(out.newGear.map((g) => g.name)).toEqual(['Bench', 'Barbell'])
+    expect(bench.required_gear_ids).toEqual(out.newGear.map((g) => g.id))
   })
 
   it('a new exercise keeps angle support and the angle, and gets its gear (matched or created)', () => {

@@ -3,7 +3,7 @@
 // downloads are one row per (user, listing). Counters change only in the same transaction as
 // their rows (service/community.ts), with the listing row locked.
 import { sql } from 'drizzle-orm'
-import { check, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { boolean, check, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import type { SharedSnapshot } from '@workout/shared'
 import { user } from './auth.js'
 
@@ -55,6 +55,11 @@ export const sharedPlanVersion = pgTable(
     version: integer('version').notNull(),
     // Validated by the shared zod schema on write and on read.
     snapshot: jsonb('snapshot').$type<SharedSnapshot>().notNull(),
+    // Search and filter columns, filled at publish so the public list never expands the jsonb:
+    // nameKey(title + description + exercise names), "no exercise needs gear", number of days.
+    searchText: text('search_text').notNull().default(''),
+    noGear: boolean('no_gear').notNull().default(false),
+    dayCount: integer('day_count').notNull().default(0),
     createdAt: ts('created_at').notNull().defaultNow(),
   },
   (t) => [

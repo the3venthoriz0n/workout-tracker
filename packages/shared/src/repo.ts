@@ -163,6 +163,15 @@ export class PublishLimitError extends ApiError {
   }
 }
 
+/** Owners cannot upvote their own listing (409 own_listing). */
+export class OwnListingError extends ApiError {
+  constructor() {
+    super(409, 'own_listing')
+    this.message = 'You cannot upvote your own plan'
+    this.name = 'OwnListingError'
+  }
+}
+
 /**
  * "Use this plan". Signed in (service, ApiRepo): the snapshot is loaded on the server by id
  * (`version` defaults to the latest) and `snapshot`, `title` and `author` are ignored. Guests
