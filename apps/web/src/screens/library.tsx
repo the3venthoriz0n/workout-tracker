@@ -6,6 +6,7 @@ import { ExerciseSheet } from '@/components/exercise-sheet'
 import { GearSheet } from '@/components/gear-sheet'
 import { LibraryExercises } from '@/components/library-exercises'
 import { LibraryGear } from '@/components/library-gear'
+import { segmentedItem, segmentedTrack } from '@/lib/styles'
 import { cn } from '@/lib/utils'
 import type { Exercise, Gear } from '@workout/shared'
 
@@ -33,7 +34,7 @@ export function LibraryScreen() {
           />
         }
       />
-      <div role="tablist" aria-label="Library sections" className="bg-muted mx-4 mb-3 flex gap-1 rounded-md p-1">
+      <div role="tablist" aria-label="Library sections" className={cn(segmentedTrack, 'mx-4 mb-4')}>
         {SECTIONS.map(({ id, label }) => (
           <button
             key={id}
@@ -42,12 +43,7 @@ export function LibraryScreen() {
             id={`library-tab-${id}`}
             aria-selected={active === id}
             aria-controls="library-panel"
-            className={cn(
-              'min-h-11 flex-1 rounded-sm px-3 text-base font-semibold transition-colors',
-              active === id
-                ? 'bg-card text-foreground shadow-sm ring-1 ring-foreground/15'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
+            className={segmentedItem(active === id)}
             onClick={() => {
               const next = new URLSearchParams(params)
               if (id === 'gear') next.set('section', 'gear')

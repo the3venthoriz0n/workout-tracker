@@ -5,6 +5,7 @@ import { useAuth } from '@/auth/context'
 import { downloadExport } from '@/lib/download-export'
 import { AUTH_ERROR_TEXT } from '@/lib/auth-messages'
 import { notifyError } from '@/lib/notify'
+import { confirmBox, segmentedItem, segmentedTrack } from '@/lib/styles'
 import { useRepo } from '@/repo/provider'
 import { CredentialsForm } from './credentials-form'
 
@@ -19,7 +20,7 @@ export function AccountCard() {
   let body
   if (a.status === 'signed-in' && a.confirmingDiscard) {
     body = (
-      <div role="alertdialog" aria-label="Discard guest data" className="flex flex-col gap-3 rounded-lg border p-3">
+      <div role="alertdialog" aria-label="Discard guest data" className={confirmBox}>
         <p className="text-sm">
           This account already has data. Signing in will discard the guest data on this device and
           use the account&apos;s data instead. They can&apos;t be merged.
@@ -32,7 +33,7 @@ export function AccountCard() {
         <Button variant="outline" className="min-h-11" onClick={() => void exportGuest()}>
           Export guest data first
         </Button>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="destructive" className="min-h-11" disabled={a.busy} onClick={() => void a.confirmDiscard()}>
             Discard guest data and continue
           </Button>
@@ -65,7 +66,7 @@ export function AccountCard() {
           </Button>
         )}
         {confirmingSignOut ? (
-          <div role="alertdialog" aria-label="Confirm sign out" className="flex flex-col gap-2 rounded-lg border p-3">
+          <div role="alertdialog" aria-label="Confirm sign out" className={confirmBox}>
             <p className="text-sm">
               {a.pendingUpload
                 ? "Your guest data hasn't been uploaded. Signing out deletes it from this device."
@@ -82,7 +83,7 @@ export function AccountCard() {
                 Export guest data first
               </Button>
             )}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 variant="destructive"
                 className="min-h-11"
@@ -109,22 +110,21 @@ export function AccountCard() {
         <p className="text-muted-foreground text-sm">
           You&apos;re using the app as a guest; data stays on this device. An account syncs it.
         </p>
-        <div role="tablist" aria-label="Account action" className="flex gap-2">
+        <div role="tablist" aria-label="Account action" className={segmentedTrack}>
           {(['sign-in', 'sign-up'] as const).map((m) => (
-            <Button
+            <button
               key={m}
               type="button"
               role="tab"
               aria-selected={mode === m}
-              variant={mode === m ? 'default' : 'outline'}
-              className="min-h-11 flex-1"
+              className={segmentedItem(mode === m)}
               onClick={() => {
                 setMode(m)
                 a.dismissError()
               }}
             >
               {m === 'sign-in' ? 'Sign in' : 'Sign up'}
-            </Button>
+            </button>
           ))}
         </div>
         <CredentialsForm

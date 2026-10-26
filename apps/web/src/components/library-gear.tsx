@@ -5,6 +5,7 @@ import { DeleteConfirm, focusLibraryPanel, RowActions, useRestoreFocus } from '@
 import { Switch } from '@/components/ui/switch'
 import { pluralize } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
+import { listGroup } from '@/lib/styles'
 import { useDeleteGear, useExercises, useGear, useSaveGear } from '@/repo/hooks'
 import type { Gear } from '@workout/shared'
 
@@ -23,11 +24,11 @@ export function LibraryGear({ onEdit }: { onEdit: (gear: Gear) => void }) {
   }
 
   return (
-    <div className="flex flex-col gap-3 px-4 pb-4">
+    <div className="flex flex-col gap-3 px-4 pb-6">
       <p className="text-muted-foreground text-sm">
         Gear you own decides which exercises appear when you build a plan.
       </p>
-      <ul className="divide-y border-y">
+      <ul className={listGroup}>
         {gear.map((g) => (
           <GearRow
             key={g.id}
@@ -72,10 +73,10 @@ function GearRow({
       : "This can't be undone."
 
   return (
-    <li className="flex flex-col py-1">
+    <li className="flex flex-col py-1.5 pr-1.5 pl-4">
       <div className="flex items-center gap-2">
         <label className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-3">
-          <span className="flex min-w-0 flex-col font-semibold">
+          <span className="flex min-w-0 flex-col text-[17px] font-semibold">
             {g.name}
             {activeCount !== null && (
               <span className="text-muted-foreground text-sm font-normal">

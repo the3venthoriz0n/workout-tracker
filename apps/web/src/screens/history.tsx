@@ -1,7 +1,9 @@
 import type { DayColor } from '@workout/shared'
+import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 import { Screen } from '@/app/screen'
-import { DayBar } from '@/components/plan-bits'
+import { DayDot } from '@/components/plan-bits'
+import { listGroup } from '@/lib/styles'
 import { useDayColors } from '@/lib/use-day-colors'
 import { Button } from '@/components/ui/button'
 import { SkeletonRows } from '@/components/ui/skeleton'
@@ -27,18 +29,21 @@ function SessionRow({
     <li>
       <Link
         to={`/history/${id}`}
-        className="hover:bg-accent/60 flex min-h-14 flex-col gap-0.5 rounded-md px-1 py-3"
+        className="hover:bg-[color-mix(in_oklch,var(--card),var(--foreground)_4%)] flex min-h-16 items-center gap-3 px-4 py-3"
       >
-        <span className="font-heading text-xl leading-tight font-bold">{formatDate(completedAt)}</span>
-        <span className="text-muted-foreground flex items-stretch gap-2 text-sm">
-          <DayBar color={color} />
-          <span>
-            {plan} · {day}
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-[17px] leading-tight font-semibold">{formatDate(completedAt)}</span>
+          <span className="text-muted-foreground flex items-center gap-2 text-sm">
+            <DayDot color={color} />
+            <span className="min-w-0">
+              {plan} · {day}
+            </span>
           </span>
+          {done !== undefined && (
+            <span className="text-muted-foreground text-sm tabular-nums">{pluralize(done, 'set')} done</span>
+          )}
         </span>
-        {done !== undefined && (
-          <span className="text-muted-foreground text-sm tabular-nums">{pluralize(done, 'set')} done</span>
-        )}
+        <ChevronRight className="text-muted-foreground size-5 shrink-0" aria-hidden />
       </Link>
     </li>
   )
@@ -50,7 +55,7 @@ export function HistoryScreen() {
   return (
     <div>
       <Screen title="History" />
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-6">
         {isPending || !data ? (
           <SkeletonRows />
         ) : data.length === 0 ? (
@@ -61,7 +66,7 @@ export function HistoryScreen() {
             </Button>
           </div>
         ) : (
-          <ul className="divide-y border-y">
+          <ul className={listGroup}>
             {data.map((s) => (
               <SessionRow
                 key={s.id}

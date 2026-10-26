@@ -9,6 +9,8 @@ import { DeleteConfirm, focusLibraryPanel, RowActions, useRestoreFocus } from '@
 import { formatWeight, pluralize } from '@/lib/format'
 import { isHttpUrl } from '@/lib/links'
 import { notifyError } from '@/lib/notify'
+import { listGroup } from '@/lib/styles'
+import { cn } from '@/lib/utils'
 import {
   useDeleteExercise,
   useExercises,
@@ -34,7 +36,7 @@ export function LibraryExercises({
   const list = exercises.data ?? []
 
   return (
-    <div className="flex flex-col gap-3 px-4 pb-4">
+    <div className="flex flex-col gap-3 px-4 pb-6">
       {exercises.isPending && <SkeletonRows />}
       {exercises.isSuccess && list.length === 0 && (
         <div className="flex flex-col items-start gap-3">
@@ -49,7 +51,7 @@ export function LibraryExercises({
         </div>
       )}
 
-      <ul className="divide-y border-y">
+      <ul className={cn(listGroup, list.length === 0 && 'hidden')}>
         {list.map((ex) => (
           <ExerciseRow
             key={ex.id}
@@ -96,14 +98,14 @@ function ExerciseRow({
       : "This can't be undone."
 
   return (
-    <li className="flex flex-col py-1">
+    <li className="flex flex-col py-1.5 pr-1.5 pl-4">
       <div className="flex items-center gap-2">
         <div className="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 py-2 text-left">
-          <span className={ex.active ? 'font-semibold' : 'text-muted-foreground font-semibold'}>
+          <span className={ex.active ? 'text-[17px] font-semibold' : 'text-muted-foreground text-[17px] font-semibold'}>
             {ex.name}
           </span>
           <span className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{gearLabel}</Badge>
+            <Badge variant="secondary" className="bg-background">{gearLabel}</Badge>
             <span className="text-muted-foreground text-sm tabular-nums">
               {ex.default_sets}×{ex.default_reps} @ {formatWeight(ex.default_weight)} {units}
             </span>
@@ -115,7 +117,7 @@ function ExerciseRow({
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Video for ${ex.name}`}
-            className="text-muted-foreground hover:text-foreground flex min-h-11 min-w-11 items-center justify-center"
+            className="text-muted-foreground hover:text-foreground hover:bg-accent flex min-h-11 min-w-11 items-center justify-center rounded-full"
           >
             <Video className="size-5" aria-hidden />
           </a>

@@ -33,7 +33,7 @@ export function DayColorButton({ day, open, onToggle }: { day: Day; open: boolea
       aria-label={`Colour for ${day.name}: ${DAY_COLOR_NAMES[color]}`}
       onClick={onToggle}
     >
-      <span aria-hidden className="size-6 rounded-full border-2 border-current" style={{ background: dayColorVar(color) }} />
+      <span aria-hidden className="ring-foreground/15 size-6 rounded-full ring-2" style={{ background: dayColorVar(color) }} />
     </Button>
   )
 }
@@ -48,7 +48,7 @@ export function DayColorPicker({ day, planId }: { day: Day; planId: string }) {
   ]
   const name = `day-color-${day.id}`
   return (
-    <div role="radiogroup" aria-label={`Colour for ${day.name}`} className="flex flex-wrap gap-1">
+    <div role="radiogroup" aria-label={`Colour for ${day.name}`} className="bg-background flex flex-wrap gap-1 rounded-row p-2">
       {choices.map((c) => {
         const checked = day.color === c.value
         return (
@@ -69,9 +69,9 @@ export function DayColorPicker({ day, planId }: { day: Day; planId: string }) {
             <span
               aria-hidden
               className={cn(
-                'flex size-9 items-center justify-center rounded-full text-[11px] font-bold uppercase',
+                'flex size-9 items-center justify-center rounded-full text-[11px] font-semibold',
                 'peer-focus-visible:outline-ring peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2',
-                checked && 'ring-foreground ring-offset-card ring-2 ring-offset-2',
+                checked && 'ring-foreground ring-offset-background ring-2 ring-offset-2',
               )}
               style={{ background: dayColorVar(c.swatch), color: 'var(--day-foreground)' }}
             >
@@ -137,7 +137,7 @@ export function SupersetPicker({ day, onDone }: { day: Day; onDone: () => void }
       <p className="text-muted-foreground text-sm">
         Pick 2-3 exercises to do back to back. One already in a superset moves to the new one.
       </p>
-      <ul className="divide-y border-y">
+      <ul className="bg-background divide-border-strong/70 divide-y rounded-row px-3">
         {day.items.map((item) => {
           const checked = ids.includes(item.id)
           return (

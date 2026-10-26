@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { notifyError } from '@/lib/notify'
+import { listGroup } from '@/lib/styles'
+import { cn } from '@/lib/utils'
 import { useDeletePlan, usePlans, useSavePlan } from '@/repo/hooks'
 
 
@@ -30,10 +32,10 @@ export function PlansScreen() {
   return (
     <div>
       <Screen title="Plans" />
-      <div className="flex flex-col gap-3 px-4 pb-4">
+      <div className="flex flex-col gap-4 px-4 pb-6">
         <form onSubmit={add} className="flex gap-2">
           <Input
-            className="min-h-11 flex-1"
+            className="flex-1"
             enterKeyHint="done"
             autoComplete="off"
             aria-label="New plan name"
@@ -41,7 +43,7 @@ export function PlansScreen() {
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <Button type="submit" className="min-h-11" disabled={save.isPending}>
+          <Button type="submit" className="h-12 px-5" disabled={save.isPending}>
             <Plus aria-hidden /> Add plan
           </Button>
         </form>
@@ -51,12 +53,12 @@ export function PlansScreen() {
           <p className="text-muted-foreground text-sm">No plans yet. Name one above to start.</p>
         )}
 
-        <ul className="divide-y border-y">
+        <ul className={cn(listGroup, list.length === 0 && 'hidden')}>
           {list.map((plan) => (
-            <li key={plan.id} className="flex items-center gap-2 py-1">
+            <li key={plan.id} className="flex items-center gap-1 py-1.5 pr-2 pl-4">
               <Link
                 to={`/plans/${plan.id}`}
-                className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-2 rounded-md py-2 text-lg font-semibold"
+                className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-2 py-2 text-[17px] font-semibold"
               >
                 <span className="min-w-0 break-words">{plan.name}</span>
                 <ChevronRight className="text-muted-foreground size-5 shrink-0" aria-hidden />

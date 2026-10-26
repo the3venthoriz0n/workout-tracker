@@ -1,8 +1,8 @@
-import { ChevronDown, ChevronUp, Link2, Plus, Unlink } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronUp, Link2, Plus, Unlink } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Link, useParams } from 'react-router'
-import { SettingsLink } from '@/app/screen'
+import { SettingsLink, StickyBar } from '@/app/screen'
 import {
   DayColorButton,
   DayColorPicker,
@@ -12,7 +12,7 @@ import {
 } from '@/components/day-parts'
 import { ExercisePicker } from '@/components/exercise-picker'
 import { ExerciseSheet } from '@/components/exercise-sheet'
-import { DayBar } from '@/components/plan-bits'
+import { DayDot, Rail } from '@/components/plan-bits'
 import { PlanItemRow } from '@/components/plan-item-row'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -92,8 +92,8 @@ export function PlanDetailScreen() {
   if (!tree) {
     return (
       <div className="flex flex-col items-start gap-3 p-4">
-        <h1 className="text-2xl font-semibold">Plan not found</h1>
-        <Link to="/plans" className="inline-flex min-h-11 items-center underline">
+        <h1 className="text-[28px] font-semibold tracking-[-0.025em]">Plan not found</h1>
+        <Link to="/plans" className="text-brand inline-flex min-h-11 items-center font-medium underline underline-offset-4">
           Back to plans
         </Link>
       </div>
@@ -103,16 +103,23 @@ export function PlanDetailScreen() {
   const creatingDay = tree.days.find((d) => d.id === creating?.dayId)
 
   return (
-    <div className="flex flex-col gap-3 px-4 pb-4">
-      <div className="bg-background sticky top-0 z-30 -mx-4 flex items-center justify-between pt-[env(safe-area-inset-top)] pr-2 pl-4">
-        <Link to="/plans" className="text-muted-foreground inline-flex min-h-11 items-center text-base font-medium">
-          ← Plans
-        </Link>
-        <SettingsLink />
-      </div>
+    <div className="flex flex-col gap-4 px-4 pb-6">
+      <StickyBar className="-mx-4">
+        <div className="flex min-h-16 items-center justify-between py-2 pr-3 pl-2">
+          <Link
+            to="/plans"
+            aria-label="Back to plans"
+            className="text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center gap-1 rounded-full pr-3 pl-2 text-base font-medium hover:bg-accent"
+          >
+            <ChevronLeft className="size-5" aria-hidden />
+            Plans
+          </Link>
+          <SettingsLink />
+        </div>
+      </StickyBar>
       <InlineName
         label="Plan name"
-        className="font-heading min-h-12 text-2xl font-bold md:text-2xl"
+        className="h-14 text-[26px] font-semibold tracking-[-0.025em] md:text-[26px]"
         value={tree.name}
         onCommit={(name) => savePlan.mutate({ id: tree.id, name }, { onError: (e) => notifyError(e) })}
       />
@@ -125,13 +132,13 @@ export function PlanDetailScreen() {
         <section
           key={day.id}
           aria-label={`Day ${day.name}`}
-          className="bg-card flex flex-col gap-3 rounded-lg border p-3"
+          className="surface flex flex-col gap-3 rounded-card p-4"
         >
-          <div className="flex items-center gap-2">
-            <DayBar color={dayColorOf(day)} className="w-2 self-stretch" />
+          <div className="flex items-center gap-1.5">
+            <DayDot color={dayColorOf(day)} className="mr-1 size-3" />
             <InlineName
               label="Day name"
-              className="font-heading min-h-11 flex-1 text-xl font-bold"
+              className="h-12 flex-1 text-lg font-semibold"
               value={day.name}
               onCommit={(name) =>
                 saveDay.mutate({ id: day.id, plan_id: tree.id, name }, { onError: (e) => notifyError(e) })
@@ -176,7 +183,7 @@ export function PlanDetailScreen() {
           {linkDay === day.id ? (
             <SupersetPicker day={day} onDone={() => setLinkDay(null)} />
           ) : (
-            <ul className="divide-y border-y">
+            <ul className="divide-border-strong/70 divide-y">
               {dayBlocks(day.items).map((block) =>
                 block.kind === 'item' ? (
                   <PlanItemRow
@@ -190,12 +197,11 @@ export function PlanDetailScreen() {
                     <div
                       role="group"
                       aria-label={`Superset ${block.letter}`}
-                      className="border-muted-foreground flex flex-col rounded-sm border-l-4 pl-3"
+                      className="bg-background relative flex flex-col rounded-row py-1 pr-3 pl-4 [--field:var(--card)]"
                     >
+                      <Rail />
                       <div className="flex items-center justify-between gap-2">
-                        <h3 className="font-heading text-lg leading-none font-bold tracking-wide uppercase">
-                          Superset {block.letter}
-                        </h3>
+                        <h3 className="text-base leading-none font-semibold">Superset {block.letter}</h3>
                         <Button
                           variant="ghost"
                           className="min-h-11"
@@ -211,7 +217,7 @@ export function PlanDetailScreen() {
                           <Unlink aria-hidden /> Unlink
                         </Button>
                       </div>
-                      <ul className="divide-y">
+                      <ul className="divide-border-strong/70 divide-y">
                         {block.members.map((m) => (
                           <PlanItemRow
                             key={m.item.id}

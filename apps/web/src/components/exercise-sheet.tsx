@@ -129,12 +129,11 @@ function ExerciseForm({
         <SheetDescription>Defaults apply when you add it to a plan.</SheetDescription>
       </SheetHeader>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pb-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-5 pb-5">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="ex-name">Name</Label>
           <Input
             id="ex-name"
-            className="min-h-11"
             autoComplete="off"
             enterKeyHint="next"
             value={name}
@@ -163,7 +162,7 @@ function ExerciseForm({
         <div className="flex flex-col gap-4">
           <button
             type="button"
-            className="hover:bg-accent -mx-2 flex min-h-11 items-center justify-between rounded-md px-2 text-sm font-medium"
+            className="hover:bg-accent -mx-3 flex min-h-11 items-center justify-between rounded-full px-3 text-sm font-medium"
             aria-expanded={detailsOpen}
             aria-controls="ex-details"
             onClick={() => setDetailsOpen((o) => !o)}
@@ -197,7 +196,6 @@ function ExerciseForm({
                 <Label htmlFor="ex-video">Video link</Label>
                 <Input
                   id="ex-video"
-                  className="min-h-11"
                   inputMode="url"
                   autoComplete="off"
                   autoCapitalize="off"
@@ -238,7 +236,7 @@ function ExerciseForm({
         </div>
       </div>
 
-      <div className="bg-popover shrink-0 border-t p-4">
+      <div className="bg-popover shrink-0 border-t px-5 py-4">
         <Button type="submit" size="big" className="w-full" disabled={save.isPending}>
           {submitLabel}
         </Button>

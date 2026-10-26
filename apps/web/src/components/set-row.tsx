@@ -61,10 +61,11 @@ export function SetRow({ set, unit, onToggle, onEdit, member }: Props) {
           aria-pressed={set.done}
           aria-label={label}
           className={cn(
-            'flex min-h-16 w-full min-w-0 flex-1 touch-manipulation items-center gap-3 rounded-md border-2 px-3 text-left select-none',
+            // Soft block; done is a solid accent fill plus the check (never colour alone)
+            'flex min-h-[68px] w-full min-w-0 flex-1 touch-manipulation items-center gap-3 rounded-row px-3.5 text-left select-none',
             set.done
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'bg-card text-card-foreground border-border',
+              ? 'bg-brand text-brand-foreground'
+              : 'bg-(--row) text-foreground hover:bg-[color-mix(in_oklch,var(--row),var(--foreground)_5%)]',
           )}
           onPointerDown={(e) => {
             origin.current = { x: e.clientX, y: e.clientY }
@@ -109,60 +110,61 @@ export function SetRow({ set, unit, onToggle, onEdit, member }: Props) {
               })
           }}
         >
-          {/* Set number as a small plate; inverted when done */}
+          {/* Set number in a small circle; inverted when done */}
           <span
             aria-hidden
             className={cn(
-              'font-heading flex size-9 shrink-0 items-center justify-center rounded-full border-2 text-lg font-bold tabular-nums',
-              set.done
-                ? 'border-primary-foreground bg-primary-foreground text-primary'
-                : 'border-foreground/70 text-foreground',
+              'flex size-9 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums',
+              set.done ? 'bg-brand-foreground text-brand' : 'bg-foreground/8 text-foreground',
             )}
           >
             {set.set_no}
           </span>
-          <span aria-hidden className="flex min-w-0 flex-1 flex-col gap-1">
-            {member && (
-              <span
-                className={cn(
-                  'truncate text-sm leading-none font-semibold',
-                  set.done ? 'text-primary-foreground' : 'text-muted-foreground',
+          <span aria-hidden className="flex min-w-0 flex-1 flex-col gap-1.5">
+            {(member || set.amrap) && (
+              <span className="flex min-w-0 items-center gap-2">
+                {member && (
+                  <span
+                    className={cn(
+                      'truncate text-sm leading-none font-medium',
+                      set.done ? 'text-brand-foreground' : 'text-muted-foreground',
+                    )}
+                  >
+                    {member.label} · {member.name}
+                  </span>
                 )}
-              >
-                {member.label} · {member.name}
+                {set.amrap && (
+                  <span
+                    className={cn(
+                      'inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[11px] leading-none font-semibold',
+                      set.done ? 'ring-brand-foreground text-brand-foreground ring-1 ring-inset' : 'bg-foreground/8 text-foreground',
+                    )}
+                  >
+                    AMRAP
+                  </span>
+                )}
               </span>
             )}
-            <span className="font-heading truncate text-[24px] leading-none font-bold tabular-nums">{numbers}</span>
+            <span className="truncate text-[26px] leading-none max-[374px]:text-[22px] font-semibold tracking-[-0.02em] tabular-nums">{numbers}</span>
           </span>
-          {set.amrap && (
-            <span
-              aria-hidden
-              className={cn(
-                'font-heading shrink-0 rounded-sm border-2 px-1.5 py-0.5 text-sm leading-none font-bold tracking-wide',
-                set.done ? 'border-primary-foreground text-primary-foreground' : 'border-foreground/70 text-foreground',
-              )}
-            >
-              AMRAP
-            </span>
-          )}
           <CheckIcon
             aria-hidden
             strokeWidth={3}
-            className={cn('size-7 shrink-0', set.done ? 'text-primary-foreground' : 'text-muted-foreground/40')}
+            className={cn('size-6 shrink-0', set.done ? 'text-brand-foreground' : 'text-foreground/20')}
           />
         </button>
         <button
           type="button"
           aria-label={`Edit set ${set.set_no}`}
           aria-expanded={editing}
-          className="text-muted-foreground hover:bg-accent flex min-h-11 min-w-12 items-center justify-center rounded-md"
+          className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-11 shrink-0 items-center justify-center self-center rounded-full aria-expanded:bg-accent aria-expanded:text-foreground"
           onClick={() => setEditing((v) => !v)}
         >
           <PencilIcon className="size-4" />
         </button>
       </div>
       {editing && (
-        <div className="bg-card mt-2 mb-1 flex flex-col gap-3 rounded-md border p-3">
+        <div className="surface rounded-row mt-2 mb-1 flex flex-col gap-3 p-3.5">
           <div className="grid grid-cols-2 gap-3">
             <NumberField
               label="Reps"
@@ -187,7 +189,6 @@ export function SetRow({ set, unit, onToggle, onEdit, member }: Props) {
           </div>
           <Input
             aria-label={`Note for set ${set.set_no}`}
-            className="min-h-11"
             placeholder="Note"
             enterKeyHint="done"
             autoComplete="off"

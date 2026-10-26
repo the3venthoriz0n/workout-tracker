@@ -9,6 +9,7 @@ import { useRepo } from '@/repo/provider'
 import { AccountCard } from '@/components/account-card'
 import { downloadExport } from '@/lib/download-export'
 import { notifyError } from '@/lib/notify'
+import { confirmBox, segmentedItem, segmentedTrack } from '@/lib/styles'
 
 const UNITS: Units[] = ['lb', 'kg']
 
@@ -48,29 +49,28 @@ export function SettingsScreen() {
   return (
     <div>
       <Screen title="Settings" />
-      <div className="flex flex-col gap-4 px-4 pb-4">
+      <div className="flex flex-col gap-4 px-4 pb-6">
         <Card>
           <CardHeader>
             <CardTitle>Units</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div role="radiogroup" aria-label="Units" className="flex gap-2">
+            <div role="radiogroup" aria-label="Units" className={segmentedTrack}>
               {UNITS.map((u) => (
-                <Button
+                <button
                   key={u}
                   type="button"
                   role="radio"
                   aria-checked={profile?.units === u}
-                  variant={profile?.units === u ? 'default' : 'outline'}
-                  className="min-h-11 flex-1"
+                  className={segmentedItem(profile?.units === u)}
                   onClick={() => u !== profile?.units && (setUnitsError(null), setPendingUnits(u))}
                 >
                   {u}
-                </Button>
+                </button>
               ))}
             </div>
             {pendingUnits && (
-              <div role="alertdialog" aria-label="Confirm unit change" className="flex flex-col gap-2 rounded-lg border p-3">
+              <div role="alertdialog" aria-label="Confirm unit change" className={confirmBox}>
                 <p className="text-sm">
                   Switch to {pendingUnits}? All saved weights will be converted and the progression
                   step reset to the default.
@@ -80,7 +80,7 @@ export function SettingsScreen() {
                     {unitsError}
                   </p>
                 )}
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     className="min-h-11"
                     onClick={confirmUnits}

@@ -67,7 +67,7 @@ function GearForm({ gear, onDone }: { gear?: Gear; onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-4 overflow-y-auto p-4">
+    <form onSubmit={submit} noValidate className="flex flex-col gap-5 overflow-y-auto p-5">
       <SheetHeader className="p-0">
         <SheetTitle>{gear ? 'Edit gear' : 'Add gear'}</SheetTitle>
         <SheetDescription>Gear you own decides which exercises you can plan.</SheetDescription>
@@ -77,7 +77,6 @@ function GearForm({ gear, onDone }: { gear?: Gear; onDone: () => void }) {
         <Label htmlFor="gear-name">Name</Label>
         <Input
           id="gear-name"
-          className="min-h-11"
           autoComplete="off"
           enterKeyHint="done"
           value={name}

@@ -1,4 +1,5 @@
 import type { SetLog } from '@workout/shared'
+import { CheckIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NumberField } from '@/components/number-field'
 import { Input } from '@/components/ui/input'
@@ -22,7 +23,7 @@ export function HistorySetEditor({
     document.getElementById(repsId)?.focus()
   }, [repsId])
   return (
-    <div className="mt-2 mb-1 flex flex-col gap-3 rounded-md border p-3">
+    <div className="bg-background mt-2 mb-2 flex flex-col gap-3 rounded-row p-3 [--field:var(--card)]">
       <div className="grid grid-cols-2 gap-3">
         <NumberField
           label="Reps"
@@ -49,16 +50,16 @@ export function HistorySetEditor({
         type="button"
         aria-pressed={set.done}
         className={cn(
-          'min-h-11 rounded-md border px-3 text-left text-sm',
-          set.done ? 'border-primary bg-primary/10' : 'bg-card',
+          'flex min-h-11 items-center justify-between gap-2 rounded-field px-3.5 text-left text-sm font-medium',
+          set.done ? 'bg-brand text-brand-foreground' : 'bg-field text-foreground',
         )}
         onClick={() => void onSave({ done: !set.done })}
       >
         Counted as done
+        <CheckIcon aria-hidden strokeWidth={2.5} className={cn('size-5', set.done ? 'opacity-100' : 'opacity-0')} />
       </button>
       <Input
         aria-label={`Note for set ${set.set_no}`}
-        className="min-h-11"
         placeholder="Note"
         enterKeyHint="done"
         autoComplete="off"

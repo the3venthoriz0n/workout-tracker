@@ -12,13 +12,19 @@ const tabs = [
   { to: '/history', label: 'History', icon: History, end: false },
 ]
 
-// One nav element: a bottom bar below md, a left sidebar from md up.
+// One nav element: a floating pill island above the safe area below md, a left sidebar from md up.
+// The island is solid; where backdrop-filter works it turns translucent with a blur.
 export function Layout() {
   return (
     <div className="bg-background text-foreground min-h-dvh md:flex">
       <nav
         aria-label="Main"
-        className="bg-card fixed inset-x-0 bottom-0 z-40 flex border-t pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] md:sticky md:top-0 md:h-dvh md:w-56 md:flex-col md:gap-1 md:border-t-0 md:border-r md:p-3"
+        className={cn(
+          'fixed z-40 mx-auto flex max-w-md gap-0.5 rounded-full p-1.5',
+          'right-[calc(12px+env(safe-area-inset-right))] bottom-[calc(12px+env(safe-area-inset-bottom))] left-[calc(12px+env(safe-area-inset-left))]',
+          'bg-popover shadow-(--shadow-float) supports-[backdrop-filter]:bg-popover/80 supports-[backdrop-filter]:backdrop-blur-xl',
+          'md:sticky md:top-0 md:right-auto md:bottom-auto md:left-auto md:mx-0 md:h-dvh md:w-60 md:max-w-none md:shrink-0 md:flex-col md:gap-1 md:rounded-none md:bg-background md:p-4 md:shadow-none md:supports-[backdrop-filter]:bg-background md:supports-[backdrop-filter]:backdrop-blur-none',
+        )}
       >
         {tabs.map(({ to, label, icon: Icon, end }) => (
           <NavLink
@@ -27,33 +33,25 @@ export function Layout() {
             end={end}
             className={({ isActive }) =>
               cn(
-                'group flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 pt-1 text-xs',
-                'md:min-h-11 md:flex-none md:flex-row md:justify-start md:gap-3 md:rounded-md md:px-3 md:pt-0 md:text-sm',
+                // Active: a filled pill with icon and label (not colour alone: shape and weight change too)
+                'flex min-h-13 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full px-0.5 text-[11px] leading-none',
+                'md:min-h-11 md:flex-none md:flex-row md:justify-start md:gap-3 md:px-4 md:text-sm',
                 isActive
-                  ? 'text-foreground font-semibold md:bg-accent'
-                  : 'text-muted-foreground font-medium hover:text-foreground md:hover:bg-accent/60',
+                  ? 'bg-primary text-primary-foreground font-semibold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent font-medium',
               )
             }
           >
             {({ isActive }) => (
               <>
-                {/* Active pill behind the icon: the indicator doesn't rely on colour alone */}
-                <span
-                  aria-hidden
-                  className={cn(
-                    'flex h-7 w-14 items-center justify-center rounded-full md:h-auto md:w-auto',
-                    isActive && 'bg-primary text-primary-foreground md:bg-transparent md:text-primary',
-                  )}
-                >
-                  <Icon className="size-5" strokeWidth={isActive ? 2.5 : 2} />
-                </span>
+                <Icon aria-hidden className="size-5 shrink-0" strokeWidth={isActive ? 2.25 : 1.75} />
                 <span className="max-w-full truncate">{label}</span>
               </>
             )}
           </NavLink>
         ))}
       </nav>
-      <main className="mx-auto w-full max-w-3xl flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-8">
+      <main className="mx-auto w-full max-w-3xl min-w-0 flex-1 pb-(--nav-space) md:pb-10">
         <Outlet />
       </main>
       <Toaster />

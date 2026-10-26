@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import { summarizeRule } from '@/lib/rule-summary'
+import { segmentedItem, segmentedTrack } from '@/lib/styles'
 import { cn } from '@/lib/utils'
 import {
   useClearRule,
@@ -68,11 +69,11 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
   }
 
   return (
-    <li aria-label={name} className="flex flex-col gap-3 py-3">
+    <li aria-label={name} className="flex flex-col gap-3 py-4">
       <div className="flex items-start gap-2">
         {supersetLabel && <SupersetLabel label={supersetLabel} className="mt-0.5" />}
         <div className="min-w-0 flex-1">
-          <p className="font-semibold">
+          <p className="text-[17px] font-semibold">
             {name}
             <AngleChip angle={item.angle} />
           </p>
@@ -131,7 +132,7 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
       </div>
 
       {exercise.supports_angle && (
-        <div role="group" aria-label={`Angle for ${name}`} className="grid grid-cols-3 gap-0.5 rounded-md border p-0.5">
+        <div role="group" aria-label={`Angle for ${name}`} className={segmentedTrack}>
           {ANGLES.map((a) => {
             const on = item.angle === a
             return (
@@ -139,10 +140,7 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
                 key={a}
                 type="button"
                 aria-pressed={on}
-                className={cn(
-                  'min-h-11 rounded-sm text-base font-semibold',
-                  on ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-accent',
-                )}
+                className={segmentedItem(on)}
                 // Tapping the selected angle again unsets it (angle is optional)
                 onClick={() => setOption({ angle: on ? null : a })}
               >
@@ -213,7 +211,7 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
       </div>
 
       {expanded && (
-        <div className="border-t pt-3">
+        <div className="border-border-strong/70 border-t pt-3">
           <RuleEditor
             rule={rule}
             source={ruleSource}

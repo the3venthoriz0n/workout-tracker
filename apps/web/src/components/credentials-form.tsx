@@ -45,7 +45,6 @@ export function CredentialsForm({
           type="email"
           autoComplete="email"
           inputMode="email"
-          className="h-11"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
@@ -56,7 +55,6 @@ export function CredentialsForm({
           id={`${id}-pw`}
           type="password"
           autoComplete={mode === 'sign-up' ? 'new-password' : 'current-password'}
-          className="h-11"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
@@ -67,7 +65,7 @@ export function CredentialsForm({
           {message}
         </p>
       )}
-      <Button type="submit" className="min-h-11" disabled={busy}>
+      <Button type="submit" className="mt-1 min-h-11" disabled={busy}>
         {busy ? busyLabel : label}
       </Button>
     </form>

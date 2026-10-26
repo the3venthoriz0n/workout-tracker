@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
+import userEvent from '@testing-library/user-event'
 import { expect, test } from 'vitest'
 import { routes } from '../src/app/router'
 import { AppDb } from '../src/repo/db'
@@ -75,4 +76,27 @@ test('Library stays highlighted on a section deep link', async () => {
   expect((await screen.findByRole('link', { name: 'Library' })).getAttribute('aria-current')).toBe(
     'page',
   )
+})
+
+test('the floating nav keeps five links with exactly one aria-current', async () => {
+  renderAt('/')
+  const nav = within(await screen.findByRole('navigation', { name: 'Main' }))
+  const links = nav.getAllByRole('link')
+  expect(links).toHaveLength(5)
+  expect(links.filter((l) => l.getAttribute('aria-current') === 'page').map((l) => l.textContent)).toEqual(['Today'])
+})
+
+test('detail screens name their back link apart from the nav tab', async () => {
+  renderAt('/history/x')
+  const back = await screen.findByRole('link', { name: 'Back to history' })
+  expect(back.getAttribute('href')).toBe('/history')
+  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'History' })).not.toBe(back)
+})
+
+test('the add exercise sheet is a labelled dialog', async () => {
+  const user = userEvent.setup()
+  renderAt('/library')
+  await user.click(await screen.findByRole('button', { name: 'Add exercise' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Add exercise' })
+  expect(within(dialog).getByRole('button', { name: 'Close' })).toBeTruthy()
 })

@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { notifyError } from '@/lib/notify'
+import { Rail } from '@/components/plan-bits'
 import { SOURCE_NAMES, summarizeRule } from '@/lib/rule-summary'
 import {
   useClearRule,
@@ -92,10 +93,10 @@ function ExerciseRow({ row, units }: { row: ExerciseProgression; units: string }
   const name = row.exercise_name
   const used = row.inheriting.length + row.overrides.length
   return (
-    <li aria-label={name} className="flex flex-col gap-2 py-2">
+    <li aria-label={name} className="flex flex-col gap-2 py-3">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="font-semibold">{name}</p>
+          <p className="text-[17px] font-semibold">{name}</p>
           <p className="text-muted-foreground text-sm tabular-nums">{summarizeRule(row.rule, units)}</p>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
             <Badge variant={row.source === 'exercise' ? 'default' : 'outline'}>{SOURCE_NAMES[row.source]}</Badge>
@@ -117,7 +118,7 @@ function ExerciseRow({ row, units }: { row: ExerciseProgression; units: string }
       </div>
 
       {expanded && (
-        <div className="flex flex-col gap-3 border-t pt-3">
+        <div className="border-border-strong/70 flex flex-col gap-3 border-t pt-3">
           <p className="text-muted-foreground text-sm">
             {row.source === 'exercise'
               ? `Default for every ${name} item without its own override.`
@@ -149,7 +150,8 @@ function ExerciseRow({ row, units }: { row: ExerciseProgression; units: string }
       )}
 
       {row.overrides.length > 0 && (
-        <ul aria-label={`Overrides of ${name}`} className="border-muted-foreground ml-1 flex flex-col border-l-2 pl-3">
+        <ul aria-label={`Overrides of ${name}`} className="bg-background relative flex flex-col rounded-row py-1 pr-2 pl-4 [--field:var(--card)]">
+          <Rail />
           {row.overrides.map((o) => {
             const where = `${o.plan_name} · ${o.day_name}`
             return (
@@ -199,7 +201,7 @@ function ExerciseRulesCard() {
             </Button>
           </div>
         ) : (
-          <ul className="divide-y border-y">
+          <ul className="divide-border-strong/70 border-border-strong/70 divide-y border-t">
             {rows.map((r) => (
               <ExerciseRow key={r.exercise_id} row={r} units={units} />
             ))}
@@ -214,7 +216,7 @@ export function ProgressionScreen() {
   return (
     <div>
       <Screen title="Progression" />
-      <div className="flex flex-col gap-4 px-4 pb-4">
+      <div className="flex flex-col gap-4 px-4 pb-6">
         <StepCard />
         <DefaultsCard />
         <ExerciseRulesCard />

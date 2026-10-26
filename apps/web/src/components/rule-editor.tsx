@@ -2,7 +2,9 @@ import { ruleInputSchema, type RuleInput, type RuleSource } from '@workout/share
 import { useState } from 'react'
 import { NumberField } from '@/components/number-field'
 import { Button } from '@/components/ui/button'
+import { fieldClass } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
 import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
@@ -49,7 +51,7 @@ export function RuleFields({ rule, onSave, idPrefix, showStepHint = true }: Fiel
         <Label htmlFor={`${idPrefix}-action`}>On success</Label>
         <select
           id={`${idPrefix}-action`}
-          className="border-input bg-background min-h-11 rounded-md border px-3 text-base"
+          className={cn(fieldClass, 'h-12')}
           value={rule.success_action}
           onChange={(e) => {
             const success_action = e.target.value as RuleInput['success_action']

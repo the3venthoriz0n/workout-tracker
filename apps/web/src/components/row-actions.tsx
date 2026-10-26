@@ -15,11 +15,11 @@ export function RowActions({
   trashRef?: Ref<HTMLButtonElement>
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-0.5">
       <Button
         type="button"
         variant="ghost"
-        className="size-11 p-0"
+        className="text-muted-foreground hover:text-foreground size-11 p-0"
         aria-label={`Edit ${name}`}
         onClick={onEdit}
       >
@@ -74,7 +74,7 @@ export function DeleteConfirm({
   const cancelRef = useRef<HTMLButtonElement>(null)
   useEffect(() => cancelRef.current?.focus(), [])
   return (
-    <div role="group" aria-label={`Confirm delete ${name}`} className="flex flex-col gap-2 p-2">
+    <div role="group" aria-label={`Confirm delete ${name}`} className="bg-background mt-1 mb-2 mr-2.5 flex flex-col gap-2 rounded-row p-3">
       <p className="text-sm font-medium">Delete {name}?</p>
       {status === 'checking' && (
         <p className="text-muted-foreground text-sm">{COPY[subject].checking}</p>

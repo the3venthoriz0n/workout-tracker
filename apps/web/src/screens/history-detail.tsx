@@ -1,10 +1,11 @@
 import type { SetLog } from '@workout/shared'
-import { PencilIcon } from 'lucide-react'
+import { ChevronLeft, PencilIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { Screen } from '@/app/screen'
 import { HistorySetEditor } from '@/components/history-set-editor'
-import { AngleChip, SupersetLabel } from '@/components/plan-bits'
+import { AngleChip, Rail, SupersetLabel } from '@/components/plan-bits'
+import { listGroup } from '@/lib/styles'
 import { sessionBlocks } from '@/lib/session-blocks'
 import { useDayColors } from '@/lib/use-day-colors'
 import { Button } from '@/components/ui/button'
@@ -40,8 +41,13 @@ function HistoryDetailBody({ id }: { id: string }) {
   }
 
   const back = (
-    <Link to="/history" className="text-muted-foreground inline-flex min-h-11 items-center px-4 text-sm">
-      ← History
+    <Link
+      to="/history"
+      aria-label="Back to history"
+      className="text-muted-foreground hover:text-foreground mt-[env(safe-area-inset-top)] ml-2 inline-flex min-h-11 items-center gap-1 rounded-full pr-3 pl-2 text-base font-medium hover:bg-accent"
+    >
+      <ChevronLeft className="size-5" aria-hidden />
+      History
     </Link>
   )
 
@@ -84,7 +90,7 @@ function HistoryDetailBody({ id }: { id: string }) {
   const units = profile.units
   // label: the superset label (A1) when the line sits in a superset block
   const setLine = (s: SetLog, exerciseName: string, label?: string | null) => (
-    <li key={s.id} className="py-1">
+    <li key={s.id} className="px-4 py-1">
       <div className="flex min-h-11 items-center gap-2">
         <span className={s.done ? 'flex-1 tabular-nums' : 'text-muted-foreground flex-1 tabular-nums'}>
           {label && (
@@ -109,14 +115,14 @@ function HistoryDetailBody({ id }: { id: string }) {
             type="button"
             aria-label={`Edit set ${s.set_no} of ${exerciseName}`}
             aria-expanded={openSet === s.id}
-            className="text-muted-foreground hover:bg-accent flex min-h-11 min-w-11 items-center justify-center rounded-md"
+            className="text-muted-foreground hover:bg-accent hover:text-foreground flex min-h-11 min-w-11 items-center justify-center rounded-full aria-expanded:bg-accent"
             onClick={() => setOpenSet(openSet === s.id ? null : s.id)}
           >
             <PencilIcon className="size-4" />
           </button>
         )}
       </div>
-      {s.note && <p className="text-muted-foreground text-sm">{s.note}</p>}
+      {s.note && <p className="text-muted-foreground pb-1 text-sm">{s.note}</p>}
       {editing && openSet === s.id && (
         <HistorySetEditor set={s} unit={units} onSave={(patch) => saveSet(s.id, patch)} />
       )}
@@ -146,7 +152,7 @@ function HistoryDetailBody({ id }: { id: string }) {
           )
         }
       />
-      <div className="flex flex-col gap-4 p-4 pt-0">
+      <div className="flex flex-col gap-6 px-4 pb-6">
         {editing && (
           <p className="text-muted-foreground text-sm">
             Editing a past workout doesn't change your plan targets or progression.
@@ -155,11 +161,11 @@ function HistoryDetailBody({ id }: { id: string }) {
         {sessionBlocks(session.exercises).map((block) =>
           block.kind === 'exercise' ? (
             <section key={block.exercise.plan_item_id}>
-              <h2 className="font-heading text-xl leading-tight font-bold">
+              <h2 className="text-xl leading-tight font-semibold tracking-[-0.015em]">
                 {block.exercise.exercise_name}
                 <AngleChip angle={block.exercise.sets[0]?.angle} />
               </h2>
-              <ul className="mt-1 divide-y border-y">
+              <ul className={`${listGroup} mt-2.5`}>
                 {block.exercise.sets.map((s) => setLine(s, block.exercise.exercise_name))}
               </ul>
             </section>
@@ -167,21 +173,20 @@ function HistoryDetailBody({ id }: { id: string }) {
             <section
               key={block.group}
               aria-label={`Superset ${block.letter}`}
-              className="border-muted-foreground border-l-4 pl-3"
+              className="surface relative -mx-1 rounded-card p-3 pl-4"
             >
-              <h2 className="font-heading text-muted-foreground text-base leading-tight font-bold tracking-wide uppercase">
-                Superset
-              </h2>
+              <Rail />
+              <h2 className="text-muted-foreground text-sm font-medium">Superset</h2>
               {block.members.map((ex) => (
-                <p key={ex.plan_item_id} className="mt-1 flex items-center gap-2">
+                <p key={ex.plan_item_id} className="mt-2 flex items-center gap-2">
                   <SupersetLabel label={ex.sets[0]?.superset_label ?? ''} />
-                  <span className="font-heading text-xl leading-tight font-bold">
+                  <span className="text-lg leading-tight font-semibold tracking-[-0.015em]">
                     {ex.exercise_name}
                     <AngleChip angle={ex.sets[0]?.angle} />
                   </span>
                 </p>
               ))}
-              <ul className="mt-1 divide-y border-y">
+              <ul className="bg-background divide-border-strong/70 mt-3 divide-y overflow-hidden rounded-row">
                 {block.sets.map(({ set, exercise }) => setLine(set, exercise.exercise_name, set.superset_label))}
               </ul>
             </section>

@@ -5,8 +5,10 @@ import { Link } from 'react-router'
 import { OfflineError, type SetLog } from '@workout/shared'
 import { toast } from 'sonner'
 import { Screen } from '@/app/screen'
-import { AngleChip, DayBar, SupersetLabel, nameWithAngle } from '@/components/plan-bits'
+import { AngleChip, DayDot, Rail, SupersetLabel, nameWithAngle } from '@/components/plan-bits'
 import { SetRow } from '@/components/set-row'
+import { fieldClass } from '@/components/ui/input'
+import { confirmPanel, listGroup } from '@/lib/styles'
 import { dayColorOf } from '@/lib/day-colors'
 import { sessionBlocks } from '@/lib/session-blocks'
 import { useDayColors } from '@/lib/use-day-colors'
@@ -41,11 +43,12 @@ import { useRepo } from '@/repo/provider'
 import type { FinishSummary, SessionDetail } from '@/repo/types'
 import { SessionInProgressError } from '@/repo/types'
 
-const selectClass = 'border-input bg-card min-h-12 w-full rounded-md border px-3 text-base'
+const selectClass = cn(fieldClass, 'h-12')
 
-// Primary action docked above the bottom tab bar (thumb zone); at the page end on md+.
+// Primary action docked above the floating tab bar (thumb zone); at the page end on md+.
+// The ::after fills the gap down to the screen edge so content never shows between bar and nav.
 const actionBarClass =
-  'bg-background sticky bottom-[calc(57px+env(safe-area-inset-bottom))] z-20 -mx-4 border-t px-4 py-3 md:bottom-0'
+  'bg-background sticky bottom-(--nav-space) z-20 -mx-4 px-4 py-3 after:absolute after:inset-x-0 after:top-full after:h-(--nav-space) after:bg-background md:bottom-0 md:after:hidden'
 
 function summaryLine(row: FinishSummary[number], unit: string): string {
   const { exercise_name: name, before, after } = row
@@ -116,7 +119,7 @@ function Picker() {
 
   return (
     <div className="flex flex-col gap-4 px-4">
-      <label className="flex flex-col gap-1.5 text-sm font-medium">
+      <label className="text-muted-foreground flex flex-col gap-2 text-sm font-medium">
         Plan
         <select
           className={selectClass}
@@ -133,15 +136,15 @@ function Picker() {
           ))}
         </select>
       </label>
-      <div className="flex flex-col gap-1.5">
-        <span id="day-chooser-label" className="text-sm font-medium">
+      <div className="flex flex-col gap-2">
+        <span id="day-chooser-label" className="text-muted-foreground text-sm font-medium">
           Day
         </span>
-        <div role="radiogroup" aria-labelledby="day-chooser-label" className="divide-y border-y">
+        <div role="radiogroup" aria-labelledby="day-chooser-label" className={listGroup}>
           {plan.days.map((d) => (
             <label
               key={d.id}
-              className="has-checked:bg-card flex min-h-14 cursor-pointer items-stretch gap-3 py-2 pr-2"
+              className="has-focus-visible:ring-ring flex min-h-14 cursor-pointer items-center gap-3 px-4 py-2 has-focus-visible:ring-2 has-focus-visible:ring-inset"
             >
               <input
                 type="radio"
@@ -151,14 +154,14 @@ function Picker() {
                 checked={d.id === day.id}
                 onChange={() => setDayId(d.id)}
               />
-              <DayBar color={dayColorOf(d)} className="w-2" />
-              <span className="font-heading flex min-w-0 flex-1 items-center text-xl leading-tight font-bold break-words">
+              <DayDot color={dayColorOf(d)} className="size-3" />
+              <span className="flex min-w-0 flex-1 items-center text-[17px] leading-tight font-medium break-words">
                 {d.name}
               </span>
-              <span className="flex items-center peer-focus-visible:outline-2" aria-hidden>
+              <span className="flex items-center" aria-hidden>
                 <CheckIcon
-                  strokeWidth={3}
-                  className={cn('size-6', d.id === day.id ? 'text-primary' : 'text-transparent')}
+                  strokeWidth={2.5}
+                  className={cn('size-5', d.id === day.id ? 'text-brand' : 'text-transparent')}
                 />
               </span>
             </label>
@@ -200,7 +203,7 @@ type SessionExercise = SessionDetail['exercises'][number]
 
 function ExerciseHeading({ ex }: { ex: SessionExercise }) {
   return (
-    <h2 className="font-heading text-2xl leading-tight font-bold">
+    <h2 className="text-xl leading-tight font-semibold tracking-[-0.015em]">
       {ex.exercise_name}
       <AngleChip angle={ex.sets[0]?.angle} />
     </h2>
@@ -215,7 +218,7 @@ function ExerciseExtras({ ex }: { ex: SessionExercise }) {
           href={ex.video_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary inline-flex min-h-11 items-center self-start text-sm underline"
+          className="text-brand inline-flex min-h-11 items-center self-start text-sm font-medium underline underline-offset-4"
         >
           Watch video
         </a>
@@ -294,11 +297,11 @@ function ActiveSession({
         note={`Started ${started}`}
         accent={dayColors.get(session.plan_day_id)}
       />
-      <div className="flex flex-col gap-6 px-4">
+      <div className="flex flex-col gap-7 px-4">
         <SessionNote key={session.id} session={session} />
         {sessionBlocks(session.exercises).map((block) =>
           block.kind === 'exercise' ? (
-            <section key={block.exercise.plan_item_id} className="flex flex-col gap-2">
+            <section key={block.exercise.plan_item_id} className="flex flex-col gap-2.5">
               <ExerciseHeading ex={block.exercise} />
               <ExerciseExtras ex={block.exercise} />
               <ul className="flex flex-col gap-2">{block.exercise.sets.map((s) => setRow(s))}</ul>
@@ -307,11 +310,10 @@ function ActiveSession({
             <section
               key={block.group}
               aria-label={`Superset ${block.letter}`}
-              className="border-muted-foreground flex flex-col gap-2 border-l-4 pl-3"
+              className="surface relative -mx-2 flex flex-col gap-2.5 rounded-card p-2.5 pl-3.5"
             >
-              <p className="font-heading text-muted-foreground text-base leading-none font-bold tracking-wide uppercase">
-                Superset
-              </p>
+              <Rail />
+              <p className="text-muted-foreground text-sm font-medium">Superset</p>
               {block.members.map((ex) => (
                 <div key={ex.plan_item_id} className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
@@ -331,7 +333,7 @@ function ActiveSession({
         )}
 
         {confirm === 'discard' ? (
-          <div className="flex flex-col gap-2 rounded-md border p-3">
+          <div className={confirmPanel}>
             <p>Discard this workout? All logged sets are deleted.</p>
             <div className="flex gap-2">
               <Button
@@ -425,7 +427,7 @@ export function TodayScreen() {
             <SheetTitle>Workout complete</SheetTitle>
             <SheetDescription>Progression for your next session.</SheetDescription>
           </SheetHeader>
-          <ul className="flex flex-col gap-2 px-4">
+          <ul className="flex flex-col gap-2 px-5">
             {summary?.map((row, i) => (
               <li key={i} className={cn('tabular-nums', row.outcome === 'success' && 'text-success font-semibold')}>
                 {summaryLine(row, unit)}

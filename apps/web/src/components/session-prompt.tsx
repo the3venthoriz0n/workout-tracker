@@ -19,7 +19,7 @@ export function SessionPrompt() {
         <div className="w-full max-w-sm">
           <CredentialsForm mode="sign-in" label="Sign in" busyLabel="Signing in..." busy={a.busy} error={a.error} onSubmit={(e, p) => void a.signIn(e, p)} />
           {confirming ? (
-            <div role="alertdialog" aria-label="Confirm guest mode" className="mt-3 flex flex-col gap-2 rounded-lg border p-3 text-sm">
+            <div role="alertdialog" aria-label="Confirm guest mode" className="surface mt-3 flex flex-col gap-2 rounded-card p-4 text-sm">
               <p>
                 {a.pendingChanges} unsent {a.pendingChanges === 1 ? 'change' : 'changes'} on this device will be lost.
               </p>
