@@ -3,11 +3,12 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import { routes } from '../src/app/router'
 import { AppDb } from '../src/repo/db'
 import { LocalRepo } from '../src/repo/local-repo'
 import { AuthProvider } from '../src/auth/auth-provider'
+import { guestRepo, renderApp } from './community-helpers'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -77,4 +78,34 @@ test('export calls exportAll and downloads a dated file', async () => {
   expect(spy).toHaveBeenCalled()
   expect(name).toMatch(/^workout-tracker-export-\d{4}-\d{2}-\d{2}\.json$/)
   click.mockRestore()
+})
+
+describe('public name', () => {
+  test('guests do not see it', async () => {
+    renderSettings()
+    await screen.findByText('Email')
+    expect(screen.queryByLabelText('Public name')).toBeNull()
+  })
+
+  test('signed in: validates, saves and explains what is shown', async () => {
+    const user = userEvent.setup()
+    const repo = await guestRepo('set-name')
+    const update = vi.spyOn(repo, 'updateProfile')
+    renderApp(repo, '/settings', { signedIn: true })
+    const input = await screen.findByLabelText('Public name')
+    expect(screen.getByText(/shown on plans you share/i).textContent).toMatch(/email is never shown/i)
+    await user.type(input, 'a')
+    await user.click(screen.getByRole('button', { name: 'Save public name' }))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/2 to 30/)
+    await user.clear(input)
+    await user.type(input, 'bad/name')
+    await user.click(screen.getByRole('button', { name: 'Save public name' }))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/letters, digits, spaces/)
+    expect(update).not.toHaveBeenCalled()
+    await user.clear(input)
+    await user.type(input, '  Sam Lifts ')
+    await user.click(screen.getByRole('button', { name: 'Save public name' }))
+    await waitFor(async () => expect((await repo.getProfile()).display_name).toBe('Sam Lifts'))
+    expect(update).toHaveBeenCalledWith({ display_name: 'Sam Lifts' })
+  })
 })
