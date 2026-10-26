@@ -14,7 +14,7 @@ A free, very simple lifting tracker. You build your own exercise library, pick t
 - Weight and rep progression is automatic, driven by user-defined rules.
 - One TypeScript codebase and one Docker image, deployed on a DigitalOcean Droplet.
 
-**Non-goals (v1)**: social features, AI-generated exercises, nutrition, wearables, two-way offline sync for signed-in users, ad-hoc exercises inside a workout, per-set rep schemes (pyramids, AMRAP).
+**Non-goals (v1)**: social features beyond community plans (no comments, follows or messages), AI-generated exercises, nutrition, wearables, two-way offline sync for signed-in users, ad-hoc exercises inside a workout, per-set rep schemes (pyramids, AMRAP).
 
 **Anti-goals**: anything that adds taps to logging a set; requiring an account to try the app; complexity a solo developer can't maintain.
 
@@ -48,6 +48,7 @@ M2 scope decisions (owner): REST resources as in §9 (not a single RPC endpoint)
 | Units | lb or kg, chosen in Settings; changing it converts stored weights. | M1 |
 | Export | Download all data as JSON. | M1 |
 | Accounts + sync | Email/password; guest data uploaded once on signup. | M2 |
+| Community plans | Signed-in users publish a plan (title 3-60, description 0-500, level, no links; needs a public name) as a frozen, versioned snapshot; anyone browses, searches and filters the public list; signed-in users upvote; anyone takes an independent copy ("Use this plan"; guests copy locally, uncounted). Limits: 5 publishes per rolling 24 h and 20 live listings per account. | Community |
 | Google / Apple sign-in | Native plugin flow on mobile. | Later |
 | Charts / PRs | Volume and estimated 1RM over time. | Later (Pro candidate) |
 | AI plan helper | Drafts a plan from goal, gear and active exercises. | Later (Pro candidate) |
@@ -91,10 +92,10 @@ The zod schemas in `packages/shared` are the single definition. Dexie (M1) and D
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| `profile` | user_id, plan (`free`\|`pro`), units (`lb`\|`kg`), weight_increment, default_rule? | `weight_increment` is the progression step: the smallest weight change you can load (default 5 lb / 2.5 kg), used for rounding. `default_rule` (optional rule shape) is the profile layer of the rule layering in §6 |
+| `profile` | user_id, plan (`free`\|`pro`), units (`lb`\|`kg`), weight_increment, default_rule?, display_name? | `weight_increment` is the progression step: the smallest weight change you can load (default 5 lb / 2.5 kg), used for rounding. `default_rule` (optional rule shape) is the profile layer of the rule layering in §6. `display_name`: the only public identity (2-30 letters, digits, spaces, `_` `-` `.`), required to publish; it can be changed, not removed |
 | `gear` | id, user_id, name, owned | Seeded list plus custom items; `owned` drives the picker |
 | `exercise` | id, user_id, name, notes, video_url, required_gear_ids[], active, default_sets, default_reps, default_weight, supports_angle, default_rule? | The reusable "var". `supports_angle` (default false) lets its items take an angle; turning it off clears the angle of its live items. `default_rule` (rule shape, nullable): the exercise layer in §6 |
-| `plan` | id, user_id, name, archived | A routine |
+| `plan` | id, user_id, name, archived, source?, published? | A routine. `source` (`{ shared_plan_id, version, title, author }`) is set on copies of community plans ("Based on X by Y"). `published` (`{ shared_plan_id, version, status }`) is the user's own listing, computed by the server (column `shared_plan_id`), never exported or imported; always null on the device |
 | `plan_day` | id, plan_id, name, position, color? | e.g. "Push A". `color`: one of `DAY_COLORS` (blue, red, green, amber, violet, teal, pink, slate) or null, when the UI derives it from the position |
 | `plan_item` | id, plan_day_id, exercise_id, position, sets?, reps?, weight?, target_reps?, target_weight?, angle?, amrap_last, superset_group?, inherit_rule | Overrides and targets are nullable; see §6. `angle`: `flat`\|`incline`\|`decline`\|null, only if the exercise supports it. `amrap_last`: the last set is AMRAP. `superset_group`: uuid shared by 2-3 items of the same day. `inherit_rule`: see §6 |
 | `progression_rule` | plan_item_id, success_action (`add_weight`\|`add_reps`), success_amount, fail_streak_limit, deload_pct, rep_ceiling? | At most one per item: the item's override (§6) |
@@ -102,9 +103,13 @@ The zod schemas in `packages/shared` are the single definition. Dexie (M1) and D
 | `workout_session` | id, user_id, plan_day_id, plan_name, day_name, started_at, completed_at?, note | `completed_at` null = in progress (at most one). Names are snapshots. |
 | `set_log` | id, session_id, plan_item_id, exercise_id, exercise_name, set_no, position, target_reps, target_weight, actual_reps, weight, done, note, angle?, amrap, seq?, superset_group?, superset_label? | Created when the session starts; snapshots values, so history never changes when plans or exercises do. `position`: plan item position at session start. `seq`: display order (§6 supersets); rows without it sort by (position, set_no). `superset_label`: e.g. `A1`, `A2` |
 
+**Community plans (server only).** `shared_plan` (id, owner_id, title, description, level, status `published`\|`unpublished`\|`hidden`, latest_version, upvote_count, download_count, created_at, updated_at) is a listing; `shared_plan_version` ((shared_plan_id, version), snapshot jsonb, created_at) holds each published snapshot, immutable; `plan_vote` and `plan_download` are one row per (user, listing) (a download row stores `first_version`). The counters are denormalized and change only in the same transaction as their row, with the listing row locked. `hidden` is set by the service owner in the database and behaves like `unpublished` everywhere, but the sharer cannot reverse it (publishing again is `409 conflict`). Deleting a plan unpublishes its listing.
+
+A **snapshot** (`packages/shared/src/community.ts`) holds the plan name, units, days (name, colour) and items (exercise name, required gear names, `supports_angle`, sets, reps and weight as effective base values, angle, `amrap_last`, superset letter, the effective rule or null). No ids, notes, video URLs, history or personal data; every string is cleaned of control and bidi characters and length-bounded. Empty days are dropped and a superset of one is ungrouped; a plan without exercises cannot be shared. `planFromSnapshot` (pure, used by `LocalRepo` and the server) builds an independent copy: weights and `add_weight` amounts converted to the adopter's units and rounded to their step (an amount never below one step; over-limit values are rejected, not clamped), exercises and gear matched by case-insensitive name and created when missing (new gear not owned, new exercises without notes or video), values and rules stored as item overrides, and an angle dropped when the matched exercise has no angle support. Existing rows are never changed.
+
 Weights are stored in the profile's unit as decimals. Changing units converts every stored weight in one transaction, rounded to 0.1, and resets the progression step (`weight_increment`) to that unit's default and converts `add_weight` amounts of the profile and exercise `default_rule`s like plan-item rules.
 
-New fields are additive: rows and exports written before them load with defaults (null / false), which keep their old meaning. Dexie schema v2 and migration `0001` add them.
+New fields are additive: rows and exports written before them load with defaults (null / false), which keep their old meaning. Dexie schema v2 and migration `0001` add them; Dexie v3 and migration `0002` add `display_name`, `plan.source` and the community tables.
 
 **Postgres mapping (M2).** Drizzle tables mirror the zod schemas, with these rules:
 - Every domain table has the primary key `(user_id, id)`, so two accounts can never collide on a client-generated UUID and a foreign ID never resolves to another user's row. `user_id` is `text` (Better Auth's user id) with a foreign key to the auth user and `ON DELETE CASCADE`; `id` and all other ids are `uuid`.
@@ -184,13 +189,16 @@ REST under `/api/v1`, JSON bodies validated by the shared zod schemas. Changes a
 - Every query is scoped by the session's user id. An id that does not exist **or belongs to another user** returns `404 {"error":"not_found"}` (never 403, so existence is not leaked).
 - Resources have client-generated UUIDs, so creates are idempotent `PUT /resource/:id` upserts (re-sending the same request is safe, which the offline queue relies on). The server sets `user_id` and timestamps.
 - State-changing requests (anything but GET/HEAD) must pass an Origin check (Hono `csrf`), in addition to SameSite=Lax cookies; bodies must be `application/json`.
-- Errors: `400 {"error":"invalid","issues":[...]}` for validation, `404`, `409 {"error":"conflict"|"session_in_progress"|"already_has_data"}`, `413` over the body limit (1 MB; 10 MB for `/import`), `500 {"error":"internal_error"}` (never internal messages).
+- Errors: `400 {"error":"invalid","issues":[...]}` for validation, `404`, `409 {"error":"conflict"|"session_in_progress"|"already_has_data"}`, `413` over the body limit (1 MB; 10 MB for `/import`), `429 {"error":"publish_limit"}`, `500 {"error":"internal_error"}` (never internal messages).
+- Community listings are the one place another user's id is reachable by design: a published listing can be voted on and adopted by anyone signed in; an unpublished or hidden one is the same `404` as a random id.
+
+**Public area (`/api/public/*`)**: GET only, outside the `/api/v1` session guard, and never reads a session or sets a cookie. Every response carries `Cache-Control: public, max-age=30` and only whitelisted fields: a listing is `id, title, description, level, author (display_name), day_count, version, upvotes, downloads, updated_at`, plus the snapshot; never owner ids, emails, notes, video URLs or other private data. Unpublished and hidden listings (and their versions) are `404`. Listings whose owner has no public name are not shown. `PUBLIC_ROUTES` in `apps/api/src/routes/table.ts` lists them; a test fails on any unlisted public route and walks every public response against the key whitelist. The web reads it through `fetchCommunityList` / `fetchCommunityPlan` in `packages/shared` (no cookies, responses parsed as untrusted).
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | \* | `/api/auth/**` | Better Auth (sign up, sign in, sign out, session) |
 | POST | `/api/v1/me/init` | Create the profile and seed gear/exercises on first use; returns the profile (idempotent) |
-| GET / PATCH | `/api/v1/me` | Profile; PATCH takes `units`, `weight_increment`, `default_rule` (a unit change converts stored weights and rules, as in §5/§6) |
+| GET / PATCH | `/api/v1/me` | Profile; PATCH takes `units`, `weight_increment`, `default_rule`, `display_name` (a unit change converts stored weights and rules, as in §5/§6) |
 | GET | `/api/v1/gear` | List gear (sorted by name) |
 | PUT / DELETE | `/api/v1/gear/:id` | Create/rename/own-toggle gear; delete also removes it from exercises' required gear |
 | GET | `/api/v1/exercises` | List exercises (sorted by name) |
@@ -215,6 +223,12 @@ REST under `/api/v1`, JSON bodies validated by the shared zod schemas. Changes a
 | PATCH | `/api/v1/sets/:id` | Edit a set (`done`, `actual_reps`, `weight`, `note`); optional client `updated_at` for last-write-wins replays |
 | GET | `/api/v1/export` | All of the account's data as the `exportAll()` JSON |
 | POST | `/api/v1/import` | One-time guest upload; `409 already_has_data` if the account already has a profile |
+| POST / DELETE | `/api/v1/plans/:id/publish` | POST `{ title, description?, level? }` publishes the plan (a new listing, or a new version of its listing) and returns `{ shared_plan_id, version }`; `400` without a public name, with an invalid title/description/level or a plan without exercises; `429 {"error":"publish_limit"}` over 5 publishes per rolling 24 h (counted from stored versions) or 20 live listings; `409` for a hidden listing. DELETE unpublishes (idempotent; 404 if the plan was never published) |
+| GET | `/api/v1/shared-plans/mine` | The caller's listings (any status) with `plan_id`, version and counts |
+| GET / PUT / DELETE | `/api/v1/shared-plans/:id/vote` | `{ voted }`; PUT/DELETE set or clear the caller's one upvote and return `{ upvotes }` (idempotent) |
+| POST | `/api/v1/shared-plans/:id/adopt` | `{ version? }`: copies the listing's snapshot (loaded from the database; a client snapshot is ignored) into the caller's account and returns `201 { plan_id }`. Every call is a new copy; the download is counted once per user. Needs a connection (never queued) |
+| GET | `/api/public/plans` | Public, no session. `q` (title, description and exercise names, case-insensitive, wildcards literal, max 100 chars), `days`, `level`, `gear=none`, `sort=top\|new\|used` (top: upvotes, then downloads, then newest), `cursor`, `limit` (max 20). Returns `{ items, next_cursor }` |
+| GET | `/api/public/plans/:id`, `/api/public/plans/:id/versions/:n` | Public: `{ listing, version, snapshot }` for the latest or a given version |
 | GET | `/healthz` | Health check (exists) |
 
 ## 10. Pro plan structure
@@ -290,6 +304,13 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | Layered progression rules (item ?? exercise ?? profile ?? built-in), resolved at read/finish time (owner's choice) | One edit to a default reaches every inheriting item; overrides stay explicit. Old rule rows stay overrides; nothing is guessed |
 | Angle per plan item, gated by `exercise.supports_angle` (owner's choice) | One exercise can be incline in one plan and flat in another, each with its own targets and progression |
 | AMRAP last set, supersets of 2-3 items in one day, palette day colours (owner's choice) | Snapshotted onto set logs (`amrap`, `seq`, `superset_label`) so history renders without the plan; progression rules unchanged |
+| Community plans as frozen, versioned snapshots behind a listing that owns the counters | A copy never depends on the sharer's library or later edits; republishing makes a new version and old versions stay readable |
+| Public reads in a separate session-less area (`/api/public/*`) with a field whitelist; writes stay authenticated `/api/v1` routes | The `/api/v1` invariants (session, 404 for foreign ids) stay intact; public data cannot leak private fields by accident |
+| Signed-in adoption loads the snapshot by id on the server; guests copy locally from the fetched snapshot with the same pure `planFromSnapshot` | A client can never inject a forged snapshot into an account; guest and server copies are identical |
+| Snapshot values are the effective base values (not the sharer's progressed targets) and rules the effective rule, stored as item overrides on the copy | The copy behaves like the original whatever the adopter's defaults are, without carrying someone else's progress |
+| Publish limits counted from stored rows (5 versions per rolling 24 h, 20 live listings), checked under a lock on the profile row | Survives restarts and multiple processes; no in-memory state |
+| `display_name` can be changed but not removed; listings show the current name | Every live listing always has an author; unpublishing is how a sharer leaves |
+| Search uses `ILIKE` over the latest snapshot without a trigram index | `pg_trgm` would need an extension outside drizzle-kit migrations; listings are capped at 20 per account and pages at 20, so the scan stays small. Revisit if the list grows large |
 
 ## 14. Open questions
 
