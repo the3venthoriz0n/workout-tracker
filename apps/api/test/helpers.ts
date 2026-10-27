@@ -106,7 +106,7 @@ export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mai
   }
 
   /** The newest captured mail to `email` whose link goes to `path`. */
-  async function lastMail(email: string, path: '/api/auth/verify-email' | '/reset-password'): Promise<Mail> {
+  async function lastMail(email: string, path: '/reset-password'): Promise<Mail> {
     // Sending is never awaited by the request (and may follow database work), so poll briefly.
     const deadline = Date.now() + 2000
     for (;;) {
@@ -117,26 +117,34 @@ export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mai
     }
   }
 
-  /** Opens the newest verification link sent to `email`, as a mail client would (no cookie, no Origin). */
-  async function verify(email: string, o: ReqOpts = {}) {
-    const res = await request(pathOf(linkIn(await lastMail(email, '/api/auth/verify-email'))), { ip: freshIp(), ...o })
-    if (res.status !== 302) throw new Error(`verify failed: ${res.status}`)
+  /**
+   * Opens the newest set-up link mailed to `email` (as a mail client would: no cookie, no Origin)
+   * and chooses `password`, which also confirms the address.
+   */
+  async function setUp(email: string, password = GOOD_PASSWORD) {
+    const link = new URL(linkIn(await lastMail(email, '/reset-password')))
+    const res = await request('/api/auth/reset-password', {
+      method: 'POST',
+      body: { token: link.searchParams.get('token'), newPassword: password },
+      ip: freshIp(),
+    })
+    if (res.status !== 200) throw new Error(`set-up failed: ${res.status}`)
     return res
   }
 
   /**
-   * Sign-up, verification through the emailed link, then sign-in: the response is the sign-in's
-   * (status 200, session cookie, `user`). A failed sign-up is returned as is. Verification and
+   * Sign-up, then the mailed set-up link (choosing `password`), then sign-in: the response is the
+   * sign-in's (status 200, session cookie, `user`). A failed sign-up is returned as is. Set-up and
    * sign-in come from fresh addresses so they never count against the test's own per-IP limits.
    */
   async function signUpVerified(email: string, password = GOOD_PASSWORD, o: ReqOpts = {}) {
     const up = await signUp(email, password, o)
     if (up.status !== 200) return up
-    await verify(email)
+    await setUp(email, password)
     return signIn(email, password, { ...o, ip: freshIp() })
   }
 
-  return { ...t, env, auth, app, origin, mail, request, signUp, signIn, lastMail, verify, signUpVerified }
+  return { ...t, env, auth, app, origin, mail, request, signUp, signIn, lastMail, setUp, signUpVerified }
 }
 
 /** "name=value" pairs of all Set-Cookie headers, joined for a Cookie request header. */

@@ -97,19 +97,6 @@ function build(to: string, subject: string, lines: string[], link: string, actio
   return { to, subject, text, html }
 }
 
-export function verificationEmail(to: string, link: string): Mail {
-  return build(
-    to,
-    'Confirm your email',
-    [
-      'Confirm your email to finish creating your Workout Tracker account.',
-      'The link works once and expires in 24 hours. If you did not sign up, ignore this email.',
-    ],
-    link,
-    'Confirm email',
-  )
-}
-
 export function resetEmail(to: string, link: string): Mail {
   return build(
     to,
@@ -124,8 +111,9 @@ export function resetEmail(to: string, link: string): Mail {
 }
 
 /**
- * A reset link for an account whose email was never verified (a duplicate sign-up, or "forgot
- * password" before verifying): whoever sets the password through it owns the account.
+ * The set-up link: a reset link for an account whose email was never verified (every sign-up, a
+ * duplicate sign-up, or "forgot password" before setting up): whoever sets the password through
+ * it owns the account.
  */
 export function setupEmail(to: string, link: string): Mail {
   return build(
