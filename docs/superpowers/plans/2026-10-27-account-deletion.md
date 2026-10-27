@@ -1,6 +1,6 @@
 # Account Deletion and Export (M2c) Plan
 
-> **Status: In progress (2026-10-27).**
+> **Status: Done (2026-10-27). Account deletion and full account export shipped (M2c).**
 
 **Goal:** A signed-in user can download all their data and delete their account from Settings.
 

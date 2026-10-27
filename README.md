@@ -21,6 +21,8 @@ The first run creates `.env` with random local-only secrets (database password, 
 
 The app works as a guest with all data on the device. Signing up (email + password, 10-128 characters) creates an account and mails a verification link; you can sign in only after confirming the address. Your guest data stays untouched on the device until the first successful sign-in, which uploads it once. From then on the data lives in Postgres behind the REST API (`/api/v1`) and is the same on every device you sign in on. While signed in, set logging keeps working offline: set edits are queued on the device and replayed when the connection returns (last write wins). Starting or finishing a workout needs a connection. Signing out returns to a fresh guest database; the account's data stays on the server.
 
+Settings → Delete account (signed in) exports your data first if you like, then deletes the account immediately after you enter your password and type DELETE; plans you shared stay in Community as "Deleted user".
+
 A forgotten password is reset by email ("Forgot password?"). Resetting also confirms the address and signs out every session. Mail goes through Resend in production and staging (`RESEND_API_KEY`, `MAIL_FROM`); the API refuses to start in production without both.
 
 ### Testing email flows locally
