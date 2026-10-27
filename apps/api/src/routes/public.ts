@@ -8,30 +8,85 @@ export type PublicRateLimit = {
   /** Requests per window per client IP (default 60). */
   max?: number
   windowMs?: number
-  /** Headers carrying the client IP, first match wins; none: one shared bucket. */
+  /** Headers carrying the client IP, first present wins; none: one shared bucket. */
   ipHeaders: string[]
   enabled: boolean
 }
 export type PublicDeps = { getPublic: () => PublicService; rateLimit: PublicRateLimit }
 
-/** Fixed-window, in-memory limiter (single API process, like Better Auth's store). */
-function rateLimiter({ max = 60, windowMs = 60_000, ipHeaders }: PublicRateLimit): MiddlewareHandler {
+const IP = /^[0-9a-fA-F:.]{2,45}$/
+
+/**
+ * The client of a proxy header: its RIGHT-most value, the one appended by the nearest trusted
+ * proxy (a client can prepend anything to X-Forwarded-For). Undefined unless it looks like an IP.
+ */
+export function clientKey(value: string | undefined): string | undefined {
+  const last = value
+    ?.split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .at(-1)
+  return last && IP.test(last) && /[.:]/.test(last) && /[0-9a-fA-F]/.test(last) ? last : undefined
+}
+
+export type RateLimitStore = { hit(key: string): { ok: boolean; retryAfterMs: number }; sweep(): void; size(): number }
+
+/**
+ * Fixed-window counters in memory (single API process, like Better Auth's store), bounded to
+ * `maxKeys`: when full, expired keys are swept (at most once a second on the request path), and
+ * new keys that still do not fit share one overflow bucket instead of growing the map. An unref'd
+ * timer sweeps every `sweepIntervalMs` (0: none) so the request path stays O(1) normally.
+ */
+export function createRateLimitStore(opts: {
+  max: number
+  windowMs: number
+  maxKeys?: number
+  now?: () => number
+  sweepIntervalMs?: number
+}): RateLimitStore {
+  const { max, windowMs, maxKeys = 10_000, now = Date.now, sweepIntervalMs = windowMs } = opts
   const hits = new Map<string, { start: number; count: number }>()
+  let lastSweep = -Infinity
+  const sweep = () => {
+    const t = now()
+    lastSweep = t
+    for (const [k, v] of hits) if (t - v.start >= windowMs) hits.delete(k)
+  }
+  if (sweepIntervalMs > 0) setInterval(sweep, sweepIntervalMs).unref?.()
+  return {
+    sweep,
+    size: () => hits.size,
+    hit(key) {
+      const t = now()
+      if (!hits.has(key) && hits.size >= maxKeys) {
+        if (t - lastSweep >= 1000) sweep()
+        if (hits.size >= maxKeys) key = 'overflow'
+      }
+      const entry = hits.get(key)
+      if (!entry || t - entry.start >= windowMs) {
+        hits.set(key, { start: t, count: 1 })
+        return { ok: true, retryAfterMs: 0 }
+      }
+      if (++entry.count > max) return { ok: false, retryAfterMs: entry.start + windowMs - t }
+      return { ok: true, retryAfterMs: 0 }
+    },
+  }
+}
+
+function rateLimiter({ max = 60, windowMs = 60_000, ipHeaders }: PublicRateLimit): MiddlewareHandler {
+  const store = createRateLimitStore({ max, windowMs })
   return async (c, next) => {
-    const now = Date.now()
-    if (hits.size > 10_000) for (const [k, v] of hits) if (now - v.start >= windowMs) hits.delete(k)
-    let ip = 'shared'
+    let key = 'shared'
     for (const h of ipHeaders) {
-      const v = c.req.header(h)?.split(',')[0]?.trim()
-      if (v) {
-        ip = v.slice(0, 64)
+      const v = c.req.header(h)
+      if (v !== undefined) {
+        key = clientKey(v) ?? 'shared'
         break
       }
     }
-    const entry = hits.get(ip)
-    if (!entry || now - entry.start >= windowMs) hits.set(ip, { start: now, count: 1 })
-    else if (++entry.count > max) {
-      c.header('Retry-After', String(Math.ceil((entry.start + windowMs - now) / 1000)))
+    const r = store.hit(key)
+    if (!r.ok) {
+      c.header('Retry-After', String(Math.ceil(r.retryAfterMs / 1000)))
       return c.json({ error: 'rate_limited' }, 429)
     }
     return next()

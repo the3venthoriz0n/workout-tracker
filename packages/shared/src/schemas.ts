@@ -82,6 +82,9 @@ export type RuleInput = z.infer<typeof ruleInputSchema>
 const CONTROLS = /[\u0000-\u001f\u007f-\u009f]/g
 const CONTROLS_MULTILINE = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g
 const FORMAT = /[\p{Cf}\u00ad\u2028\u2029]/gu
+// Full-stop look-alikes that NFKC leaves alone (or maps to another look-alike) become '.', so the
+// stored text and the link check see the same dot.
+const DOTS = /[\u3002\uff61\u2024\ufe52\uff0e]/g
 
 /** Strips format and control characters, applies NFKC (full-width letters become ASCII), then trims. */
 export function cleanText(s: string, multiline = false): string {
@@ -89,13 +92,16 @@ export function cleanText(s: string, multiline = false): string {
     .replace(FORMAT, '')
     .normalize('NFKC')
     .replace(FORMAT, '')
+    .replace(DOTS, '.')
     .replace(multiline ? CONTROLS_MULTILINE : CONTROLS, '')
     .trim()
 }
 
-// Links and their usual disguises: http(s)://, hxxp(s)://, www., and bare domains (a letter or
-// digit, a dot, then two or more letters: "spam.com", "shop.example.co.uk"). Checked on cleaned text.
-const LINK = /(h[tx]{2}ps?:\/\/|www\.|[\p{L}\p{N}]\.\p{L}{2,})/iu
+// Links and their usual disguises: http(s)://, hxxp(s)://, www., bare domains (a letter or digit,
+// a dot, then two or more letters: "spam.com", "shop.example.co.uk"), IPv4 literals and IPv6
+// literals (bracketed, with "::", or four or more colon groups). Checked on cleaned text.
+const LINK =
+  /(h[tx]{2}ps?:\/\/|www\.|[\p{L}\p{N}]\.\p{L}{2,}|\b\d{1,3}(?:\.\d{1,3}){3}\b|\[[0-9a-f.]*:[0-9a-f:.]*\]|[0-9a-f]::|::[0-9a-f]|\b(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}\b)/iu
 
 /** True when cleaned public text holds no link. */
 export const isLinkFree = (s: string): boolean => !LINK.test(s)

@@ -149,8 +149,16 @@ describe('public text: one link check for every public string', () => {
         expect(sharedSnapshotSchema.safeParse(snap(over)).success, `snapshot ${JSON.stringify(over)}`).toBe(false)
       }
     }
-    // Ordinary text with dots or abbreviations still passes.
-    for (const ok of ['5x5 v2. Heavy', 'Mon. and Thu.', 'D.B. Press', '3.5 kg plates', 'e.g. squats']) {
+    // Full-stop look-alikes, IPv4 and IPv6 literals are links too.
+    for (const b of ['spam\u3002com', 'spam\uff61com', 'spam\u2024com', 'spam\ufe52com', 'spam\uff0ecom', 'go to 203.0.113.7 now', '198.51.100.4',
+      '[2001:db8::1]', '2001:db8::1', 'http at ::1', 'fe80:0:0:0:200:f8ff:fe21:67cf']) {
+      expect(listingMetaSchema.safeParse({ title: 'Good title', description: b }).success, `description ${b}`).toBe(false)
+      expect(sharedSnapshotSchema.safeParse(snap({ exercise: b })).success, `exercise ${b}`).toBe(false)
+    }
+    // The stored form uses the same mapping the check used.
+    expect(listingMetaSchema.parse({ title: 'Mon\u3002 and Thu\uff61' }).title).toBe('Mon. and Thu.')
+    // Ordinary text with dots, numbers, times or abbreviations still passes.
+    for (const ok of ['5x5 v2. Heavy', 'Mon. and Thu.', 'D.B. Press', '3.5 kg plates', 'e.g. squats', '3.5 x 10', 'Rest 1:30 between', 'Tempo 3:1:2', '1.2.3 progression']) {
       expect(listingMetaSchema.safeParse({ title: 'Good title', description: ok }).success, ok).toBe(true)
     }
   })
