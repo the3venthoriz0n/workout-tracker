@@ -56,6 +56,12 @@ services:
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?run just setup}
       API_PROXY_TARGET: http://localhost:3000
       DEV_ALLOWED_HOSTS: ${DEV_ALLOWED_HOSTS:-}
+      # Optional (see .env.example): real email, sign-up list, community rate limit. Unset/empty
+      # keeps the defaults (mail printed to the log, open sign-up, limit on).
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      SIGNUP_ALLOWLIST: ${SIGNUP_ALLOWLIST:-}
+      AUTH_RATE_LIMIT: ${AUTH_RATE_LIMIT:-on}
     ports:
       # Vite is reachable from the LAN so a phone can open it. Set DEV_BIND=127.0.0.1
       # for loopback only. The API and database stay on loopback; Vite proxies /api.
