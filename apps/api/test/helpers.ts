@@ -107,10 +107,14 @@ export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mai
 
   /** The newest captured mail to `email` whose link goes to `path`. */
   async function lastMail(email: string, path: '/api/auth/verify-email' | '/reset-password'): Promise<Mail> {
-    await new Promise((r) => setImmediate(r)) // sending is never awaited by the request
-    const found = mail.sent.filter((m) => m.to === email.toLowerCase() && new URL(linkIn(m)).pathname === path).at(-1)
-    if (!found) throw new Error(`no ${path} mail to ${email}`)
-    return found
+    // Sending is never awaited by the request (and may follow database work), so poll briefly.
+    const deadline = Date.now() + 2000
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 5))
+      const found = mail.sent.filter((m) => m.to === email.toLowerCase() && new URL(linkIn(m)).pathname === path).at(-1)
+      if (found) return found
+      if (Date.now() > deadline) throw new Error(`no ${path} mail to ${email}`)
+    }
   }
 
   /** Opens the newest verification link sent to `email`, as a mail client would (no cookie, no Origin). */

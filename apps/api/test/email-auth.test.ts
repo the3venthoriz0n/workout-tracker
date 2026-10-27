@@ -3,8 +3,8 @@
 // POST /request-password-reset, POST /reset-password).
 import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { session, user } from '../src/db/schema.js'
-import { createCaptureMailer, throttled, type Mail, type Mailer } from '../src/mail.js'
+import { session, user, verification } from '../src/db/schema.js'
+import { createCaptureMailer, setupEmail, throttled, type Mail, type Mailer } from '../src/mail.js'
 import { cookieJar, freshIp, GOOD_PASSWORD, linkIn, pathOf, setupApp, type Harness } from './helpers.js'
 
 let h: Harness | undefined
@@ -145,7 +145,7 @@ describe('sign-up sends a verification link and creates no session', () => {
 })
 
 describe('sign-up never reveals whether an email has an account', () => {
-  it('an existing email (any letter case, verified or not) gets the same answer as a new one, creates nothing and sends nothing', async () => {
+  it('an existing email (any letter case, verified or not) gets the same answer as a new one and creates nothing; only an unverified one gets a set-up link', async () => {
     h = await setupApp()
     const fresh = await h.signUp('first@example.com')
     expect(fresh.status).toBe(200)
@@ -158,10 +158,16 @@ describe('sign-up never reveals whether an email has an account', () => {
       expect(dup.headers.getSetCookie(), email).toEqual([])
       expect(await shape(dup), email).toEqual(freshShape)
     }
-    await new Promise((r) => setImmediate(r))
+    await new Promise((r) => setTimeout(r, 50))
     expect(await users(h)).toHaveLength(2)
-    expect(h.mail.sent.length).toBe(before)
-    // The first password still works and the attempted one does not.
+    // The verified account gets nothing; the unverified one gets a "choose your password" link per attempt.
+    const sent = h.mail.sent.slice(before)
+    expect(sent.map((m) => m.to)).toEqual(['first@example.com', 'first@example.com'])
+    for (const m of sent) {
+      expect(m.subject).toBe(setupEmail('x@example.com', 'https://example.invalid/').subject)
+      expect(new URL(linkIn(m)).pathname).toBe('/reset-password')
+    }
+    // Nothing changed yet: the first password still works once verified and the attempted one does not.
     await h.verify('first@example.com')
     expect((await h.signIn('first@example.com', GOOD_PASSWORD, { ip: freshIp() })).status).toBe(200)
     expect((await h.signIn('first@example.com', 'some other password', { ip: freshIp() })).status).toBe(401)
@@ -179,7 +185,12 @@ describe('sign-up never reveals whether an email has an account', () => {
     expect(again.status).toBe(200)
     await h.verify('listed@example.com')
     expect((await h.signIn('listed@example.com', GOOD_PASSWORD, { ip: freshIp() })).status).toBe(200)
-    expect(h.mail.sent.map((m) => m.to)).toEqual(['listed@example.com'])
+    await new Promise((r) => setTimeout(r, 50))
+    // The verification link, then the set-up link of the second (duplicate) sign-up.
+    expect(h.mail.sent.map((m) => [m.to, new URL(linkIn(m)).pathname])).toEqual([
+      ['listed@example.com', '/api/auth/verify-email'],
+      ['listed@example.com', '/reset-password'],
+    ])
   })
 })
 
@@ -273,18 +284,45 @@ describe('password reset', () => {
     expect((await h.signIn('slow@example.com', NEW_PASSWORD, { ip: freshIp() })).status).toBe(200)
   })
 
-  it('requesting a newer link invalidates older ones', async () => {
+  for (const used of ['first', 'second'] as const) {
+    it(`every mailed link works until one is used (the ${used}); then all of them fail`, async () => {
+      h = await setupApp()
+      await h.signUpVerified('twice@example.com')
+      await requestReset(h, 'twice@example.com')
+      const first = await resetToken(h, 'twice@example.com')
+      await requestReset(h, 'twice@example.com')
+      const second = await resetToken(h, 'twice@example.com')
+      expect(second).not.toBe(first)
+      const [use, other] = used === 'first' ? [first, second] : [second, first]
+      expect((await resetPassword(h, use)).status).toBe(200)
+      const late = await resetPassword(h, other, 'other link password')
+      expect(late.status).toBe(400)
+      expect(((await late.json()) as { code: string }).code).toBe('INVALID_TOKEN')
+      expect((await h.signIn('twice@example.com', NEW_PASSWORD, { ip: freshIp() })).status).toBe(200)
+      const id = (await users(h))[0]!.id
+      expect(await h.db.select().from(verification).where(eq(verification.value, id))).toEqual([])
+    })
+  }
+
+  it('reset tokens are stored hashed, never as sent', async () => {
     h = await setupApp()
-    await h.signUpVerified('twice@example.com')
-    await requestReset(h, 'twice@example.com')
-    const first = await resetToken(h, 'twice@example.com')
-    await requestReset(h, 'twice@example.com')
-    const second = await resetToken(h, 'twice@example.com')
-    expect(second).not.toBe(first)
-    const old = await resetPassword(h, first, 'old link password')
-    expect(old.status).toBe(400)
-    expect((await resetPassword(h, second)).status).toBe(200)
-    expect((await h.signIn('twice@example.com', NEW_PASSWORD, { ip: freshIp() })).status).toBe(200)
+    await h.signUpVerified('hashed@example.com')
+    await requestReset(h, 'hashed@example.com')
+    const token = await resetToken(h, 'hashed@example.com')
+    const rows = await h.db.select().from(verification)
+    expect(rows).toHaveLength(1)
+    expect(JSON.stringify(rows)).not.toContain(token)
+  })
+
+  it('a used reset link also verifies the email (it proves the mailbox)', async () => {
+    h = await setupApp()
+    await h.signUp('unverified@example.com')
+    await requestReset(h, 'unverified@example.com')
+    const mail = await h.lastMail('unverified@example.com', '/reset-password')
+    expect(mail.subject).toBe(setupEmail('x@example.com', 'https://example.invalid/').subject)
+    expect((await resetPassword(h, new URL(linkIn(mail)).searchParams.get('token')!)).status).toBe(200)
+    expect((await users(h))[0]!.emailVerified).toBe(true)
+    expect((await h.signIn('unverified@example.com', NEW_PASSWORD, { ip: freshIp() })).status).toBe(200)
   })
 
   it('another user\'s reset request leaves my links alone', async () => {
@@ -305,6 +343,59 @@ describe('password reset', () => {
       const res = await resetPassword(h, token)
       expect(res.status, token).toBe(400)
     }
+  })
+})
+
+describe('pre-registration takeover', () => {
+  it('an attacker who signs up the victim\'s address first loses it once the victim signs up and sets a password', async () => {
+    h = await setupApp()
+    const ATTACKER = 'attacker chosen password'
+    const attackerIp = freshIp()
+    const unknown = await shape(await h.signUp('someone-new@example.com', GOOD_PASSWORD, { ip: freshIp() }))
+    expect((await h.signUp('victim@example.com', ATTACKER, { ip: attackerIp })).status).toBe(200)
+    // The attacker cannot sign in: the address is unverified.
+    expect((await h.signIn('victim@example.com', ATTACKER, { ip: attackerIp })).status).toBe(403)
+
+    // The victim signs up later: same answer as for a new address, and a "choose your password" link.
+    const dup = await h.signUp('Victim@example.com', GOOD_PASSWORD, { ip: freshIp() })
+    expect(await shape(dup)).toEqual(unknown)
+    expect(dup.headers.getSetCookie()).toEqual([])
+    const mail = await h.lastMail('victim@example.com', '/reset-password')
+    expect(mail.subject).toBe(setupEmail('x@example.com', 'https://example.invalid/').subject)
+    expect(mail.text.toLowerCase()).toContain('choose your password')
+
+    // Suppose the attacker had a session somehow (e.g. the victim later clicked the first verification mail).
+    await h.verify('victim@example.com')
+    const attackerSession = await h.signIn('victim@example.com', ATTACKER, { ip: attackerIp })
+    expect(attackerSession.status).toBe(200)
+
+    // The victim follows the link and sets a password.
+    const token = new URL(linkIn(mail)).searchParams.get('token')!
+    expect((await resetPassword(h, token, NEW_PASSWORD)).status).toBe(200)
+    expect((await h.request('/api/v1/progression', { cookie: cookieJar(attackerSession) })).status).toBe(401)
+    expect((await h.signIn('victim@example.com', ATTACKER, { ip: freshIp() })).status).toBe(401)
+    expect((await h.signIn('victim@example.com', NEW_PASSWORD, { ip: freshIp() })).status).toBe(200)
+    expect(await users(h)).toHaveLength(2)
+  })
+
+  it('without the victim verifying first, the set-up link alone makes the account the victim\'s', async () => {
+    h = await setupApp()
+    await h.signUp('victim@example.com', 'attacker chosen password', { ip: freshIp() })
+    await h.signUp('victim@example.com', GOOD_PASSWORD, { ip: freshIp() })
+    const mail = await h.lastMail('victim@example.com', '/reset-password')
+    expect((await resetPassword(h, new URL(linkIn(mail)).searchParams.get('token')!)).status).toBe(200)
+    expect((await users(h))[0]!.emailVerified).toBe(true)
+    expect((await h.signIn('victim@example.com', 'attacker chosen password', { ip: freshIp() })).status).toBe(401)
+    expect((await h.signIn('victim@example.com', NEW_PASSWORD, { ip: freshIp() })).status).toBe(200)
+  })
+
+  it('duplicate sign-ups of an unverified address are throttled like other mail', async () => {
+    const inner = createCaptureMailer()
+    h = await setupApp({}, { mailer: throttled(inner) })
+    await h.signUp('flood@example.com')
+    for (let i = 0; i < 10; i++) expect((await h.signUp('flood@example.com', GOOD_PASSWORD, { ip: freshIp() })).status).toBe(200)
+    await new Promise((r) => setTimeout(r, 50))
+    expect(inner.sent.filter((m) => new URL(linkIn(m)).pathname === '/reset-password')).toHaveLength(3)
   })
 })
 

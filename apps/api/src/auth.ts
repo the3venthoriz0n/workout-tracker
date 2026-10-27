@@ -1,12 +1,12 @@
 import { betterAuth } from 'better-auth'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { and, eq, like, ne } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { Db } from './db/index.js'
 import { account, session, user, verification } from './db/schema.js'
 import type { Env } from './env.js'
 import { sanitizedLog } from './logging.js'
-import { logMailFailure, resetEmail, verificationEmail, type Mail, type Mailer } from './mail.js'
+import { logMailFailure, resetEmail, setupEmail, verificationEmail, type Mail, type Mailer } from './mail.js'
 import { configuredOrigins, isTrustedOrigin } from './origins.js'
 
 export type AuthEnv = Pick<Env, 'NODE_ENV' | 'BETTER_AUTH_URL' | 'BETTER_AUTH_SECRET' | 'TRUSTED_ORIGINS'> &
@@ -68,7 +68,10 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
 
   const allowlist = new Set(env.SIGNUP_ALLOWLIST ?? [])
 
-  return betterAuth({
+  // Set right after betterAuth() returns; the sign-up hook uses it to mail a reset link.
+  let requestPasswordReset: ((email: string) => Promise<unknown>) | undefined
+
+  const auth = betterAuth({
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
     database: drizzleAdapter(db, {
@@ -104,18 +107,28 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
       maxPasswordLength: 128,
       resetPasswordTokenExpiresIn: 60 * 60,
       revokeSessionsOnPasswordReset: true,
+      // Every mailed link stays valid (1 hour) until one is used; onPasswordReset then removes the
+      // rest. Nothing here touches the database, so a known address costs no extra awaited work.
       sendResetPassword: async ({ user: u, token }) => {
-        // One live reset link per user: a newer request invalidates the older links.
-        await db
-          .delete(verification)
-          .where(
-            and(
-              eq(verification.value, u.id),
-              like(verification.identifier, 'reset-password:%'),
-              ne(verification.identifier, `reset-password:${token}`),
-            ),
-          )
-        send(resetEmail(u.email, link(RESET_PASSWORD_PATH, { token })))
+        const url = link(RESET_PASSWORD_PATH, { token })
+        send(u.emailVerified ? resetEmail(u.email, url) : setupEmail(u.email, url))
+      },
+      // A used link proves control of the mailbox: verify the email and drop every other reset
+      // link of this user (sessions are already revoked by revokeSessionsOnPasswordReset).
+      onPasswordReset: async ({ user: u }) => {
+        await db.transaction(async (tx) => {
+          await tx.delete(verification).where(eq(verification.value, u.id))
+          await tx.update(user).set({ emailVerified: true, updatedAt: new Date() }).where(eq(user.id, u.id))
+        })
+      },
+      // Pre-registration takeover: someone may have signed up this address with their own
+      // password. A sign-up for an existing UNVERIFIED account mails a reset ("choose your
+      // password") link instead; using it sets the password, verifies the email and revokes
+      // sessions. Verified accounts get nothing. The answer is the same either way (Better Auth
+      // returns its uniform 200), and the mail is never awaited.
+      onExistingUserSignUp: async ({ user: u }) => {
+        if (u.emailVerified || !requestPasswordReset) return
+        requestPasswordReset(u.email).catch(logMailFailure)
       },
     },
     emailVerification: {
@@ -154,7 +167,13 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
         '/send-verification-email': { window: 60 * 60, max: 5 },
       },
     },
+    // Reset tokens are stored as SHA-256 hashes, so a database leak exposes no live link.
+    verification: { storeIdentifier: 'hashed' },
   })
+
+  requestPasswordReset = (email) => auth.api.requestPasswordReset({ body: { email } })
+
+  return auth
 }
 
 export type Auth = ReturnType<typeof createAuth>

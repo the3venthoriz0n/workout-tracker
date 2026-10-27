@@ -27,7 +27,7 @@ In the Cloudflare dashboard (Zero Trust, Networks, Tunnels, your tunnel, Public 
 
 Known limits (also in the spec):
 - Any other container on the tunnel network can reach the app directly and send its own `cf-connecting-ip`, bypassing per-IP rate limits. Put only trusted containers on that network.
-- The allowlist checks an email address, not a person. An account cannot sign in until its address is verified through a link sent to that address.
+- The allowlist checks an email address, not a person, so anyone who knows a listed address can register it before its owner does. Email verification narrows this but does not fully close it: the owner may still click the verification link of a sign-up they did not make, which confirms the other person's password. It is mitigated because a sign-up for an existing unverified address mails the owner a "choose your password" link; using it sets their password, verifies the address and signs everyone else out.
 
 ## 4. First deploy
 

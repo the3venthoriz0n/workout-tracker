@@ -6,6 +6,7 @@ import {
   logMailFailure,
   mailerFromEnv,
   resetEmail,
+  setupEmail,
   throttled,
   verificationEmail,
   type Mail,
@@ -138,6 +139,7 @@ describe('message builders', () => {
   for (const [name, build] of [
     ['verificationEmail', verificationEmail],
     ['resetEmail', resetEmail],
+    ['setupEmail', setupEmail],
   ] as const) {
     it(`${name}: link in text and html only, plain html without remote content`, () => {
       const m = build('lifter@example.com', link)
@@ -151,7 +153,9 @@ describe('message builders', () => {
   }
 
   it('the two kinds have different subjects (the throttle keys on it)', () => {
-    expect(verificationEmail('a@example.com', link).subject).not.toBe(resetEmail('a@example.com', link).subject)
+    const subjects = [verificationEmail, resetEmail, setupEmail].map((b) => b('a@example.com', link).subject)
+    expect(new Set(subjects).size).toBe(3)
+    expect(setupEmail('a@example.com', link).text.toLowerCase()).toContain('finish setting up your account: choose your password')
   })
 
   it('escapes the link in html', () => {

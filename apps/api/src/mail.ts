@@ -123,6 +123,23 @@ export function resetEmail(to: string, link: string): Mail {
   )
 }
 
+/**
+ * A reset link for an account whose email was never verified (a duplicate sign-up, or "forgot
+ * password" before verifying): whoever sets the password through it owns the account.
+ */
+export function setupEmail(to: string, link: string): Mail {
+  return build(
+    to,
+    'Finish setting up your account',
+    [
+      'Finish setting up your account: choose your password.',
+      'Someone, probably you, tried to create a Workout Tracker account with this email. The link works once and expires in 1 hour. Choosing a password confirms your email and signs out anyone else. If it was not you, ignore this email.',
+    ],
+    link,
+    'Choose your password',
+  )
+}
+
 /** Logs a failed send as name and code only: a message could hold the link. */
 export function logMailFailure(err: unknown): void {
   const name = err instanceof Error ? err.name : typeof err
