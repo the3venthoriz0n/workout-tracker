@@ -169,6 +169,29 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
     },
     // Reset tokens are stored as SHA-256 hashes, so a database leak exposes no live link.
     verification: { storeIdentifier: 'hashed' },
+    // Endpoints the web app never calls, closed over HTTP (404). Several check a password or change
+    // the account for whoever holds a session cookie, with only the global per-IP limit, so a stolen
+    // cookie could use them as a password oracle or a takeover path. Account deletion has its own
+    // route, which calls auth.api.verifyPassword directly (server calls skip this list).
+    disabledPaths: [
+      '/verify-password',
+      '/change-password',
+      '/change-email',
+      '/update-user',
+      '/delete-user',
+      '/delete-user/callback',
+      '/update-session',
+      '/list-sessions',
+      '/revoke-session',
+      '/revoke-sessions',
+      '/revoke-other-sessions',
+      '/list-accounts',
+      '/account-info',
+      '/unlink-account',
+      '/link-social',
+      '/get-access-token',
+      '/refresh-token',
+    ],
   })
 
   requestPasswordReset = (email) => auth.api.requestPasswordReset({ body: { email } })

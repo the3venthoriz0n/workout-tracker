@@ -13,6 +13,7 @@ import {
 } from '@workout/shared'
 import type { z } from 'zod'
 import type { AppEnv } from '../middleware.js'
+import { TryAgainError } from '../service/account.js'
 import type { Service } from '../service/index.js'
 
 export type Ctx = Context<AppEnv>
@@ -73,5 +74,9 @@ export function mapDomainError(err: unknown, c: Context): Response | undefined {
   if (err instanceof ConflictError) return c.json({ error: 'conflict' }, 409)
   if (err instanceof OwnListingError) return c.json({ error: 'own_listing' }, 409)
   if (err instanceof PublishLimitError) return c.json({ error: 'publish_limit' }, 429)
+  if (err instanceof TryAgainError) {
+    c.header('Retry-After', '1')
+    return c.json({ error: 'try_again' }, 503)
+  }
   return undefined
 }

@@ -2,6 +2,7 @@
 // everything else in ONE transaction, so a failure leaves the account exactly as it was.
 import { and, eq, inArray, ne, sql } from 'drizzle-orm'
 import { DELETED_AUTHOR, NotFoundError } from '@workout/shared'
+import { pgCode } from './pg-error.js'
 import { plan, planDownload, planVote, sharedPlan, user, verification } from '../db/schema.js'
 import type { Db } from '../db/types.js'
 
@@ -20,7 +21,28 @@ import type { Db } from '../db/types.js'
  *   sessions and accounts (every session is revoked). Reset links (verification rows whose value
  *   is the user id) are deleted explicitly.
  */
+/** A deadlock or serialization failure survived one retry: the client should simply try again. */
+export class TryAgainError extends Error {
+  constructor() {
+    super('Try again')
+    this.name = 'TryAgainError'
+  }
+}
+
+const TRANSIENT = new Set(['40P01', '40001']) // deadlock_detected, serialization_failure
+
 export async function deleteAccount(db: Db, userId: string): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await deleteOnce(db, userId)
+    } catch (err) {
+      if (!TRANSIENT.has(pgCode(err) ?? '')) throw err
+      if (attempt >= 2) throw new TryAgainError()
+    }
+  }
+}
+
+async function deleteOnce(db: Db, userId: string): Promise<void> {
   await db.transaction(async (tx) => {
     const [found] = await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for('update')
     if (!found) throw new NotFoundError('Account')
@@ -40,7 +62,14 @@ export async function deleteAccount(db: Db, userId: string): Promise<void> {
         .where(inArray(sharedPlan.id, downloads.map((d) => d.id)))
     }
 
-    const owned = await tx.select({ id: sharedPlan.id }).from(sharedPlan).where(eq(sharedPlan.ownerId, userId))
+    // Locked like a vote or an adopt locks them: an adopt in flight finishes first (and its copy is
+    // renamed below); one that starts later sees the owner gone and names "Deleted user" itself.
+    const owned = await tx
+      .select({ id: sharedPlan.id })
+      .from(sharedPlan)
+      .where(eq(sharedPlan.ownerId, userId))
+      .orderBy(sharedPlan.id)
+      .for('update')
     if (owned.length > 0) {
       const ids = owned.map((l) => l.id)
       // Other users' copies named this user as the author when they were taken.

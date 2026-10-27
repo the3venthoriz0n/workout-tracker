@@ -263,7 +263,7 @@ export async function adoptSharedPlan(db: Db, userId: string, input: AdoptInput)
   }
   const prof = await profileOf(db, userId)
   const [listing] = await db
-    .select({ title: sharedPlan.title, latest: sharedPlan.latestVersion, author: authorColumn })
+    .select({ title: sharedPlan.title, latest: sharedPlan.latestVersion })
     .from(sharedPlan)
     .leftJoin(profile, eq(profile.userId, sharedPlan.ownerId))
     .where(and(eq(sharedPlan.id, id), visible))
@@ -275,11 +275,15 @@ export async function adoptSharedPlan(db: Db, userId: string, input: AdoptInput)
     .where(and(eq(sharedPlanVersion.sharedPlanId, id), eq(sharedPlanVersion.version, version)))
   if (!stored) throw new NotFoundError('Shared plan version')
 
-  const source = { shared_plan_id: id, version, title: listing.title, author: listing.author }
-
   return db.transaction(async (tx) => {
     // Unpublished meanwhile: no copy, no count.
     const { ownerId } = await lockPublished(tx, id)
+    // The author is read again under the listing lock: an account deletion that finished meanwhile
+    // leaves "Deleted user", and one still waiting for this lock renames this copy after it.
+    const [owner] = ownerId
+      ? await tx.select({ name: profile.displayName }).from(profile).where(eq(profile.userId, ownerId))
+      : []
+    const source = { shared_plan_id: id, version, title: listing.title, author: owner?.name ?? DELETED_AUTHOR }
     // One adopt at a time per user, and the library is read inside the transaction, so
     // concurrent adopts reuse each other's new exercises and gear instead of duplicating them.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`adopt:${userId}`}))`)

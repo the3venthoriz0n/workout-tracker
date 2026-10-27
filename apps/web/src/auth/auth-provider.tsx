@@ -91,7 +91,8 @@ export function AuthProvider({
   const accountRef = useRef('') // id of the account this device is (becoming) signed in as
   const goRef = useRef<(next: S) => void>(() => undefined)
   const lastVersion = useRef(0)
-  // True while the account is being deleted: a pause or a 401 then means "gone", not "expired".
+  // True from the start of an account deletion until it fails or the next sign-in starts: a pause or
+  // a late 401 then means "gone", not "expired".
   const leavingRef = useRef(false)
 
   const dropApi = () => {
@@ -191,7 +192,13 @@ export function AuthProvider({
   // A 401 while using the account ends the session; never fall back to guest data.
   useEffect(() => {
     const check = (err: unknown) => {
-      if (err instanceof UnauthenticatedError && !leavingRef.current && sRef.current.kind === 'signed-in' && sRef.current.phase === 'ready') {
+      if (
+        err instanceof UnauthenticatedError &&
+        !leavingRef.current &&
+        accountRef.current !== '' &&
+        sRef.current.kind === 'signed-in' &&
+        sRef.current.phase === 'ready'
+      ) {
         queueMicrotask(() => go({ kind: 'expired' }))
       }
     }
@@ -211,6 +218,7 @@ export function AuthProvider({
   const learn = async (call: () => Promise<{ userId: string; email: string }>) => {
     // Whatever repo is still around belongs to the previous account: stop its replay before the cookie can change.
     offlineApi()?.pause()
+    leavingRef.current = false // a new sign-in: 401s mean "expired" again
     const r = await call()
     accountRef.current = r.userId
     return r
@@ -360,7 +368,7 @@ export function AuthProvider({
         toast.success('Your account was deleted.')
         return null
       } finally {
-        leavingRef.current = false
+        // leavingRef stays true after a successful deletion (see above).
         busyRef.current = false
         setBusy(false)
       }

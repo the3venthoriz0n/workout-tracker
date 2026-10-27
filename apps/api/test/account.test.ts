@@ -2,6 +2,7 @@
 // personal row in one transaction, keeps published listings as "Deleted user", fixes the
 // community counters, and ends every session. Export covers everything the account owns.
 import { newId, type ExportData } from '@workout/shared'
+import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { makeClient, type Client } from './fixture.js'
 import { GOOD_PASSWORD, cookieJar, freshIp, setupApp, type Harness } from './helpers.js'
@@ -326,4 +327,87 @@ describe('GET /api/v1/export covers everything the account owns', () => {
     expect(back.account?.email).not.toBe(u.email)
     expect(back.community).toEqual({ listings: [], votes: [], downloads: [] })
   })
+})
+
+describe('Better Auth endpoints a session holder could use to test passwords or change the account', () => {
+  // Unused by the web app; disabled so a stolen cookie gets no password oracle without the
+  // per-account limit, and nothing changes the account outside our own routes.
+  const DISABLED = [
+    '/verify-password', '/change-password', '/change-email', '/update-user', '/delete-user', '/delete-user/callback',
+    '/update-session', '/list-sessions', '/revoke-session', '/revoke-sessions', '/revoke-other-sessions',
+    '/list-accounts', '/account-info', '/unlink-account', '/link-social', '/get-access-token', '/refresh-token',
+  ]
+
+  it('answer 404 over HTTP and change nothing; DELETE /account (which checks the password directly) still works', async () => {
+    const u = await account('Oracle Target')
+    const bodies: Record<string, unknown> = {
+      '/verify-password': { password: GOOD_PASSWORD },
+      '/change-password': { currentPassword: GOOD_PASSWORD, newPassword: 'another long password', revokeOtherSessions: true },
+      '/change-email': { newEmail: `x-${newId().slice(0, 6)}@example.com` },
+      '/update-user': { name: 'Changed' },
+      '/delete-user': { password: GOOD_PASSWORD },
+    }
+    for (const path of DISABLED) {
+      for (const method of ['GET', 'POST']) {
+        const res = await h.request(`/api/auth${path}`, { method, body: method === 'POST' ? (bodies[path] ?? {}) : undefined, cookie: u.cookie, ip: freshIp() })
+        expect(res.status, `${method} ${path}`).toBe(404)
+      }
+    }
+    // The password and the account are unchanged.
+    expect((await h.signIn(u.email, GOOD_PASSWORD, { ip: freshIp() })).status).toBe(200)
+    expect((await u.call('GET', '/api/v1/me')).status).toBe(200)
+    const [row] = (await h.sql(`select name from "user" where id = '${u.userId}'`)) as { name: string }[]
+    expect(row!.name).not.toBe('Changed')
+    expect((await del(u)).status).toBe(204)
+  })
+
+  it('the flows the web app uses stay enabled', async () => {
+    for (const path of ['/get-session', '/sign-out', '/sign-in/email', '/sign-up/email', '/request-password-reset', '/reset-password', '/send-verification-email', '/verify-email']) {
+      const res = await h.request(`/api/auth${path}`, { method: path === '/get-session' || path === '/verify-email' ? 'GET' : 'POST', body: path === '/get-session' || path === '/verify-email' ? undefined : {}, ip: freshIp() })
+      expect(res.status, path).not.toBe(404)
+    }
+  })
+})
+
+describe('a copy taken while the author deletes the account never keeps the old public name', () => {
+  /** Holds a row lock on the listing until `release` is called, so the order of the two writers is fixed. */
+  function blockListing(id: string) {
+    let release!: () => void
+    const released = new Promise<void>((r) => (release = r))
+    let locked!: () => void
+    const isLocked = new Promise<void>((r) => (locked = r))
+    const done = h.db.transaction(async (tx) => {
+      await tx.execute(sql`select id from shared_plan where id = ${id} for update`)
+      locked()
+      await released
+    })
+    return { isLocked, release, done }
+  }
+  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+  for (const first of ['adopt', 'delete'] as const) {
+    it(`${first} first`, async () => {
+      const author = `Racing Author ${first}`
+      const u = await account(author)
+      const o = await account(`Racing Copier ${first}`)
+      const listing = await publish(u, `Race ${first} plan`)
+      const block = blockListing(listing.id)
+      await block.isLocked
+      const run = { adopt: () => o.call('POST', `/api/v1/shared-plans/${listing.id}/adopt`, {}), delete: () => del(u) }
+      const a = run[first]()
+      await pause(150)
+      const b = run[first === 'adopt' ? 'delete' : 'adopt']()
+      await pause(150)
+      block.release()
+      await block.done
+      const results = await Promise.all([a, b])
+      for (const r of results) expect([200, 201, 204], r.text).toContain(r.status)
+      const plans = (await ok(o, 'GET', '/api/v1/plans')) as { source: { author: string } | null }[]
+      const copies = plans.filter((p) => p.source)
+      expect(copies.length).toBe(1)
+      expect(copies[0]!.source!.author).toBe('Deleted user')
+      expect(await dumpAll()).not.toContain(author)
+      await expectCountersMatchRows()
+    })
+  }
 })

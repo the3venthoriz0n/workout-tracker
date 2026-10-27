@@ -1,6 +1,7 @@
 // Settings > Delete account (spec §8): password + typing DELETE; on success nothing of the account
 // stays on the device (query cache, outbox and mirror, account hint) and the app is a fresh guest.
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
+import { UnauthenticatedError } from '@workout/shared'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { toast } from 'sonner'
@@ -66,6 +67,23 @@ function Gate() {
   return useSignedIn() ? <DeleteAccountCard /> : null
 }
 
+/** Deletes, then reports a 401 from a request that was still in flight (same tick). */
+function LateUnauthorized() {
+  const a = useAuth()
+  const qc = useQueryClient()
+  return (
+    <button
+      onClick={async () => {
+        if ((await a.deleteAccount('my password 123')) !== null) return
+        qc.getQueryCache().notify({ type: 'updated', action: { type: 'error', error: new UnauthenticatedError() }, query: {} } as never)
+        qc.getMutationCache().notify({ type: 'updated', action: { type: 'error', error: new UnauthenticatedError() }, mutation: {} } as never)
+      }}
+    >
+      delete-then-401
+    </button>
+  )
+}
+
 async function setup(auth: AuthClient = makeAuth()) {
   const local = new LocalRepo(new AppDb(`del-${crypto.randomUUID()}`))
   await local.init()
@@ -78,6 +96,7 @@ async function setup(auth: AuthClient = makeAuth()) {
       <AuthProvider auth={auth} local={local} createApi={() => api as never}>
         <Probe />
         <Gate />
+        <LateUnauthorized />
       </AuthProvider>
     </QueryClientProvider>,
   )
@@ -178,4 +197,13 @@ test('success clears every local trace of the account and returns to an empty gu
   expect(success).toHaveBeenCalledWith(expect.stringMatching(/account (was )?deleted/i))
   // The card is gone in guest mode (as in Settings).
   expect(screen.queryByRole('heading', { name: 'Delete account' })).toBeNull()
+})
+
+test('a 401 from a request still in flight after the deletion does not turn the fresh guest into "expired"', async () => {
+  const user = userEvent.setup()
+  await setup()
+  await user.click(screen.getByRole('button', { name: 'delete-then-401' }))
+  await waitFor(() => expect(screen.getByTestId('s').textContent).toBe('guest|local'))
+  await new Promise((r) => setTimeout(r, 50))
+  expect(screen.getByTestId('s').textContent).toBe('guest|local')
 })
