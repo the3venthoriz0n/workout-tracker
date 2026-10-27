@@ -171,7 +171,6 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
         '/sign-in/email': { window: 60, max: 5 },
         '/sign-up/email': { window: 60 * 60, max: 10 },
         '/request-password-reset': { window: 60 * 60, max: 5 },
-        '/send-verification-email': { window: 60 * 60, max: 5 },
       },
     },
     // Reset tokens are stored as SHA-256 hashes, so a database leak exposes no live link.

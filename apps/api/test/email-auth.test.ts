@@ -2,6 +2,7 @@
 // password is chosen only after the email is confirmed; password reset by email. Better Auth 1.7.12
 // endpoints: POST /sign-up/email, POST /request-password-reset, POST /reset-password. The
 // verification endpoints (GET /verify-email, POST /send-verification-email) are closed.
+import { randomBytes } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { session, user, verification } from '../src/db/schema.js'
@@ -57,13 +58,14 @@ function captureLogs(): string[] {
   return lines
 }
 
-const SIGNUP_PASSWORD = 'throwaway-Zq9sV1cT8kLmW3pXrY6uNb2aEoHd4fGj'
+// Like the web client's throwaway sign-up password: 32 random bytes, base64url.
+const THROWAWAY = randomBytes(32).toString('base64url')
 
 describe('sign-up mails the set-up link; the password is chosen only after the email is confirmed', () => {
   it('sends exactly one mail: the set-up link (BETTER_AUTH_URL, ?setup=1, a working token); no cookie; the sign-up password never leaks', async () => {
     const logs = captureLogs()
     h = await setupApp()
-    const up = await h.signUp('New@Example.com', SIGNUP_PASSWORD)
+    const up = await h.signUp('New@Example.com', THROWAWAY)
     expect(up.status).toBe(200)
     expect(up.headers.getSetCookie()).toEqual([])
     const upText = await up.text()
@@ -81,7 +83,7 @@ describe('sign-up mails the set-up link; the password is chosen only after the e
     expect(token).toMatch(/^[A-Za-z0-9]{24}$/)
 
     // Before the set-up link: the sign-up password gets 403 EMAIL_NOT_VERIFIED, no cookie.
-    const early = await h.signIn('new@example.com', SIGNUP_PASSWORD)
+    const early = await h.signIn('new@example.com', THROWAWAY)
     expect(early.status).toBe(403)
     expect(((await early.json()) as { code: string }).code).toBe('EMAIL_NOT_VERIFIED')
     expect(early.headers.getSetCookie()).toEqual([])
@@ -94,15 +96,15 @@ describe('sign-up mails the set-up link; the password is chosen only after the e
     expect(chosen.headers.getSetCookie()).toEqual([])
     expect(await h.db.select().from(session)).toHaveLength(0)
     expect((await users(h))[0]!.emailVerified).toBe(true)
-    expect((await h.signIn('new@example.com', SIGNUP_PASSWORD, { ip: freshIp() })).status).toBe(401)
+    expect((await h.signIn('new@example.com', THROWAWAY, { ip: freshIp() })).status).toBe(401)
     const ok = await h.signIn('new@example.com', NEW_PASSWORD, { ip: freshIp() })
     expect(ok.status).toBe(200)
     expect((await h.request('/api/v1/progression', { cookie: cookieJar(ok) })).status).toBe(200)
 
     // The sign-up password appears in no mail, response or log line.
-    for (const m of h.mail.sent) expect(m.subject + m.text + m.html).not.toContain(SIGNUP_PASSWORD)
-    expect(upText).not.toContain(SIGNUP_PASSWORD)
-    expect(logs.join('\n')).not.toContain(SIGNUP_PASSWORD)
+    for (const m of h.mail.sent) expect(m.subject + m.text + m.html).not.toContain(THROWAWAY)
+    expect(upText).not.toContain(THROWAWAY)
+    expect(logs.join('\n')).not.toContain(THROWAWAY)
   })
 
   it('the verification endpoints are closed', async () => {
