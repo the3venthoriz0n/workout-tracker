@@ -1,25 +1,24 @@
 # Architecture
 
-Diagrams of what exists today, with parts that are not built yet marked "planned". The spec ([spec.md](spec.md) §4, §7, §9, §11) is the source of truth.
+Diagrams of what exists today, with parts that are not built yet marked "planned" (production and Cloudflare's proxy). The spec ([spec.md](spec.md) §4, §7, §9, §11) is the source of truth.
 
 ## 1. System context
 
-One Droplet runs Caddy, the app container (Hono serving the SPA and `/api`) and Postgres; images are built and deployed from GitHub Actions, and Cloudflare and Resend are planned for M3/M2b.
+Staging runs on a self-hosted Docker host behind an existing Cloudflare Tunnel (app and Postgres only, no published ports, pulled by `update.sh`). Production is planned for one Droplet running Caddy, the app and Postgres (M3, on hold). Both run the same image: Hono serving the SPA, `/api/v1` (session required) and the public community area `/api/public/*` (GET only, no session). Verification and reset email goes out through Resend (built); production and staging refuse to start without its settings, and in development the console mailer prints links to the API log instead.
 
 ```mermaid
 flowchart LR
-  user["Phone or browser"] --> cf["Cloudflare (planned)"]
-  cf --> caddy
-  user -. "until Cloudflare is set up" .-> caddy
-  subgraph droplet["DigitalOcean Droplet (compose)"]
-    caddy["Caddy: TLS, reverse proxy"] --> app["Hono app: SPA and /api"]
-    app --> db[("Postgres")]
+  user["Phone or browser"] --> cf["Cloudflare: tunnel (staging), proxy (production, planned)"]
+  cf --> app
+  subgraph host["Self-hosted staging host (compose)"]
+    app["Hono app: SPA, /api/v1, /api/public"] --> db[("Postgres")]
   end
-  app -. "verification and reset email" .-> resend["Resend (planned)"]
-  tag["vX.Y.Z tag"] --> gha["GitHub Actions"]
-  gha --> ghcr["GHCR image"]
-  gha -- "deploy by digest over SSH" --> droplet
-  ghcr -- "image pulled" --> droplet
+  app -- "verification and reset email (never awaited)" --> mailer["Mailer: Resend (console in dev)"]
+  mailer --> resend["Resend"]
+  main["push to main"] --> gha["GitHub Actions"]
+  gha -- "publishes :staging" --> ghcr["GHCR image"]
+  host -- "update.sh pulls by digest" --> ghcr
+  gha -. "vX.Y.Z tag: deploy by digest over SSH (M3, on hold)" .-> prod["Production Droplet: Caddy, app, Postgres (planned)"]
 ```
 
 ## 2. Repo layout and dependencies
@@ -32,7 +31,7 @@ flowchart TD
   api["apps/api: Hono, Better Auth, Drizzle"] --> shared
   shared["packages/shared: zod schemas, progression engine, entitlements, ApiRepo, contract tests"]
   web -. "HTTP /api/v1 at runtime" .-> api
-  deploy["deploy/: production compose, Caddyfile, deploy.sh"] -. "runs the image of" .-> api
+  deploy["deploy/: production compose, Caddyfile, deploy.sh, self-hosted/ staging stack"] -. "runs the image of" .-> api
   infra["infra/terraform: Droplet, firewall, reserved IP"]
 ```
 
@@ -43,10 +42,13 @@ The UI only talks to the `Repo` interface, which has a local guest implementatio
 ```mermaid
 flowchart TD
   ui["UI via TanStack Query hooks"] --> repo{{"Repo interface"}}
+  ui --> community
   repo --> local["LocalRepo (Dexie, guest)"]
   repo --> outbox["Offline outbox wrapper: queued set edits"]
   outbox --> apirepo["ApiRepo (fetch)"]
   apirepo --> routes["REST routes /api/v1"]
+  community["Community browse: fetchCommunityList (no session)"] --> publicroutes["Public routes /api/public (GET only, whitelist)"]
+  publicroutes --> service
   routes --> service["Service layer (Drizzle)"]
   service --> pg[("Postgres")]
   contract["Shared contract test suite"] -.-> local
@@ -54,9 +56,9 @@ flowchart TD
   contract -.-> service
 ```
 
-## 4. Sign-up, sign-in and guest data upload
+## 4. Sign-up, verification, sign-in and guest data upload
 
-On sign-up the guest data is uploaded once and the local database is cleared only after the server confirms; on sign-in an account that already has data replaces the guest data after confirmation.
+Sign-up creates no session and uploads nothing: guest data stays on the device until the first successful sign-in. A new account is imported once and the local database is cleared only after the server confirms; an account that already has data replaces the guest data after confirmation. The same screens handle "forgot password"; a reset (or the set-up link mailed for an unverified account) verifies the address and revokes every session.
 
 ```mermaid
 sequenceDiagram
@@ -64,26 +66,36 @@ sequenceDiagram
   participant W as Web app (LocalRepo)
   participant A as API
   participant D as Postgres
-  Note over U,D: Sign up
+  participant M as Mailer (Resend, console in dev)
+  Note over U,M: Sign up and verify
   U->>W: Create account
-  W->>A: POST /api/auth/sign-up
-  A->>D: Create user and session
-  A-->>W: Session cookie
-  W->>A: POST /api/v1/import (exportAll JSON)
-  A->>D: Store rows with user_id set by server
-  A-->>W: Confirmed
-  W->>W: Clear local database, switch to ApiRepo
-  Note over W: If the upload fails, guest data stays and can be retried from Settings
+  W->>A: POST /api/auth/sign-up/email
+  A->>D: Create unverified user (no session)
+  A-->>M: Verification link (not awaited)
+  A-->>W: Uniform 200 (same for known addresses)
+  W->>U: Check your email (guest data untouched)
+  U->>A: Open link (any device)
+  A->>D: Mark email verified (no session)
+  A-->>U: Redirect to /verified
+  Note over U,M: Forgot password
+  U->>W: Forgot password
+  W->>A: POST /api/auth/request-password-reset
+  A-->>M: Reset link, or set-up link if unverified (not awaited)
+  A-->>W: Uniform answer
+  U->>A: Open link, choose password
+  A->>D: Set password, verify email, delete other links, revoke sessions
   Note over U,D: Sign in
   U->>W: Sign in
-  W->>A: POST /api/auth/sign-in
-  A-->>W: Session cookie
+  W->>A: POST /api/auth/sign-in/email
+  A-->>W: Session cookie (403 until verified)
   W->>A: POST /api/v1/me/init
   alt Account already has data
     W->>U: Confirm discarding guest data (JSON export offered)
     W->>W: Discard guest data, switch to ApiRepo
   else Account is new and empty
-    W->>A: POST /api/v1/import
-    A-->>W: Confirmed, switch to ApiRepo
+    W->>A: POST /api/v1/import (exportAll JSON)
+    A->>D: Store rows with user_id set by server
+    A-->>W: Confirmed, clear local database, switch to ApiRepo
+    Note over W: If the upload fails, guest data stays and can be retried from Settings
   end
 ```

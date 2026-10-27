@@ -1,6 +1,6 @@
 # Workout Tracker — Spec
 
-Revised 2026-10-22, after the scaffold (build step 1) landed. Earlier version: 2026-10-21.
+Revised 2026-10-26 to match what is built (M1, M2, M2b, the restyle and feature batch, the self-hosted staging stack and community plans). Earlier versions: 2026-10-22, 2026-10-21.
 
 ## 1. Overview
 
@@ -12,7 +12,7 @@ A free, very simple lifting tracker. You build your own exercise library, pick t
 - Guest use with no signup. An account only adds sync and backup.
 - Exercises are defined once (the "vars") and reused in plans with per-plan overrides.
 - Weight and rep progression is automatic, driven by user-defined rules.
-- One TypeScript codebase and one Docker image, deployed on a DigitalOcean Droplet.
+- One TypeScript codebase and one Docker image: staging on a self-hosted Docker host first, production later on a DigitalOcean Droplet (M3, on hold).
 
 **Non-goals (v1)**: social features beyond community plans (no comments, follows or messages), AI-generated exercises, nutrition, wearables, two-way offline sync for signed-in users, ad-hoc exercises inside a workout, per-set rep schemes (pyramids, AMRAP).
 
@@ -20,15 +20,24 @@ A free, very simple lifting tracker. You build your own exercise library, pick t
 
 ## 2. Milestones
 
-**M1 and M2 are done** (M1 completed 2026-10-22: built, reviewed task by task and as a whole branch, and exercised in a real browser against both the dev server and the production image; M2: the API is verified against the production image in an isolated compose project). Production deploy (M3) stays on hold until the owner decides to ship it.
+**Done (2026-10-26)**: M1, M2, M2b, the restyle and feature batch, the self-hosted staging stack and community plan sharing (v0.0.4). M3 (production) is on hold, with no date.
+
+**Current goals, in order**
+
+1. Staging deployed at home behind an existing Cloudflare Tunnel, using the generic self-hosted stack (`deploy/self-hosted/`, [README](../deploy/self-hosted/README.md)).
+2. M3: production on DigitalOcean behind Cloudflare. On hold, no date; the owner decides when.
+3. Later ideas (all mentioned elsewhere in this spec, none scheduled): M4 mobile (Capacitor wrap, bearer auth, store builds); Google/Apple sign-in; charts and PRs; AI plan helper; Pro gating; frontend/backend container split; account deletion and per-account export endpoints; off-box database backups; CSV export.
 
 | Milestone | Contents | Runs |
 | --- | --- | --- |
-| **M1: Local MVP (guest mode)** ✅ done | Gear (a section of Library), exercise library, plans, progression rules, Today logging, progression engine, history, settings and export. Everything runs on-device through `LocalRepo`. | `just dev`, `just preview` |
-| **M2: Accounts and sync** ✅ done | Postgres schema (Drizzle), Better Auth email + password, the REST API in §9, `ApiRepo`, guest-data import on signup, offline set-log queue. Plan: `docs/superpowers/plans/2026-10-22-m2-accounts-and-sync.md`. | `just dev`, `just preview` |
+| **M1: Local MVP (guest mode)** ✅ done | Gear (a section of Library), exercise library, plans, progression rules, Today logging, progression engine, history, settings and export. Everything runs on-device through `LocalRepo`. Plan: `docs/superpowers/plans/2026-10-22-m1-local-mvp.md`. | `just dev`, `just preview` |
+| **M2: Accounts and sync** ✅ done | Postgres schema (Drizzle), Better Auth email + password, the REST API in §9, `ApiRepo`, guest-data import on first sign-in, offline set-log queue. Plan: `docs/superpowers/plans/2026-10-22-m2-accounts-and-sync.md`. | `just dev`, `just preview` |
+| **Restyle and feature batch** ✅ done | Warm minimal visual direction (§8) and day colours, exercise angle, AMRAP last set, supersets, layered progression rules with the Progress tab. No separate plan file. | `just dev`, `just preview` |
 | **M2b: Email verification and password reset** ✅ done | Resend in production and staging, console mailer in development (links printed to the API log with a `[mail]` prefix); verify before first sign-in; forgot-password and set-up flows; per-recipient mail throttle. Plan: `docs/superpowers/plans/2026-10-25-m2b-email-auth.md`. | `just dev` |
-| M3: Production (on hold) | Droplet via Terraform behind Cloudflare (proxy, Full (strict), origin firewall limited to Cloudflare), scripted secret seeding, GitHub production environment, first `v*` release, nightly `pg_dump` backups. Plan: `docs/superpowers/plans/2026-10-25-m3-production-cloudflare.md`. | DigitalOcean + Cloudflare |
-| M4: Mobile | Capacitor wrap, bearer auth, store builds | iOS / Android |
+| **Staging stack (self-hosted)** ✅ built, deployment pending | Generic compose stack (app + Postgres, no published ports, joins an existing tunnel network), `update.sh` pull-based updater, `staging.yml` publishing `:staging`, public-safety check. Deploying it at home is the current goal. | self-hosted Docker host |
+| **Community plans** ✅ done (v0.0.4) | Publish a plan as a versioned snapshot, public browse/search/filter, upvotes, "Use this plan". Plan: `docs/superpowers/plans/2026-10-26-community-plans.md`. | `just dev`, `just preview` |
+| M3: Production (on hold, no date) | Droplet via Terraform behind Cloudflare (proxy, Full (strict), origin firewall limited to Cloudflare), scripted secret seeding, GitHub production environment, first `v*` release, nightly `pg_dump` backups. Plan: `docs/superpowers/plans/2026-10-25-m3-production-cloudflare.md`. | DigitalOcean + Cloudflare |
+| M4: Mobile (later) | Capacitor wrap, bearer auth, store builds | iOS / Android |
 | Later | Google/Apple sign-in, charts/PRs, AI plan helper, Pro gating, frontend/backend container split | |
 
 M1 is deliberately client-only: guest mode is a v1 requirement anyway, and it is the fastest path to something usable in the gym. The API stayed as scaffolded (`/healthz`, empty `/api/v1`) until M2.
@@ -43,11 +52,12 @@ M2 scope decisions (owner): REST resources as in §9 (not a single RPC endpoint)
 | Exercise library | Name, notes, video/instruction URL, required gear, default sets/reps/weight, active toggle. Per user, seeded from a starter list. | M1 |
 | Plans | Named plans → ordered days → ordered items. Each item references an exercise, with optional overrides and a progression rule. | M1 |
 | Session logging | Pick a plan day, then mark sets done with one tap. Edit actual reps and weight in place. Per-set and per-session notes. Resumes if the app closes. | M1 |
-| Progression | Runs when a session is finished. See §6. Has its own tab: the progression step, the app default rule, and every exercise's default with the plan items that override it. | M1 |
+| Progression | Runs when a session is finished. See §6. Has its own tab (labelled "Progress"): the progression step, the app default rule, and every exercise's default with the plan items that override it. | M1 |
 | History | Completed sessions by date, with the exact sets, reps and weights (skipped sets show their planned numbers, marked "skipped"). Past workouts are editable (sets, set notes, session note) without affecting plan targets or progression. | M1 |
 | Units | lb or kg, chosen in Settings; changing it converts stored weights. | M1 |
 | Export | Download all data as JSON. | M1 |
-| Accounts + sync | Email/password; guest data uploaded once on signup. | M2 |
+| Accounts + sync | Email/password; guest data uploaded once on the first sign-in of a new account. | M2 |
+| Email verification, password reset | Verified address required before first sign-in; reset by email; Resend in production, console mailer in development. | M2b |
 | Community plans | Signed-in users publish a plan (title 3-60, description 0-500, level, no links; needs a public name) as a frozen, versioned snapshot; anyone browses, searches and filters the public list; signed-in users upvote; anyone takes an independent copy ("Use this plan"; guests copy locally, uncounted). Limits: 5 publishes per rolling 24 h and 20 live listings per account. | Community |
 | Google / Apple sign-in | Native plugin flow on mobile. | Later |
 | Charts / PRs | Volume and estimated 1RM over time. | Later (Pro candidate) |
@@ -73,7 +83,7 @@ One pnpm monorepo, all TypeScript. A single app container (Hono serves the API a
 
 ```
 apps/api          Hono server; Drizzle schema + migrations (M2)
-apps/web          React SPA: routes/, components/, repo/ (LocalRepo, later ApiRepo)
+apps/web          React SPA: routes/, components/, repo/ (LocalRepo, ApiRepo)
 packages/shared   zod schemas + types, progression engine, effective-value helpers,
                   seed data, units, entitlements
 deploy/           production compose stack, Caddyfile, deploy.sh; self-hosted/ staging stack
@@ -179,7 +189,7 @@ Five tabs (Today, Plans, Library, Progress for `/progression`, History): a float
 | `/progression` | Progression (tab label "Progress") | Three cards: the progression step (smallest weight change you can load; steps and deloads snap to it); the app default rule (`profile.default_rule`, used live by every inheriting item); and Exercise rules: every exercise once (`listProgressionByExercise`) with its effective default, a source badge (Exercise default / App default / Built-in), how many items inherit, an editor that sets the exercise default (and "Use app default" to clear it), and below it the plan items that override it (plan · day, their rule, "Use default"). |
 | `/history`, `/history/:id` | History | Completed sessions, newest first, each with its day colour dot; tap one for exact sets, reps and weights; skipped sets show planned numbers; AMRAP sets show the extra reps ("AMRAP +3"); angle chips and superset blocks as on Today. An Edit toggle on finished workouts allows editing reps, weight, done/skipped, set notes and the session note (no date edit or delete); edits never change plan targets or progression. |
 | `/plans/community`, `/plans/community/:id` | Community | Reached from the "My plans / Community" toggle at the top of the Plans tab. Public list with search and filters (days, level, no gear), paged 20 at a time, sorted by newest or most upvoted; works signed out. A listing shows the title, description, level, author's public name, day and item counts, the days with their exercises, upvotes and copies. Upvote needs sign-in (not on your own listing). "Use this plan" copies it into My plans (guests copy locally); a copy shows "based on X by Y" and "update available" when a newer version exists. In My plans, a plan's share sheet publishes, republishes or unpublishes it and asks for a public name first. All public text renders as escaped text; no link is rendered or followed. |
-| `/settings` | Settings | Units, export JSON, and an Account card: sign up, log in, log out, and (after a failed upload) retry the guest-data upload. Signed out, the app is in guest mode. |
+| `/settings` | Settings | Units, export JSON, and an Account card: sign up (then "Check your email" with a resend action), log in, "Forgot password?", log out, and (after a failed upload) retry the guest-data upload. Two landing routes work signed out, in guest mode and signed in: `/verified` ("Email confirmed") and `/reset-password` (reads the token from the link, removes it from the address bar, sets the new password). Signed out, the app is in guest mode. |
 
 UX rules: tap targets at least 44 px; `inputmode="decimal"` for weight and `inputmode="numeric"` for reps; never more than one modal or sheet open; edit in place; follows the system light/dark mode (CSS media query, no toggle); inputs at least 16 px text (no iOS zoom); the Start/Finish button is docked above the tab bar; the screen stays awake during a workout (Wake Lock, best effort); a short vibration when a set is marked done unless reduced motion is on.
 
@@ -201,7 +211,7 @@ REST under `/api/v1`, JSON bodies validated by the shared zod schemas. Changes a
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| \* | `/api/auth/**` | Better Auth (sign up, sign in, sign out, session) |
+| \* | `/api/auth/**` | Better Auth (sign up, sign in, sign out, session, verify email, request password reset, reset password, resend verification; see §7) |
 | POST | `/api/v1/me/init` | Create the profile and seed gear/exercises on first use; returns the profile (idempotent) |
 | GET / PATCH | `/api/v1/me` | Profile; PATCH takes `units`, `weight_increment`, `default_rule`, `display_name` (a unit change converts stored weights and rules, as in §5/§6) |
 | GET | `/api/v1/gear` | List gear (sorted by name) |
@@ -300,7 +310,7 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | Mailed reset and set-up links all stay valid until one is used, then all die; reset tokens are hashed (M2b) | No awaited database work per request (no enumeration timing), and a database leak exposes no live link |
 | Three environments: local dev, self-hosted staging behind an existing Cloudflare Tunnel, production on DigitalOcean (on hold) (owner's choice) | Staging costs nothing and exercises the real image and deploy script before any production spend |
 | Staging updates by pull: CI only publishes `:staging`; the host's `update.sh` polls the digest and deploys | CI holds no credentials for the home network and nothing inbound is opened; a lock and digest compare make repeated runs harmless |
-| `SIGNUP_ALLOWLIST` (comma separated emails, exact match after lowercasing, enforced in a Better Auth before-hook): blocked sign-up is `403 {"code":"SIGNUP_CLOSED","message":"signup_closed"}` and writes nothing; empty means open sign-up; sign-in is unaffected | Staging is invite-only without an invite system; the web client shows "Sign-up is invite-only" |
+| `SIGNUP_ALLOWLIST` (comma separated emails, exact match after lowercasing, enforced in a Better Auth before-hook): blocked sign-up is `403 {"code":"SIGNUP_CLOSED","message":"signup_closed"}` and writes nothing; empty means open sign-up; sign-in is unaffected | Staging can be invite-only without an invite system; the web client shows "Sign-up is invite-only". Sign-up is open by default (empty list) and the allowlist code stays |
 | `CLIENT_IP_HEADER` replaces the client-IP header used for auth rate limits (`cf-connecting-ip` behind the tunnel) | The tunnel sets it and the app has no published ports, so it is trustworthy; set it only when the app is reachable solely through such a proxy, otherwise clients can pick their own IP |
 | Composite primary keys `(user_id, id)` | Client-generated ids can't collide across accounts or reveal another user's rows |
 | 404 (not 403) for ids owned by someone else | Doesn't leak which ids exist |

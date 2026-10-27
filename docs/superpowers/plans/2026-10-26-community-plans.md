@@ -1,5 +1,7 @@
 # Community Plans Implementation Plan
 
+> **Status: Done (2026-10-26). Community plan sharing shipped (v0.0.4).**
+
 > **For agentic workers:** Use superpowers:subagent-driven-development (lean variant: one implementer per task, fail-before/pass-after tests, controller reads the diff; independent review of Task 1 only) to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Signed-in users can publish a plan to a public community list (versioned, frozen until re-published); anyone, signed in or not, can browse, search and filter it; signed-in users can upvote; anyone can take a copy that is theirs to edit and that never affects the original.

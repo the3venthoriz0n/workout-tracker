@@ -1,5 +1,7 @@
 # M2 Accounts and Sync Implementation Plan
 
+> **Status: Done (2026-10-26). M2 shipped; the checkboxes below were not ticked as work went, so they are not a progress record. Email verification and reset followed in M2b.**
+
 > **For agentic workers:** Use superpowers:subagent-driven-development (lean variant, see "How to run") to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let a user sign up, log in and use the same workout data from any device: a Postgres-backed REST API with Better Auth sessions, an `ApiRepo` client, one-time guest-data upload, and an offline set-log queue.

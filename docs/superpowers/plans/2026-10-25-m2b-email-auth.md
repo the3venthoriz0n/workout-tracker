@@ -1,5 +1,7 @@
 # M2b Email Verification and Password Reset Implementation Plan
 
+> **Status: Done (2026-10-26). Verification, reset, set-up links, Resend and the console mailer are built and documented. Where the code differs from this plan (single set-up link for unverified resend, all mailed links valid until one is used), the spec and CLAUDE.md describe the real behaviour.**
+
 > **For agentic workers:** Use superpowers:subagent-driven-development (lean variant: one implementer per task, fail-before/pass-after tests, controller reads the diff; independent review only for Tasks 1 and 3) to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Sign-up requires a verified email, and a user who forgot their password can reset it by email, using Resend in production and a console mailer in development.

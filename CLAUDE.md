@@ -70,6 +70,8 @@ See the spec's "Open questions" section. The exercise library is decided: each u
 
 ## Status
 
-The scaffold (Docker, compose, CI, infra), M1 (local guest-mode MVP) and M2 (accounts, REST API, `ApiRepo`, guest import, offline set-log outbox) are done (plans: [M1](docs/superpowers/plans/2026-10-22-m1-local-mvp.md), [M2](docs/superpowers/plans/2026-10-22-m2-accounts-and-sync.md)). Next is M3 (production) or whatever the owner picks.
+Done: the scaffold (Docker, compose, CI, infra), M1 (local guest-mode MVP), M2 (accounts, REST API, `ApiRepo`, guest import, offline set-log outbox), the restyle and feature batch (angles, AMRAP, supersets, layered rules, day colours), the self-hosted staging stack, community plan sharing (v0.0.4) and M2b (email verification and password reset). Plans: [docs/superpowers/plans/](docs/superpowers/plans/), each with a status line at the top.
+
+Goals, in order: staging deployed at home behind an existing tunnel (generic self-hosted stack), then M3 production on DigitalOcean (on hold, no date). Later ideas are listed in the spec's milestones table.
 
 Production is still on hold: don't run `infra-*` or `github-setup`, and don't push `v*` tags. Work through [docs/release-checklist.md](docs/release-checklist.md) before the first release. Verify features with `just dev` / `just preview`.
