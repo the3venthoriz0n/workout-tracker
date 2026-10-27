@@ -19,7 +19,7 @@ function renderSettings() {
   const router = createMemoryRouter(routes, { initialEntries: ['/settings'] })
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <AuthProvider auth={{ signUp: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), resendVerification: vi.fn(), requestPasswordReset: vi.fn(), resetPassword: vi.fn(), session: async () => null }} local={repo} createApi={() => ({}) as never}>
+      <AuthProvider auth={{ signUp: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), resendVerification: vi.fn(), requestPasswordReset: vi.fn(), resetPassword: vi.fn(), deleteAccount: vi.fn(), session: async () => null }} local={repo} createApi={() => ({}) as never}>
         <RouterProvider router={router} />
       </AuthProvider>
     </QueryClientProvider>,
@@ -35,6 +35,8 @@ test('Settings no longer shows gear, but keeps units, export and account', async
   expect(screen.queryByLabelText('Custom gear name')).toBeNull()
   expect(screen.getByRole('radio', { name: 'kg' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Export data' })).toBeTruthy()
+  // Guests have no account to delete.
+  expect(screen.queryByRole('heading', { name: 'Delete account' })).toBeNull()
 })
 
 test('changing units asks for confirmation then converts weights', async () => {

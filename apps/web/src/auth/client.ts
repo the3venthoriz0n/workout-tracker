@@ -10,6 +10,8 @@ export type AuthErrorKind =
   | 'unsynced_changes'
   | 'email_not_verified'
   | 'invalid_token'
+  | 'invalid_password'
+  | 'session_expired'
 
 // Typed, body-free error: the server's response text is never kept or shown.
 export class AuthError extends Error {
@@ -32,6 +34,8 @@ export interface AuthClient {
   resendVerification(email: string): Promise<void>
   requestPasswordReset(email: string): Promise<void>
   resetPassword(token: string, newPassword: string): Promise<void>
+  /** Deletes the signed-in account (DELETE /api/v1/account); the password is checked by the server. */
+  deleteAccount(password: string): Promise<void>
 }
 
 type Opts = { fetch?: typeof fetch; baseUrl?: string }
@@ -50,8 +54,17 @@ function kindForStatus(status: number, mode: Mode, code: string): AuthErrorKind 
   return 'server'
 }
 
+/** Errors of DELETE /api/v1/account; only the status is read, never the body. */
+function deleteKind(status: number): AuthErrorKind {
+  if (status === 429) return 'rate_limited'
+  if (status === 401) return 'session_expired'
+  if (status === 403 || status === 400) return 'invalid_password'
+  return 'server'
+}
+
 export function createAuthClient(opts: Opts = {}): AuthClient {
-  const base = (opts.baseUrl ?? '').replace(/\/+$/, '') + '/api/auth'
+  const origin = (opts.baseUrl ?? '').replace(/\/+$/, '')
+  const base = origin + '/api/auth'
   const doFetch = (url: string, init: RequestInit) => (opts.fetch ?? globalThis.fetch)(url, init)
 
   async function request(path: string, init: RequestInit): Promise<Response> {
@@ -103,6 +116,20 @@ export function createAuthClient(opts: Opts = {}): AuthClient {
     },
     async resetPassword(token, newPassword) {
       await post('/reset-password', { token, newPassword }, 'reset')
+    },
+    async deleteAccount(password) {
+      let res: Response
+      try {
+        res = await doFetch(`${origin}/api/v1/account`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        })
+      } catch {
+        throw new AuthError('offline')
+      }
+      if (!res.ok) throw new AuthError(deleteKind(res.status))
     },
     async session() {
       const res = await request('/get-session', { method: 'GET' })

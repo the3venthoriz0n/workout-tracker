@@ -18,6 +18,7 @@ function setup(url: string, over: Partial<AuthClient> = {}, session = false) {
     resendVerification: vi.fn(async () => {}),
     requestPasswordReset: vi.fn(async () => {}),
     resetPassword: vi.fn(async () => {}),
+    deleteAccount: vi.fn(async () => {}),
     ...over,
   }
   const local = { init: async () => {}, exportAll: async () => ({}), reset: async () => {} }

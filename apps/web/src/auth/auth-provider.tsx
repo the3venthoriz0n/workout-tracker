@@ -91,6 +91,8 @@ export function AuthProvider({
   const accountRef = useRef('') // id of the account this device is (becoming) signed in as
   const goRef = useRef<(next: S) => void>(() => undefined)
   const lastVersion = useRef(0)
+  // True while the account is being deleted: a pause or a 401 then means "gone", not "expired".
+  const leavingRef = useRef(false)
 
   const dropApi = () => {
     unsubApi.current?.()
@@ -114,7 +116,7 @@ export function AuthProvider({
         setPendingChanges(st.pending)
         const cur = sRef.current
         const live = cur.kind === 'signed-in' && cur.phase === 'ready'
-        if (st.paused && live) queueMicrotask(() => goRef.current({ kind: 'expired' }))
+        if (st.paused && live && !leavingRef.current) queueMicrotask(() => goRef.current({ kind: 'expired' }))
         else if (st.version !== lastVersion.current) {
           lastVersion.current = st.version
           if (live) void queryClient.invalidateQueries() // replay changed server state: refresh what is on screen
@@ -189,7 +191,7 @@ export function AuthProvider({
   // A 401 while using the account ends the session; never fall back to guest data.
   useEffect(() => {
     const check = (err: unknown) => {
-      if (err instanceof UnauthenticatedError && sRef.current.kind === 'signed-in' && sRef.current.phase === 'ready') {
+      if (err instanceof UnauthenticatedError && !leavingRef.current && sRef.current.kind === 'signed-in' && sRef.current.phase === 'ready') {
         queueMicrotask(() => go({ kind: 'expired' }))
       }
     }
@@ -332,6 +334,37 @@ export function AuthProvider({
         accountRef.current = ''
         go({ kind: 'guest' })
       }),
+    deleteAccount: async (password) => {
+      if (busyRef.current) return 'server'
+      busyRef.current = true
+      setBusy(true)
+      leavingRef.current = true
+      const off = offlineApi()
+      off?.pause() // no queued edit may replay while (or after) the account goes away
+      try {
+        try {
+          await auth.deleteAccount(password)
+        } catch (e) {
+          leavingRef.current = false
+          off?.resume()
+          const kind = toKind(e)
+          if (kind === 'session_expired') queueMicrotask(() => go({ kind: 'expired' }))
+          return kind
+        }
+        // The account is gone on the server: forget everything of it on this device.
+        await off?.clear().catch(() => undefined)
+        dropApi()
+        accountRef.current = ''
+        await local.reset().catch(() => undefined)
+        go({ kind: 'guest' }) // also clears the query cache and the account hint
+        toast.success('Your account was deleted.')
+        return null
+      } finally {
+        leavingRef.current = false
+        busyRef.current = false
+        setBusy(false)
+      }
+    },
     retrySession: () => {
       setS({ kind: 'loading' })
       setAttempt((n) => n + 1)

@@ -116,3 +116,32 @@ test('email requests map 429 and network failure', async () => {
   const e2 = await createAuthClient({ fetch: stub(new TypeError('x')) }).resendVerification('a@example.com').catch((e: unknown) => e)
   expect((e2 as AuthError).kind).toBe('offline')
 })
+
+test('deleteAccount sends DELETE /api/v1/account with the password as JSON and credentials', async () => {
+  const f = stub(new Response(null, { status: 204 }))
+  await createAuthClient({ fetch: f, baseUrl: 'https://app.example.invalid/' }).deleteAccount('my password 123')
+  const [url, init] = f.mock.calls[0]!
+  expect(url).toBe('https://app.example.invalid/api/v1/account')
+  expect(init?.method).toBe('DELETE')
+  expect(init?.credentials).toBe('include')
+  expect(new Headers(init?.headers).get('content-type')).toBe('application/json')
+  expect(JSON.parse(init!.body as string)).toEqual({ password: 'my password 123' })
+})
+
+test.each([
+  [403, { error: 'invalid_password' }, 'invalid_password'],
+  [429, { error: 'rate_limited' }, 'rate_limited'],
+  [401, { error: 'unauthorized' }, 'session_expired'],
+  [400, { error: 'invalid' }, 'invalid_password'],
+  [500, { error: 'internal_error', message: 'SECRET-DETAIL' }, 'server'],
+])('deleteAccount %i maps to its kind without echoing the body', async (status, body, kind) => {
+  const err = await createAuthClient({ fetch: stub(json(status, body)) }).deleteAccount('pw').catch((e: unknown) => e)
+  expect(err).toBeInstanceOf(AuthError)
+  expect((err as AuthError).kind).toBe(kind)
+  expect(String((err as AuthError).message)).not.toContain('SECRET')
+})
+
+test('deleteAccount without a connection is offline', async () => {
+  const err = await createAuthClient({ fetch: stub(new TypeError('net')) }).deleteAccount('pw').catch((e: unknown) => e)
+  expect((err as AuthError).kind).toBe('offline')
+})

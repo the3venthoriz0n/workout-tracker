@@ -22,6 +22,7 @@ function makeAuth(over: Partial<AuthClient> = {}): AuthClient {
     resendVerification: vi.fn(async () => {}),
     requestPasswordReset: vi.fn(async () => {}),
     resetPassword: vi.fn(async () => {}),
+    deleteAccount: vi.fn(async () => {}),
     session: async () => ({ userId: 'a', email: 'a@example.com' }),
     ...over,
   }
@@ -117,6 +118,7 @@ test('flow: a failed sign-out cleanup after check_failed keeps the retry state i
       resendVerification: vi.fn(),
       requestPasswordReset: vi.fn(),
       resetPassword: vi.fn(),
+      deleteAccount: vi.fn(),
     },
     local: { exportAll: vi.fn(), reset: vi.fn() },
     api: { getProfile: vi.fn(async () => { throw new Error('boom') }), importAll: vi.fn() },

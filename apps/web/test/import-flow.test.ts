@@ -21,6 +21,7 @@ function deps(over: { getProfile?: () => Promise<unknown>; importAll?: () => Pro
       resendVerification: vi.fn(async () => {}),
       requestPasswordReset: vi.fn(async () => {}),
       resetPassword: vi.fn(async () => {}),
+      deleteAccount: vi.fn(async () => {}),
     },
     local: { exportAll: vi.fn(log('export', async () => DATA)), reset: vi.fn(log('reset', async () => {})) },
     api: {

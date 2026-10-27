@@ -15,6 +15,7 @@ function setup(opts: { session?: boolean; signIn?: AuthClient['signIn']; signUp?
     resendVerification: opts.resend ?? vi.fn(async () => {}),
     requestPasswordReset: opts.forgot ?? vi.fn(async () => {}),
     resetPassword: vi.fn(async () => {}),
+    deleteAccount: vi.fn(async () => {}),
     session: async () => (opts.session ? { userId: 'u', email: 'me@example.test' } : null),
   }
   const local = { init: async () => {}, exportAll: vi.fn(async () => ({ version: 1 })), reset: vi.fn(async () => {}) }
