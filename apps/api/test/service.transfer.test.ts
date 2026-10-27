@@ -12,6 +12,7 @@ import type { AnyPgColumn, AnyPgTable } from 'drizzle-orm/pg-core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import * as t from '../src/db/schema.js'
 import { createService } from '../src/service/index.js'
+import { HasPublishedError } from '../src/service/transfer.js'
 import { type TestDb, withTestDb } from './harness.js'
 
 let h: TestDb
@@ -325,5 +326,133 @@ describe('imports written before day colours, angle, AMRAP, supersets and layere
     across.plan_items[1]!.plan_day_id = day2.id
     const other = await makeUser(false)
     await expect(other.s.importAll(across)).rejects.toBeInstanceOf(ImportInvalidError)
+  })
+})
+
+describe('replaceAll (restore from a file)', () => {
+  /** Every row of the user in every domain table, plus the community rows that must not move. */
+  const state = async (userId: string) => {
+    const s = createService(h.db, userId)
+    const { exported_at: _t, ...rest } = await s.exportAll()
+    return JSON.stringify(rest)
+  }
+  const listingCounts = async (id: string) => {
+    const [row] = await h.db.select({ up: t.sharedPlan.upvoteCount, down: t.sharedPlan.downloadCount }).from(t.sharedPlan).where(eq(t.sharedPlan.id, id))
+    return row
+  }
+  /** A user with a published listing of their plan. */
+  async function publisher() {
+    const u = await populated()
+    await u.s.updateProfile({ display_name: 'Pat Lifts' })
+    const { shared_plan_id } = await u.s.publishPlan(u.plan.id, { title: 'Pat plan' })
+    return { ...u, listing: shared_plan_id }
+  }
+
+  it('replaces every domain row, keeps the profile row, ignores account and community fields', async () => {
+    const src = await populated()
+    const data = await src.s.exportAll()
+    const dst = await populated()
+    const before = await counts(dst.id)
+    expect(before.plan).toBeGreaterThan(0)
+    const withExtras = {
+      ...data,
+      account: { email: 'someone@example.test', created_at: data.exported_at },
+      community: { listings: [], votes: [{ shared_plan_id: newId(), created_at: data.exported_at }], downloads: [] },
+    }
+    await dst.s.replaceAll(withExtras)
+    const after = await dst.s.exportAll()
+    expect(after.plans.map((p) => p.id).sort()).toEqual(data.plans.map((p) => p.id).sort())
+    expect(after.set_logs).toHaveLength(data.set_logs.length)
+    expect(after.profile.user_id).toBe(dst.id)
+    expect(await counts(dst.id)).toMatchObject({ profile: 1, plan: data.plans.length, setLog: data.set_logs.length })
+    expect(after.community?.votes).toEqual([])
+    const [u] = await h.db.select({ email: t.user.email }).from(t.user).where(eq(t.user.id, dst.id))
+    expect(u?.email).toBe(`${dst.id}@example.test`)
+  })
+
+  it("leaves other users' data byte-identical", async () => {
+    const other = await publisher()
+    const bystander = await populated()
+    const beforeOther = await state(other.id)
+    const beforeBystander = await state(bystander.id)
+    const dst = await populated()
+    // The file is full of the other user's ids: they land under the caller only (composite keys).
+    const data = await other.s.exportAll()
+    await dst.s.replaceAll({ ...data, community: undefined })
+    expect(await state(other.id)).toBe(beforeOther)
+    expect(await state(bystander.id)).toBe(beforeBystander)
+  })
+
+  it('refuses with HasPublishedError while a listing is published, and changes nothing', async () => {
+    const p = await publisher()
+    const data = await (await populated()).s.exportAll()
+    const before = await state(p.id)
+    await expect(p.s.replaceAll(data)).rejects.toBeInstanceOf(HasPublishedError)
+    expect(await state(p.id)).toBe(before)
+    // After unpublishing it works; the (unpublished) listing row stays with its counters.
+    await p.s.unpublishPlan(p.plan.id)
+    const listingBefore = await listingCounts(p.listing)
+    await p.s.replaceAll(data)
+    expect(await listingCounts(p.listing)).toEqual(listingBefore)
+    expect((await p.s.listMyShared()).map((l) => l.id)).toEqual([p.listing])
+  })
+
+  it('leaves votes, downloads and listing counters untouched', async () => {
+    const p = await publisher()
+    const fan = await populated()
+    await fan.s.setVote(p.listing, true)
+    await fan.s.adoptSharedPlan({ shared_plan_id: p.listing })
+    const countersBefore = await listingCounts(p.listing)
+    expect(countersBefore).toEqual({ up: 1, down: 1 })
+    const votesBefore = await h.db.select().from(t.planVote).where(eq(t.planVote.userId, fan.id))
+    const downloadsBefore = await h.db.select().from(t.planDownload).where(eq(t.planDownload.userId, fan.id))
+    await fan.s.replaceAll(await (await populated()).s.exportAll())
+    expect(await listingCounts(p.listing)).toEqual(countersBefore)
+    expect(await h.db.select().from(t.planVote).where(eq(t.planVote.userId, fan.id))).toEqual(votesBefore)
+    expect(await h.db.select().from(t.planDownload).where(eq(t.planDownload.userId, fan.id))).toEqual(downloadsBefore)
+    expect(await fan.s.hasVoted(p.listing)).toBe(true)
+  })
+
+  it('is all-or-nothing when the database rejects the last row (after every delete ran)', async () => {
+    const src = await populated()
+    const bad = JSON.parse(JSON.stringify(await src.s.exportAll())) as ExportData
+    // Passes the shared schema and checks, fails only inside Postgres on the last table written.
+    bad.set_logs[bad.set_logs.length - 1]!.note = 'a\u0000b'
+    const dst = await populated()
+    const before = await state(dst.id)
+    const beforeCounts = await counts(dst.id)
+    await expect(dst.s.replaceAll(bad)).rejects.toBeInstanceOf(ImportInvalidError)
+    expect(await state(dst.id)).toBe(before)
+    expect(await counts(dst.id)).toEqual(beforeCounts)
+  })
+
+  it('rolls back on a failure that is not a bad file too (forced mid-transaction error)', async () => {
+    const src = await populated()
+    const data = await src.s.exportAll()
+    const dst = await populated()
+    const before = await state(dst.id)
+    // A trigger that fails the first set_log insert of this user only: the deletes have run by then.
+    await h.sql(`create function wt_fail_restore() returns trigger language plpgsql as $$
+      begin if new.user_id = '${dst.id}' then raise exception 'forced failure'; end if; return new; end $$`)
+    await h.sql('create trigger wt_fail_restore before insert on set_log for each row execute function wt_fail_restore()')
+    try {
+      await expect(dst.s.replaceAll(data)).rejects.toThrow()
+    } finally {
+      await h.sql('drop trigger wt_fail_restore on set_log')
+      await h.sql('drop function wt_fail_restore()')
+    }
+    expect(await state(dst.id)).toBe(before)
+  })
+
+  it('rejects an invalid file before touching anything', async () => {
+    const src = await populated()
+    const good = await src.s.exportAll()
+    const dst = await populated()
+    const before = await state(dst.id)
+    const bad = JSON.parse(JSON.stringify(good)) as ExportData
+    bad.plan_items[0]!.exercise_id = newId()
+    await expect(dst.s.replaceAll(bad)).rejects.toBeInstanceOf(ImportInvalidError)
+    await expect(dst.s.replaceAll({ nope: true } as unknown as ExportData)).rejects.toBeInstanceOf(ImportInvalidError)
+    expect(await state(dst.id)).toBe(before)
   })
 })

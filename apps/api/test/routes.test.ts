@@ -22,7 +22,7 @@ describe('happy path for every route in the table', () => {
   it.each(ROUTES.map((r) => [label(r), r] as const))('%s', async (_name, spec) => {
     // Import is first-time only, so it runs as a brand-new account that has never been initialised.
     // Deleting the account runs as a throwaway account too, so `u` survives for the other cases.
-    const client = spec.freshAccount || spec.deletesAccount ? await signUpClient(h, `fresh-${newId()}@example.com`) : u
+    const client = spec.freshAccount || spec.deletesAccount || spec.replacesData ? await signUpClient(h, `fresh-${newId()}@example.com`) : u
     const f = await buildFixture(u, { active: spec.noActiveSession ? false : true })
     const res = await client.call(spec.method, fill(spec, f), spec.body?.(f))
     expect(res.status, res.text).toBe(spec.status)
@@ -33,6 +33,10 @@ describe('happy path for every route in the table', () => {
       expect(spec.response, 'every JSON route declares a response schema').toBeDefined()
       const parsed = spec.response!.safeParse(res.json)
       expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true)
+    }
+    if (spec.replacesData) {
+      const mine = (await client.call('GET', '/api/v1/export')).json as ExportData
+      expect(mine.plans.map((p) => p.id).sort()).toEqual(f.export.plans.map((p) => p.id).sort())
     }
     if (spec.freshAccount) {
       // The upload landed under the new account, not under the exporter's.

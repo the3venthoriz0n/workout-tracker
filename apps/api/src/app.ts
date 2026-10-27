@@ -51,11 +51,12 @@ export function createApp(deps: AppDeps): Hono {
     }),
   )
   app.use('/api/*', csrfGuard(env))
-  // 1 MB everywhere under /api, except the one-time guest upload, which gets its own 10 MB.
+  // 1 MB everywhere under /api, except the two uploads of an export file (guest upload, restore): 10 MB.
+  const IMPORT_PATHS = new Set([`${API_PREFIX}/import`, `${API_PREFIX}/import/replace`])
   const smallLimit = bodyLimit({ maxSize: 1024 * 1024 })
   const importLimit = bodyLimit({ maxSize: 10 * 1024 * 1024 })
   app.use('/api/*', (c, next) =>
-    c.req.method === 'POST' && c.req.path === `${API_PREFIX}/import` ? importLimit(c, next) : smallLimit(c, next),
+    c.req.method === 'POST' && IMPORT_PATHS.has(c.req.path) ? importLimit(c, next) : smallLimit(c, next),
   )
 
   app.get('/healthz', async (c) => {

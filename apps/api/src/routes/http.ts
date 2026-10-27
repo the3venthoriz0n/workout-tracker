@@ -14,6 +14,7 @@ import {
 import type { z } from 'zod'
 import type { AppEnv } from '../middleware.js'
 import { TryAgainError } from '../service/account.js'
+import { HasPublishedError } from '../service/transfer.js'
 import type { Service } from '../service/index.js'
 
 export type Ctx = Context<AppEnv>
@@ -71,6 +72,7 @@ export function mapDomainError(err: unknown, c: Context): Response | undefined {
   if (err instanceof NotFoundError || err instanceof ProfileNotFoundError) return c.json({ error: 'not_found' }, 404)
   if (err instanceof SessionInProgressError) return c.json({ error: 'session_in_progress' }, 409)
   if (err instanceof AlreadyHasDataError) return c.json({ error: 'already_has_data' }, 409)
+  if (err instanceof HasPublishedError) return c.json({ error: 'has_published' }, 409)
   if (err instanceof ConflictError) return c.json({ error: 'conflict' }, 409)
   if (err instanceof OwnListingError) return c.json({ error: 'own_listing' }, 409)
   if (err instanceof PublishLimitError) return c.json({ error: 'publish_limit' }, 429)

@@ -248,6 +248,38 @@ describe('account deletion (foreign: none) only ever removes the caller', () => 
   })
 })
 
+describe('restore (foreign: none) only ever changes the caller', () => {
+  it('E restoring a file full of A\'s ids leaves A and B byte-identical (counters included)', async () => {
+    const e = await signUpClient(h, 'erin-restore@example.com')
+    expect((await e.call('POST', '/api/v1/me/init')).status).toBe(200)
+    // E voted on and adopted a published listing; neither the rows nor the counters may move.
+    expect((await e.call('PUT', `/api/v1/shared-plans/${fa.shared}/vote`)).status).toBe(200)
+    expect((await e.call('POST', `/api/v1/shared-plans/${fa.shared}/adopt`, {})).status).toBe(201)
+    const counters = async () => {
+      const res = await h.request(`/api/public/plans/${fa.shared}`)
+      const { listing } = (await res.json()) as { listing: { upvotes: number; downloads: number } }
+      return [listing.upvotes, listing.downloads]
+    }
+    const countersBefore = await counters()
+    const beforeA = await snapshot(a)
+    const beforeB = await snapshot(b)
+    const res = await e.call('POST', '/api/v1/import/replace', { password: fa.password, data: fa.export })
+    expect(res.status, res.text).toBe(204)
+    expect(await snapshot(a)).toBe(beforeA)
+    expect(await snapshot(b)).toBe(beforeB)
+    expect(await counters()).toEqual(countersBefore)
+    const mine = (await e.call('GET', '/api/v1/export')).json as ExportData
+    expect(mine.profile.user_id).not.toBe(fa.export.profile.user_id)
+    for (const row of mine.plans) expect(row.user_id).toBe(mine.profile.user_id)
+    expect(mine.community?.votes.map((v) => v.shared_plan_id)).toContain(fa.shared)
+    expect(mine.community?.downloads.map((d) => d.shared_plan_id)).toContain(fa.shared)
+    // A with a published listing cannot restore, and A's data stays as it was.
+    const refused = await a.call('POST', '/api/v1/import/replace', { password: fa.password, data: fb.export })
+    expect(refused.status).toBe(409)
+    expect(await snapshot(a)).toBe(beforeA)
+  })
+})
+
 describe('authentication on every route', () => {
   it('no cookie, a tampered cookie, a garbage cookie and a signed-out cookie are all 401', async () => {
     const d = await signUpClient(h, 'dave@example.com')
