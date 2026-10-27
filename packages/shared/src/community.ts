@@ -128,10 +128,10 @@ export type SharedListing = z.infer<typeof sharedListingSchema>
 /** A listing in the public area: exactly these fields, nothing else. */
 export const publicListingSchema = z.object({
   id: idSchema,
-  title: z.string().min(1).max(COMMUNITY.titleMax),
-  description: z.string().max(COMMUNITY.descriptionMax),
+  title: publicText(COMMUNITY.titleMin, COMMUNITY.titleMax),
+  description: publicText(0, COMMUNITY.descriptionMax, true),
   level: levelSchema.nullable(),
-  author: z.string().min(1).max(30),
+  author: publicText(1, 30),
   day_count: z.number().int().min(1).max(COMMUNITY.maxDays),
   /** Latest version. */
   version,

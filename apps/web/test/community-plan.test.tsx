@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { ApiError, NotFoundError } from '@workout/shared'
 import { toast } from 'sonner'
 import { afterEach, expect, test, vi } from 'vitest'
+import { GONE_TEXT } from '@/lib/community'
 import { LISTING_ID, detail, guestRepo, json, renderApp, stubFetch } from './community-helpers'
 
 afterEach(() => {
@@ -14,14 +15,29 @@ const path = `/plans/community/${LISTING_ID}`
 const servePlan = (d = detail()) =>
   stubFetch((u) => (u.pathname === `/api/public/plans/${LISTING_ID}` ? json(d) : undefined))
 
+test('a listing with a link in its text is rejected, not rendered', async () => {
+  servePlan(detail({ description: 'see https://x.invalid' }))
+  renderApp(await guestRepo(), path)
+  expect(await screen.findByText("Couldn't load this plan.")).toBeTruthy()
+  expect(document.querySelector('a[href*="x.invalid"]')).toBeNull()
+})
+
+test('a malformed plan id shows the not-shared state without a request', async () => {
+  const fetchSpy = vi.fn()
+  vi.stubGlobal('fetch', fetchSpy)
+  renderApp(await guestRepo(), '/plans/community/..')
+  expect(await screen.findByText(GONE_TEXT)).toBeTruthy()
+  expect(fetchSpy).not.toHaveBeenCalled()
+})
+
 test('detail shows description, author, version, counts and a text-only preview', async () => {
-  servePlan(detail({ description: 'Line one\n<a href="https://x.invalid">link</a>' }))
+  servePlan(detail({ description: 'Line one\n<b>bold</b> <img src=x onerror=alert(1)>' }))
   renderApp(await guestRepo(), path)
   expect(await screen.findByRole('heading', { level: 1, name: 'Strong Start' })).toBeTruthy()
   expect(screen.getByText(/by Sam Lifts/)).toBeTruthy()
   expect(screen.getByText(/v2/)).toBeTruthy()
-  expect(screen.getByText(/<a href=/).tagName).not.toBe('A')
-  expect(document.querySelector('a[href^="https://x.invalid"]')).toBeNull()
+  expect(screen.getByText(/<b>bold<\/b>/)).toBeTruthy()
+  expect(document.querySelector('b, img')).toBeNull()
   const dayA = screen.getByRole('region', { name: 'Day A' })
   expect(within(dayA).getByText('Back Squat')).toBeTruthy()
   expect(within(dayA).getByText(/5 × 5\+ · 135 lb/)).toBeTruthy()

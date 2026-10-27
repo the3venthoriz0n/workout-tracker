@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { PublicListQuery } from '@workout/shared'
+import { idSchema, type PublicListQuery } from '@workout/shared'
 import { publicApi } from '@/lib/community'
 import { useRepo } from './provider'
 import type { Repo } from './types'
@@ -151,6 +151,7 @@ export const useCommunityList = (q: Omit<PublicListQuery, 'cursor'>) =>
     queryFn: ({ pageParam }) => publicApi.list({ ...q, cursor: pageParam ?? undefined }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor,
+    maxPages: 10,
     retry: false,
     staleTime: 30_000,
   })
@@ -159,7 +160,7 @@ export const useCommunityPlan = (id: string, opts: { enabled?: boolean; quiet?: 
   useQuery({
     queryKey: keys.communityPlan(id),
     queryFn: () => publicApi.plan(id),
-    enabled: opts.enabled ?? true,
+    enabled: (opts.enabled ?? true) && idSchema.safeParse(id).success,
     retry: false,
     staleTime: opts.quiet ? 10 * 60_000 : 30_000,
     refetchOnWindowFocus: !opts.quiet,

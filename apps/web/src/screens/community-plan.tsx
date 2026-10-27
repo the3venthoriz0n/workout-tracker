@@ -1,4 +1,4 @@
-import { NotFoundError, OfflineError, type PublicPlanDetail, type SharedSnapshot } from '@workout/shared'
+import { NotFoundError, OfflineError, idSchema, type PublicPlanDetail, type SharedSnapshot } from '@workout/shared'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowBigUp, ChevronLeft } from 'lucide-react'
 import { useRef, useState } from 'react'
@@ -164,7 +164,8 @@ export function CommunityPlanScreen() {
     </StickyBar>
   )
 
-  if (plan.isPending) {
+  const badId = !idSchema.safeParse(id).success
+  if (plan.isPending && !badId) {
     return (
       <div className="flex flex-col gap-4 px-4 pb-6">
         {header}
@@ -172,8 +173,8 @@ export function CommunityPlanScreen() {
       </div>
     )
   }
-  if (plan.isError) {
-    const gone = plan.error instanceof NotFoundError
+  if (badId || plan.isError || !plan.data) {
+    const gone = badId || plan.error instanceof NotFoundError
     return (
       <div className="flex flex-col gap-4 px-4 pb-6">
         {header}
