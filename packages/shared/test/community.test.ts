@@ -432,7 +432,7 @@ describe('public client', () => {
     const url = new URL(s.calls[0]!.url)
     expect(url.origin + url.pathname).toBe('https://api.example.invalid/api/public/plans')
     expect(Object.fromEntries(url.searchParams)).toEqual({ q: 'a%b', days: '3', level: 'beginner', gear: 'none', sort: 'new', cursor: 'c1' })
-    expect(s.calls[0]!.init?.credentials).toBe('omit')
+    expect(s.calls[0]!.init?.credentials).toBe('same-origin')
   })
 
   it('fetches a plan (latest or one version) and maps errors like ApiRepo', async () => {
