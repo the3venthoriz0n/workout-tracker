@@ -190,3 +190,20 @@ describe('ApiRepo: own listing', () => {
     expect(err).toMatchObject({ status: 409, code: 'own_listing' })
   })
 })
+
+describe('ApiRepo.replaceAll (restore)', () => {
+  const data = { version: 1 } as unknown as ExportData
+  it('POSTs { password, data } to /import/replace', async () => {
+    const s = stub(204)
+    await s.repo.replaceAll('pw 1234567890', data)
+    expect(s.calls[0]!.url).toBe('/api/v1/import/replace')
+    expect(s.calls[0]!.init.method).toBe('POST')
+    expect(JSON.parse(s.calls[0]!.init.body as string)).toEqual({ password: 'pw 1234567890', data })
+  })
+  it('maps 400 to ImportInvalidError and keeps the other codes', async () => {
+    await expect(stub(400, { error: 'invalid' }).repo.replaceAll('p', data)).rejects.toBeInstanceOf(ImportInvalidError)
+    await expect(stub(403, { error: 'invalid_password' }).repo.replaceAll('p', data)).rejects.toMatchObject({ status: 403, code: 'invalid_password' })
+    await expect(stub(409, { error: 'has_published' }).repo.replaceAll('p', data)).rejects.toMatchObject({ status: 409, code: 'has_published' })
+    await expect(stub(429, { error: 'rate_limited' }).repo.replaceAll('p', data)).rejects.toMatchObject({ status: 429, code: 'rate_limited' })
+  })
+})
