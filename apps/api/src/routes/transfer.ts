@@ -16,7 +16,7 @@ export function registerTransfer(v1: V1, { getService, passwordGate }: RouteDeps
     const parsed = parseImport(data)
     const denied = await passwordGate(c, password)
     if (denied) return denied
-    await service(c, getService).replaceAll(parsed)
+    await service(c, getService).replaceAll(parsed, { validated: true })
     return c.body(null, 204)
   })
 }

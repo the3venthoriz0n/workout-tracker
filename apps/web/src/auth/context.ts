@@ -38,9 +38,10 @@ export type AuthState = {
    * Restore from a file: REPLACES the library and history. Signed in, on the server (the password
    * is checked there) with the outbox paused, then the account's outbox and mirror are cleared;
    * as a guest, on this device. Every query is refreshed afterwards. Resolves to the error kind
-   * (nothing changed) or null on success; never touches `error`.
+   * (nothing changed) or null on success; never touches `error`. `signedIn` is what the form showed:
+   * when it no longer matches the live state nothing is written ('server').
    */
-  restoreData(data: ExportData, password?: string): Promise<RestoreErrorKind | null>
+  restoreData(data: ExportData, opts: { signedIn: boolean; password?: string }): Promise<RestoreErrorKind | null>
   /** Plain pass-throughs: they do not touch the session state. */
   resendVerification(email: string): Promise<void>
   requestPasswordReset(email: string): Promise<void>

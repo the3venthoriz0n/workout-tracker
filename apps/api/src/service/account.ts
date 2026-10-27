@@ -29,7 +29,7 @@ export class TryAgainError extends Error {
   }
 }
 
-const TRANSIENT = new Set(['40P01', '40001']) // deadlock_detected, serialization_failure
+export const TRANSIENT = new Set(['40P01', '40001']) // deadlock_detected, serialization_failure
 
 export async function deleteAccount(db: Db, userId: string): Promise<void> {
   for (let attempt = 1; ; attempt++) {

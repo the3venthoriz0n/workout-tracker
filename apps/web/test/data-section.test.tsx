@@ -10,7 +10,8 @@ import { toast } from 'sonner'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { routes } from '../src/app/router'
 import type { AuthClient } from '../src/auth/client'
-import { AuthProvider } from '../src/auth/auth-provider'
+import { AuthProvider, useAuth } from '../src/auth/auth-provider'
+import type { AuthState } from '../src/auth/context'
 import { AppDb } from '../src/repo/db'
 import { LocalRepo } from '../src/repo/local-repo'
 
@@ -45,6 +46,7 @@ function makeApi(file: ExportData) {
     flush: vi.fn(async () => {}),
     resume: vi.fn(),
     pause: vi.fn(),
+    idle: vi.fn(async () => {}),
     clear: vi.fn(async () => {}),
     dispose: vi.fn(),
     hasOfflineData: vi.fn(async () => false),
@@ -201,7 +203,8 @@ describe('restore as a guest (this device)', () => {
     Object.defineProperty(big, 'size', { value: 10 * 1024 * 1024 + 1 })
     const text = vi.spyOn(big, 'text')
     await user.upload(screen.getByLabelText('Restore file'), big)
-    expect((await screen.findByRole('alert')).textContent).toMatch(/over 10 MB/i)
+    // The same wording as the server's 413.
+    expect((await screen.findByRole('alert')).textContent).toMatch(/too big.*10 MB.*nothing was changed/i)
     expect(text).not.toHaveBeenCalled()
   })
 
@@ -244,7 +247,8 @@ describe('restore while signed in (this account)', () => {
     expect(api.replaceAll.mock.calls[0]![0]).toBe('my password 123')
     expect(api.replaceAll.mock.calls[0]![1].plans.map((p) => p.name)).toEqual(['Restored plan'])
     expect(api.importAll).not.toHaveBeenCalled()
-    expect(api.pause.mock.invocationCallOrder[0]!).toBeLessThan(api.replaceAll.mock.invocationCallOrder[0]!)
+    expect(api.pause.mock.invocationCallOrder[0]!).toBeLessThan(api.idle.mock.invocationCallOrder[0]!)
+    expect(api.idle.mock.invocationCallOrder[0]!).toBeLessThan(api.replaceAll.mock.invocationCallOrder[0]!)
     await waitFor(() => expect(api.clear).toHaveBeenCalled())
     await waitFor(() => expect(invalidate).toHaveBeenCalled())
     expect(ok).toHaveBeenCalled()
@@ -269,5 +273,75 @@ describe('restore while signed in (this account)', () => {
     expect((screen.getByLabelText('Type REPLACE to confirm') as HTMLInputElement).value).toBe('REPLACE')
     expect(api.resume).toHaveBeenCalled()
     expect(api.clear).not.toHaveBeenCalled()
+  })
+})
+
+describe('restore guards', () => {
+  test('a replay already in flight finishes before the restore request is sent', async () => {
+    const user = userEvent.setup()
+    const file = await exportFile()
+    const { api } = await renderSettings(true, file)
+    await screen.findByRole('heading', { name: 'Delete account' })
+    let release!: () => void
+    api.idle.mockImplementationOnce(() => new Promise<void>((r) => (release = r)))
+    await user.upload(screen.getByLabelText('Restore file'), fileOf(JSON.stringify(file)))
+    await user.type(await screen.findByLabelText('Type REPLACE to confirm'), 'REPLACE')
+    await user.type(screen.getByLabelText('Password'), 'my password 123')
+    await user.click(screen.getByRole('button', { name: 'Replace my data' }))
+    await waitFor(() => expect(api.idle).toHaveBeenCalled())
+    expect(api.pause).toHaveBeenCalled()
+    await new Promise((r) => setTimeout(r, 20))
+    expect(api.replaceAll).not.toHaveBeenCalled()
+    release()
+    await waitFor(() => expect(api.replaceAll).toHaveBeenCalledTimes(1))
+  })
+
+  test('a second submit while the first runs is ignored: one request, no error', async () => {
+    const user = userEvent.setup()
+    const file = await exportFile()
+    const { api } = await renderSettings(true, file)
+    await screen.findByRole('heading', { name: 'Delete account' })
+    let release!: () => void
+    api.replaceAll.mockImplementationOnce(() => new Promise<void>((r) => (release = r)))
+    await user.upload(screen.getByLabelText('Restore file'), fileOf(JSON.stringify(file)))
+    await user.type(await screen.findByLabelText('Type REPLACE to confirm'), 'REPLACE')
+    await user.type(screen.getByLabelText('Password'), 'my password 123')
+    const form = screen.getByRole('alertdialog', { name: 'Confirm restore' }) as HTMLFormElement
+    form.requestSubmit()
+    form.requestSubmit()
+    await waitFor(() => expect(api.replaceAll).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('alert')).toBeNull()
+    release()
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Restore summary' })).toBeNull())
+    expect(api.replaceAll).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  test.each([
+    ['guest state, form says signed in', false, true],
+    ['signed-in state, form says guest', true, false],
+  ])('%s: refused with "server" and nothing is written', async (_what, live, claimed) => {
+    const file = await exportFile()
+    let auth!: AuthState
+    function Grab() {
+      auth = useAuth()
+      return null
+    }
+    const local = new LocalRepo(new AppDb(`guard-${crypto.randomUUID()}`))
+    await local.init()
+    const importAll = vi.spyOn(local, 'importAll')
+    const api = makeApi(file)
+    if (live) localStorage.setItem('wt-account-hint', JSON.stringify({ id: 'acc-1', email: 'me@example.test' }))
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <AuthProvider auth={makeAuth(live)} local={local} createApi={() => api as never}>
+          <Grab />
+        </AuthProvider>
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(auth.status).toBe(live ? 'signed-in' : 'guest'))
+    expect(await auth.restoreData(file, { signedIn: claimed, password: 'my password 123' })).toBe('server')
+    expect(importAll).not.toHaveBeenCalled()
+    expect(api.replaceAll).not.toHaveBeenCalled()
   })
 })

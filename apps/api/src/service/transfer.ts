@@ -1,5 +1,5 @@
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
-import { AlreadyHasDataError, ImportInvalidError, ProfileNotFoundError, parseImport } from '@workout/shared'
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import { AlreadyHasDataError, ImportInvalidError, NotFoundError, ProfileNotFoundError, parseImport } from '@workout/shared'
 import type { ExportData, SharedListing } from '@workout/shared'
 
 type ListingLevel = SharedListing['level']
@@ -38,6 +38,7 @@ import {
   toSession,
   toSetLog,
 } from './mappers.js'
+import { TRANSIENT, TryAgainError } from './account.js'
 import { pgCode } from './pg-error.js'
 
 export async function exportAll(db: Db, userId: string): Promise<ExportData> {
@@ -180,40 +181,67 @@ export async function importAll(db: Db, userId: string, raw: ExportData): Promis
 
 /**
  * Restore (spec §3, §9): REPLACES the caller's library and history with the file, in one
- * transaction (a failure anywhere leaves the old data). Under the same locks as publish (the profile
- * row) and adopt (the per-user advisory lock). Refused while a listing is published. The profile row
+ * transaction (a failure anywhere leaves the old data). Locks the user row (key share, as account
+ * deletion's order expects), then the same locks as adopt (the per-user advisory lock) and publish
+ * (the profile row). Refused while a listing is published. The profile row
  * stays (tier and public name: the account's name wins, the file's only fills a gap); every other
  * domain row is deleted, then the file is inserted as a first-time import does. Listings, votes and
  * downloads are not touched, so community counters cannot move. `account` and `community` in the
  * file are ignored.
  */
-export async function replaceAll(db: Db, userId: string, raw: ExportData): Promise<void> {
-  const d = parseImport(raw)
-  await asImportError(() =>
-    db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`adopt:${userId}`}))`)
-      const [prof] = await tx
-        .select({ displayName: profile.displayName })
-        .from(profile)
-        .where(eq(profile.userId, userId))
-        .for('update')
-      const [live] = await tx
-        .select({ id: sharedPlan.id })
-        .from(sharedPlan)
-        .where(and(eq(sharedPlan.ownerId, userId), eq(sharedPlan.status, 'published')))
-        .limit(1)
-      if (live) throw new HasPublishedError()
+export async function replaceAll(db: Db, userId: string, raw: ExportData, opts: { validated?: boolean } = {}): Promise<void> {
+  // The route already ran parseImport (before the password check); a direct call validates here.
+  const d = opts.validated ? raw : parseImport(raw)
+  // Like account deletion: a deadlock or serialization failure is retried once, then "try again".
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await asImportError(() => replaceOnce(db, userId, d))
+    } catch (err) {
+      if (!TRANSIENT.has(pgCode(err) ?? '')) throw err
+      if (attempt >= 2) throw new TryAgainError()
+    }
+  }
+}
 
-      // Children first; the composite foreign keys would cascade anyway.
-      for (const table of [setLog, workoutSession, itemState, progressionRule, planItem, planDay, plan, exercise, gear]) {
-        await tx.delete(table).where(eq(table.userId, userId))
-      }
-      const values = { ...profileValues(d), displayName: prof?.displayName ?? d.profile.display_name }
-      if (prof) await tx.update(profile).set(values).where(eq(profile.userId, userId))
-      else await tx.insert(profile).values({ userId, ...values })
-      await insertRows(tx, userId, d)
-    }),
-  )
+async function replaceOnce(db: Db, userId: string, d: ExportData): Promise<void> {
+  await db.transaction(async (tx) => {
+    // The user row first, in the same order as account deletion (which locks it for update).
+    const [u] = await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for('key share')
+    if (!u) throw new NotFoundError('Account')
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`adopt:${userId}`}))`)
+    const [prof] = await tx
+      .select({ displayName: profile.displayName })
+      .from(profile)
+      .where(eq(profile.userId, userId))
+      .for('update')
+    const [live] = await tx
+      .select({ id: sharedPlan.id })
+      .from(sharedPlan)
+      .where(and(eq(sharedPlan.ownerId, userId), eq(sharedPlan.status, 'published')))
+      .limit(1)
+    if (live) throw new HasPublishedError()
+    // Plans linked to their (unpublished or hidden) listing keep the link when the file has them, so
+    // a republish adds a version to the same listing and a hidden one stays refused.
+    const links = await tx
+      .select({ id: plan.id, sharedPlanId: plan.sharedPlanId })
+      .from(plan)
+      .where(and(eq(plan.userId, userId), isNotNull(plan.sharedPlanId)))
+
+    // Children first; the composite foreign keys would cascade anyway.
+    for (const table of [setLog, workoutSession, itemState, progressionRule, planItem, planDay, plan, exercise, gear]) {
+      await tx.delete(table).where(eq(table.userId, userId))
+    }
+    const values = { ...profileValues(d), displayName: prof?.displayName ?? d.profile.display_name }
+    if (prof) await tx.update(profile).set(values).where(eq(profile.userId, userId))
+    else await tx.insert(profile).values({ userId, ...values })
+    await insertRows(tx, userId, d)
+
+    const inFile = new Set(d.plans.map((p) => p.id))
+    for (const l of links) {
+      if (!inFile.has(l.id)) continue
+      await tx.update(plan).set({ sharedPlanId: l.sharedPlanId }).where(and(eq(plan.userId, userId), eq(plan.id, l.id)))
+    }
+  })
 }
 
 /** Inserts every row of a validated file under `userId` (ids and timestamps kept). */

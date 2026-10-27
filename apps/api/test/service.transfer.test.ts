@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import {
   AlreadyHasDataError,
   ImportInvalidError,
@@ -9,10 +9,13 @@ import {
 } from '@workout/shared'
 import type { ExportData } from '@workout/shared'
 import type { AnyPgColumn, AnyPgTable } from 'drizzle-orm/pg-core'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as t from '../src/db/schema.js'
 import { createService } from '../src/service/index.js'
-import { HasPublishedError } from '../src/service/transfer.js'
+import { HasPublishedError, replaceAll } from '../src/service/transfer.js'
+import { TryAgainError } from '../src/service/account.js'
+import type { Db } from '../src/db/types.js'
+import { ConflictError } from '@workout/shared'
 import { type TestDb, withTestDb } from './harness.js'
 
 let h: TestDb
@@ -454,5 +457,70 @@ describe('replaceAll (restore from a file)', () => {
     await expect(dst.s.replaceAll(bad)).rejects.toBeInstanceOf(ImportInvalidError)
     await expect(dst.s.replaceAll({ nope: true } as unknown as ExportData)).rejects.toBeInstanceOf(ImportInvalidError)
     expect(await state(dst.id)).toBe(before)
+  })
+})
+
+describe('replaceAll keeps the links of plans to their listings', () => {
+  async function publisher() {
+    const u = await populated()
+    await u.s.updateProfile({ display_name: 'Pat Lifts' })
+    const { shared_plan_id } = await u.s.publishPlan(u.plan.id, { title: 'Pat plan' })
+    return { ...u, listing: shared_plan_id }
+  }
+
+  it('a hidden listing stays hidden: republishing the restored plan is still refused', async () => {
+    const p = await publisher()
+    await h.sql(`update shared_plan set status = 'hidden' where id = '${p.listing}'`)
+    const backup = await p.s.exportAll()
+    await p.s.replaceAll(backup)
+    await expect(p.s.publishPlan(p.plan.id, { title: 'Pat plan again' })).rejects.toBeInstanceOf(ConflictError)
+    const [row] = await h.db.select({ n: sql<number>`count(*)::int` }).from(t.sharedPlan).where(eq(t.sharedPlan.ownerId, p.id))
+    expect(row?.n).toBe(1)
+  })
+
+  it('an unpublished listing gets a new version of the SAME listing after a restore', async () => {
+    const p = await publisher()
+    await p.s.unpublishPlan(p.plan.id)
+    const backup = await p.s.exportAll()
+    await p.s.replaceAll(backup)
+    const again = await p.s.publishPlan(p.plan.id, { title: 'Pat plan again' })
+    expect(again).toEqual({ shared_plan_id: p.listing, version: 2 })
+  })
+
+  it('a plan missing from the file loses its link; its unpublished listing stays unreachable', async () => {
+    const p = await publisher()
+    await p.s.unpublishPlan(p.plan.id)
+    const other = await (await populated()).s.exportAll()
+    await p.s.replaceAll(other)
+    const mine = await p.s.listMyShared()
+    expect(mine.map((l) => [l.id, l.status, l.plan_id])).toEqual([[p.listing, 'unpublished', null]])
+  })
+})
+
+describe('replaceAll on a transient database conflict', () => {
+  const pgError = (code: string) => Object.assign(new Error('failed query'), { cause: Object.assign(new Error(code), { code }) })
+  const minimal = (): ExportData => {
+    const ts = new Date().toISOString()
+    return {
+      version: 1,
+      exported_at: ts,
+      profile: { user_id: 'u1', plan: 'free', units: 'lb', weight_increment: 5, display_name: null, created_at: ts, updated_at: ts, deleted_at: null },
+      gear: [], exercises: [], plans: [], plan_days: [], plan_items: [], progression_rules: [], item_states: [], workout_sessions: [], set_logs: [],
+    }
+  }
+  for (const code of ['40P01', '40001']) {
+    it(`${code}: retries once, then succeeds; twice is TryAgainError`, async () => {
+      const once = vi.fn().mockRejectedValueOnce(pgError(code)).mockResolvedValueOnce(undefined)
+      await replaceAll({ transaction: once } as unknown as Db, 'u1', minimal())
+      expect(once).toHaveBeenCalledTimes(2)
+      const always = vi.fn().mockRejectedValue(pgError(code))
+      await expect(replaceAll({ transaction: always } as unknown as Db, 'u1', minimal())).rejects.toBeInstanceOf(TryAgainError)
+      expect(always).toHaveBeenCalledTimes(2)
+    })
+  }
+  it('other errors are not retried', async () => {
+    const tx = vi.fn().mockRejectedValue(new Error('boom'))
+    await expect(replaceAll({ transaction: tx } as unknown as Db, 'u1', minimal())).rejects.toThrow('boom')
+    expect(tx).toHaveBeenCalledTimes(1)
   })
 })

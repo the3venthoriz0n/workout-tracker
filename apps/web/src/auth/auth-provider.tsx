@@ -374,17 +374,20 @@ export function AuthProvider({
         setBusy(false)
       }
     },
-    restoreData: async (data, password) => {
+    restoreData: async (data, { signedIn, password }) => {
       if (busyRef.current) return 'server'
-      busyRef.current = true
-      setBusy(true)
       const cur = sRef.current
       const onAccount = cur.kind === 'signed-in' && cur.phase === 'ready'
+      // The form was shown for another state (signed out or in meanwhile): write nothing anywhere.
+      if (onAccount !== signedIn) return 'server'
+      busyRef.current = true
+      setBusy(true)
       const off = onAccount ? offlineApi() : null
       try {
         if (onAccount) {
           off?.pause() // no queued set edit may replay into (or after) the replaced data
           try {
+            await off?.idle() // ...and one already in flight lands before the restore
             await (getApi() as ApiRepo).replaceAll(password ?? '', data)
           } catch (e) {
             off?.resume()

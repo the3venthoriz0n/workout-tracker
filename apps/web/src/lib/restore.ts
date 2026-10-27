@@ -18,7 +18,7 @@ const UNCHANGED = 'Nothing was changed.'
 
 export const RESTORE_ERROR_TEXT: Record<RestoreErrorKind, string> = {
   invalid_file: `This file isn't a valid export from this app, or it's damaged. ${UNCHANGED}`,
-  too_big: `This file is over 10 MB, so it can't be an export from this app. ${UNCHANGED}`,
+  too_big: `This file is too big (the limit is 10 MB). ${UNCHANGED}`,
   invalid_password: `${AUTH_ERROR_TEXT.invalid_password} ${UNCHANGED}`,
   has_published: `You have shared plans in Community. Unpublish them first (Plans, then the plan's share button), then try again. ${UNCHANGED}`,
   rate_limited: `${AUTH_ERROR_TEXT.rate_limited} ${UNCHANGED}`,

@@ -22,6 +22,7 @@ export function DataSection({ signedIn }: { signedIn: boolean }) {
   const repo = useRepo()
   const id = useId()
   const fileInput = useRef<HTMLInputElement>(null)
+  const submitting = useRef(false)
   const [file, setFile] = useState<{ name: string; data: ExportData } | null>(null)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -59,11 +60,17 @@ export function DataSection({ signedIn }: { signedIn: boolean }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!file || !ready) return
+    // A second submit while one runs (or while another account action runs) is ignored, not an error.
+    if (!file || !ready || submitting.current) return
+    submitting.current = true
     setError(null)
-    const kind = await a.restoreData(file.data, signedIn ? password : undefined)
-    if (kind) setError(kind)
-    else reset()
+    try {
+      const kind = await a.restoreData(file.data, { signedIn, password: signedIn ? password : undefined })
+      if (kind) setError(kind)
+      else reset()
+    } finally {
+      submitting.current = false
+    }
   }
 
   const s = file ? summarize(file.data) : null

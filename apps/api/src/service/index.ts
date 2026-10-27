@@ -37,7 +37,7 @@ import { adoptSharedPlan, hasVoted, listMyShared, publishPlan, setVote, unpublis
 export type Service = Repo & {
   importAll(data: ExportData): Promise<void>
   /** Restore: replaces the library and history with the file (the route checks the password first). */
-  replaceAll(data: ExportData): Promise<void>
+  replaceAll(data: ExportData, opts?: { validated?: boolean }): Promise<void>
   addPlanItem(planDayId: string, exerciseId: string, id?: string): Promise<PlanItem>
   /** True when `id` is a live row of this kind owned by the user (used for 404 on deletes). */
   owns(kind: OwnedKind, id: string): Promise<boolean>
@@ -88,7 +88,7 @@ export function createService(db: Db, userId: string): Service {
     getSession: (id) => getSession(db, userId, id),
     exportAll: () => exportAll(db, userId),
     importAll: (data) => importAll(db, userId, data),
-    replaceAll: (data) => replaceAll(db, userId, data),
+    replaceAll: (data, opts) => replaceAll(db, userId, data, opts),
     owns: (kind, id) => owns(db, userId, kind, id),
 
     // community plans
