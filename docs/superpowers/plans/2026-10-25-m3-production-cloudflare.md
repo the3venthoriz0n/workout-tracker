@@ -1,6 +1,6 @@
 # M3 Production Behind Cloudflare Implementation Plan
 
-> **Status: On hold (2026-10-26). Not started and no date; a self-hosted staging stack at home comes first. Nothing here has been applied to any account.**
+> **Status: On hold (2026-10-26). Mostly not started and no date (the `AUTH_RATE_LIMIT` switch and `CLIENT_IP_HEADER` setting from Task 1 already exist in the API); a self-hosted staging stack at home comes first. Nothing here has been applied to any account.**
 
 > **For agentic workers:** Use superpowers:subagent-driven-development (lean variant: one implementer per task, tests or validation commands first, controller reads the diff; independent review only for Tasks 2, 3 and the final pass) to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Nothing in this plan is applied to a real account until the owner says so**: agents write code, tests and docs only; `terraform apply`, DNS changes, tags and pushes are manual steps in the runbook.
 

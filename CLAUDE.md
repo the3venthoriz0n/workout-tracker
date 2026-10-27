@@ -74,4 +74,4 @@ Done: the scaffold (Docker, compose, CI, infra), M1 (local guest-mode MVP), M2 (
 
 Goals, in order: staging deployed at home behind an existing tunnel (generic self-hosted stack), then M3 production on DigitalOcean (on hold, no date). Later ideas are listed in the spec's milestones table.
 
-Production is still on hold: don't run `infra-*` or `github-setup`, and don't push `v*` tags. Work through [docs/release-checklist.md](docs/release-checklist.md) before the first release. Verify features with `just dev` / `just preview`.
+Production is still on hold: don't run `infra-*` or `github-setup`, and a `v*` tag builds and publishes a versioned image, but its deploy job targets the (not yet existing) production server and fails until M3 is done; tag only when the owner asks. Work through [docs/release-checklist.md](docs/release-checklist.md) before the first release. Verify features with `just dev` / `just preview`.
