@@ -113,21 +113,17 @@ async function openForm(user: ReturnType<typeof userEvent.setup>) {
   }
 }
 
-test('explains what is removed and what stays; export comes first; 44px targets', async () => {
+test('explains what is removed and what stays; export lives in "Your data", not here; 44px targets', async () => {
   const user = userEvent.setup()
-  const { api } = await setup()
+  await setup()
   expect(screen.getByRole('heading', { name: 'Delete account' })).toBeTruthy()
   expect(screen.getByText(/workout history/i)).toBeTruthy()
   expect(screen.getByText(/Deleted user/)).toBeTruthy()
   expect(screen.getByText(/can.t be undone/i)).toBeTruthy()
-  const exportBtn = screen.getByRole('button', { name: 'Export my data' })
-  const URLs = URL as unknown as { createObjectURL?: unknown; revokeObjectURL?: unknown }
-  URLs.createObjectURL = vi.fn(() => 'blob:x')
-  URLs.revokeObjectURL = vi.fn()
-  await user.click(exportBtn)
-  await waitFor(() => expect(api.exportAll).toHaveBeenCalled())
+  // The one export button of the page sits in the "Your data" card above (data-section.test.tsx).
+  expect(screen.queryByRole('button', { name: /export/i })).toBeNull()
   const open = screen.getByRole('button', { name: 'Delete account' })
-  for (const b of [exportBtn, open]) expect(b.className).toContain('min-h-11')
+  expect(open.className).toContain('min-h-11')
   const { submit } = await openForm(user)
   expect(submit.className).toContain('min-h-11')
   expect(screen.getByRole('button', { name: 'Cancel' }).className).toContain('min-h-11')

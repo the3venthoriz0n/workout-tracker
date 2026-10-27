@@ -5,12 +5,11 @@ import { Screen } from '@/app/screen'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useProfile, useUpdateProfile } from '@/repo/hooks'
-import { useRepo } from '@/repo/provider'
 import { AccountCard } from '@/components/account-card'
+import { DataSection } from '@/components/data-section'
 import { DeleteAccountCard } from '@/components/delete-account-card'
 import { PublicNameCard } from '@/components/public-name-card'
 import { useSignedIn } from '@/auth/context'
-import { downloadExport } from '@/lib/download-export'
 import { notifyError } from '@/lib/notify'
 import { confirmBox, segmentedItem, segmentedTrack } from '@/lib/styles'
 
@@ -19,7 +18,6 @@ const UNITS: Units[] = ['lb', 'kg']
 export function SettingsScreen() {
   const profile = useProfile().data
   const updateProfile = useUpdateProfile()
-  const repo = useRepo()
   const signedIn = useSignedIn()
   const [pendingUnits, setPendingUnits] = useState<Units | null>(null)
   const [unitsError, setUnitsError] = useState<string | null>(null)
@@ -40,14 +38,6 @@ export function SettingsScreen() {
         },
       },
     )
-  }
-
-  async function exportData() {
-    try {
-      await downloadExport(repo)
-    } catch (err) {
-      notifyError(err, 'Export failed')
-    }
   }
 
   return (
@@ -104,19 +94,34 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Data</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" className="min-h-11" onClick={() => void exportData()}>
-              Export data
-            </Button>
-          </CardContent>
-        </Card>
+        {!signedIn && (
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2>Data</h2>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataSection signedIn={false} />
+            </CardContent>
+          </Card>
+        )}
 
         <AccountCard />
         {signedIn && <PublicNameCard />}
+        {/* Signed in, the data card sits directly above Delete account: the one place to export. */}
+        {signedIn && (
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2>Your data</h2>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataSection signedIn />
+            </CardContent>
+          </Card>
+        )}
         {signedIn && <DeleteAccountCard />}
       </div>
     </div>

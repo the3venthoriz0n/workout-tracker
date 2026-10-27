@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { UnauthenticatedError, type ApiRepo, type Repo } from '@workout/shared'
+import { UnauthenticatedError, type ApiRepo, type ExportData, type Repo } from '@workout/shared'
 import { ProfileNotFoundError } from '@workout/shared'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { SessionPrompt } from '@/components/session-prompt'
+import { restoreErrorKind } from '@/lib/restore'
 import { isOfflineRepo, type OfflineRepo } from '@/repo/offline'
 import { RepoProvider } from '@/repo/provider'
 import { AuthError, toKind, type AuthClient, type AuthErrorKind } from './client'
@@ -29,7 +30,7 @@ type S =
   | { kind: 'expired' }
   | { kind: 'unreachable' }
 
-type LocalWithReset = Repo & { reset(): Promise<void> }
+type LocalWithReset = Repo & { reset(): Promise<void>; importAll(data: ExportData): Promise<void> }
 
 const HINT = 'wt-account-hint'
 type HintPhase = 'pending-upload' | 'confirm-discard'
@@ -369,6 +370,43 @@ export function AuthProvider({
         return null
       } finally {
         // leavingRef stays true after a successful deletion (see above).
+        busyRef.current = false
+        setBusy(false)
+      }
+    },
+    restoreData: async (data, password) => {
+      if (busyRef.current) return 'server'
+      busyRef.current = true
+      setBusy(true)
+      const cur = sRef.current
+      const onAccount = cur.kind === 'signed-in' && cur.phase === 'ready'
+      const off = onAccount ? offlineApi() : null
+      try {
+        if (onAccount) {
+          off?.pause() // no queued set edit may replay into (or after) the replaced data
+          try {
+            await (getApi() as ApiRepo).replaceAll(password ?? '', data)
+          } catch (e) {
+            off?.resume()
+            const kind = restoreErrorKind(e)
+            if (kind === 'session_expired') queueMicrotask(() => go({ kind: 'expired' }))
+            return kind
+          }
+          // Queued edits and the mirrored workout belong to the data that was just replaced.
+          await off?.clear().catch(() => undefined)
+          off?.resume()
+        } else {
+          try {
+            await local.importAll(data)
+          } catch (e) {
+            return restoreErrorKind(e)
+          }
+        }
+        queryClient.removeQueries({ type: 'inactive' })
+        await queryClient.invalidateQueries()
+        toast.success('Your data was restored from the file.')
+        return null
+      } finally {
         busyRef.current = false
         setBusy(false)
       }

@@ -106,6 +106,7 @@ function authState(signedIn: boolean): AuthState {
     requestPasswordReset: noop,
     resetPassword: noop,
     deleteAccount: async () => null,
+    restoreData: async () => null,
   }
 }
 
