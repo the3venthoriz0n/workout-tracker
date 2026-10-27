@@ -29,6 +29,7 @@ function makeAuth(session: AuthClient['session'], over: Partial<AuthClient> = {}
     resendVerification: vi.fn(async () => {}),
     requestPasswordReset: vi.fn(async () => {}),
     resetPassword: vi.fn(async () => {}),
+    deleteAccount: vi.fn(async () => {}),
     session,
     ...over,
   }

@@ -21,7 +21,8 @@ const label = (r: { method: string; path: string }) => `${r.method} ${r.path}`
 describe('happy path for every route in the table', () => {
   it.each(ROUTES.map((r) => [label(r), r] as const))('%s', async (_name, spec) => {
     // Import is first-time only, so it runs as a brand-new account that has never been initialised.
-    const client = spec.freshAccount ? await signUpClient(h, `fresh-${newId()}@example.com`) : u
+    // Deleting the account runs as a throwaway account too, so `u` survives for the other cases.
+    const client = spec.freshAccount || spec.deletesAccount ? await signUpClient(h, `fresh-${newId()}@example.com`) : u
     const f = await buildFixture(u, { active: spec.noActiveSession ? false : true })
     const res = await client.call(spec.method, fill(spec, f), spec.body?.(f))
     expect(res.status, res.text).toBe(spec.status)

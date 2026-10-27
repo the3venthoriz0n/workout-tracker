@@ -1,6 +1,6 @@
 import { newId, type ExportData } from '@workout/shared'
 import { randomInt } from 'node:crypto'
-import { cookieJar, type Harness } from './helpers.js'
+import { GOOD_PASSWORD, cookieJar, type Harness } from './helpers.js'
 import type { Fixture, RouteSpec } from '../src/routes/table.js'
 
 export type Client = ReturnType<typeof makeClient>
@@ -158,7 +158,7 @@ export async function buildFixture(c: Client, opts: Opts = {}): Promise<Fixture>
   }
   const listing = await ensureListing(c, ok, f.plan)
   const exported = (await ok('GET', '/api/v1/export')) as ExportData
-  return { ...f, item: item.id, item2: item2.id, group, session, set, completedSession: first.id, ...listing, export: exported }
+  return { ...f, item: item.id, item2: item2.id, group, session, set, completedSession: first.id, ...listing, export: exported, password: GOOD_PASSWORD }
 }
 
 /** A fixture whose ids all belong to nobody. */
@@ -177,6 +177,7 @@ export function randomFixture(like: Fixture): Fixture {
     shared: newId(),
     publishedPlan: newId(),
     export: like.export,
+    password: like.password,
   }
 }
 

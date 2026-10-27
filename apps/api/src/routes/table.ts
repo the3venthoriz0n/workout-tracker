@@ -43,6 +43,8 @@ export type Fixture = Record<Kind, string> & {
   completedSession: string
   /** `GET /export` taken right after the fixture was built. */
   export: ExportData
+  /** The account's password (account deletion asks for it). */
+  password: string
 }
 
 export type RouteSpec = {
@@ -75,6 +77,8 @@ export type RouteSpec = {
   freshAccount?: boolean
   /** The happy path needs the user to have no active session (starting one). */
   noActiveSession?: boolean
+  /** The happy path deletes the caller's account, so it runs as a throwaway account. */
+  deletesAccount?: true
 }
 
 const rule = {
@@ -374,6 +378,15 @@ export const ROUTES: RouteSpec[] = [
   },
 
   { method: 'GET', path: `${V1}/export`, status: 200, response: exportDataSchema, foreign: 'none' },
+  // Acts on the caller only: there is no id to point at someone else's account.
+  {
+    method: 'DELETE',
+    path: `${V1}/account`,
+    body: (f) => ({ password: f.password }),
+    status: 204,
+    foreign: 'none',
+    deletesAccount: true,
+  },
   { method: 'POST', path: `${V1}/import`, body: (f) => f.export, status: 204, foreign: 'none', freshAccount: true },
 ]
 

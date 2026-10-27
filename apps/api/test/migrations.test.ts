@@ -112,3 +112,31 @@ describe('migrations 0003/0004 (search columns)', () => {
     }
   })
 })
+
+describe('migration 0005 (listing owner nullable)', () => {
+  it('keeps listings written before it; deleting the owner afterwards keeps the listing with no owner', async () => {
+    const { withTestDb } = await import('./harness.js')
+    const { createPublicService } = await import('../src/service/community.js')
+    const t = await withTestDb({ upTo: 5 })
+    try {
+      const u = 'u_before_owner_null'
+      const id = '00000000-0000-4000-8000-000000000051'
+      const snapshot = JSON.stringify({
+        name: 'Old', units: 'lb',
+        days: [{ name: 'D', color: null, items: [{ exercise: 'Goblet Squat', gear: [], supports_angle: false, sets: 3, reps: 5, weight: 50, angle: null, amrap_last: false, superset: null, rule: null }] }],
+      })
+      await t.sql(`insert into "user" (id, name, email) values ('${u}', 'old', 'old5@example.test')`)
+      await t.sql(`insert into profile (user_id, weight_increment, display_name) values ('${u}', 5, 'Old Owner')`)
+      await t.sql(`insert into shared_plan (id, owner_id, title, latest_version) values ('${id}', '${u}', 'Before Null', 1)`)
+      await t.sql(`insert into shared_plan_version (shared_plan_id, version, snapshot, day_count) values ('${id}', 1, '${snapshot}'::jsonb, 1)`)
+      await t.migrateRest()
+      const pub = createPublicService(t.db)
+      expect((await pub.getPlan(id))?.listing.author).toBe('Old Owner')
+      await t.sql(`delete from "user" where id = '${u}'`)
+      expect(await t.sql(`select owner_id from shared_plan where id = '${id}'`)).toEqual([{ owner_id: null }])
+      expect((await pub.getPlan(id))?.listing.author).toBe('Deleted user')
+    } finally {
+      await t.cleanup()
+    }
+  })
+})

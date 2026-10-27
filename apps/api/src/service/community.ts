@@ -2,10 +2,11 @@
 // public reads (createPublicService) never know a user. Counters on `shared_plan` change only in
 // the same transaction as the vote/download row, with the listing row locked, so they always equal
 // the real row counts.
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm'
 import {
   COMMUNITY,
   ConflictError,
+  DELETED_AUTHOR,
   NotFoundError,
   OwnListingError,
   PublishLimitError,
@@ -51,6 +52,12 @@ import { pgCode } from './pg-error.js'
 import { getPlan, profileOf } from './plans.js'
 
 const live = (userId: string) => and(eq(plan.userId, userId), isNull(plan.deletedAt))
+
+// Public listings (spec §9): published, and the owner either has a public name or deleted the
+// account (owner_id null, kept as "Deleted user"). Queries left-join the owner's profile.
+const visible = and(eq(sharedPlan.status, 'published'), or(isNull(sharedPlan.ownerId), isNotNull(profile.displayName)))
+/** The public author: the owner's current public name, or "Deleted user" once the account is gone. */
+const authorColumn = sql<string>`coalesce(${profile.displayName}, ${DELETED_AUTHOR})`
 
 /** The caller's own listing of each plan that has one (for Plan.published). */
 export async function publishedOf(
@@ -200,7 +207,8 @@ export async function listMyShared(db: Db, userId: string): Promise<SharedListin
 }
 
 /** Locks a published listing (or 404): serializes votes, downloads and status changes on it. */
-async function lockPublished(tx: Tx, id: string): Promise<{ ownerId: string }> {
+// ownerId is null for a listing kept after its owner deleted the account: nobody owns it.
+async function lockPublished(tx: Tx, id: string): Promise<{ ownerId: string | null }> {
   const [row] = await tx
     .select({ ownerId: sharedPlan.ownerId })
     .from(sharedPlan)
@@ -255,10 +263,10 @@ export async function adoptSharedPlan(db: Db, userId: string, input: AdoptInput)
   }
   const prof = await profileOf(db, userId)
   const [listing] = await db
-    .select({ title: sharedPlan.title, latest: sharedPlan.latestVersion, author: profile.displayName })
+    .select({ title: sharedPlan.title, latest: sharedPlan.latestVersion })
     .from(sharedPlan)
-    .innerJoin(profile, eq(profile.userId, sharedPlan.ownerId))
-    .where(and(eq(sharedPlan.id, id), eq(sharedPlan.status, 'published'), isNotNull(profile.displayName)))
+    .leftJoin(profile, eq(profile.userId, sharedPlan.ownerId))
+    .where(and(eq(sharedPlan.id, id), visible))
   if (!listing) throw new NotFoundError('Shared plan')
   const version = input.version ?? listing.latest
   const [stored] = await db
@@ -267,11 +275,15 @@ export async function adoptSharedPlan(db: Db, userId: string, input: AdoptInput)
     .where(and(eq(sharedPlanVersion.sharedPlanId, id), eq(sharedPlanVersion.version, version)))
   if (!stored) throw new NotFoundError('Shared plan version')
 
-  const source = { shared_plan_id: id, version, title: listing.title, author: listing.author }
-
   return db.transaction(async (tx) => {
     // Unpublished meanwhile: no copy, no count.
     const { ownerId } = await lockPublished(tx, id)
+    // The author is read again under the listing lock: an account deletion that finished meanwhile
+    // leaves "Deleted user", and one still waiting for this lock renames this copy after it.
+    const [owner] = ownerId
+      ? await tx.select({ name: profile.displayName }).from(profile).where(eq(profile.userId, ownerId))
+      : []
+    const source = { shared_plan_id: id, version, title: listing.title, author: owner?.name ?? DELETED_AUTHOR }
     // One adopt at a time per user, and the library is read inside the transaction, so
     // concurrent adopts reuse each other's new exercises and gear instead of duplicating them.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`adopt:${userId}`}))`)
@@ -412,7 +424,7 @@ const listingColumns = {
   title: sharedPlan.title,
   description: sharedPlan.description,
   level: sharedPlan.level,
-  author: profile.displayName,
+  author: authorColumn,
   dayCount: sharedPlanVersion.dayCount,
   version: sharedPlan.latestVersion,
   upvotes: sharedPlan.upvoteCount,
@@ -426,7 +438,7 @@ type ListingRow = {
   title: string
   description: string
   level: string | null
-  author: string | null
+  author: string
   dayCount: number
   version: number
   upvotes: number
@@ -441,7 +453,7 @@ function toPublicListing(r: ListingRow): PublicListing {
     title: r.title,
     description: r.description,
     level: r.level as PublicListing['level'],
-    author: r.author ?? '',
+    author: r.author,
     day_count: r.dayCount,
     version: r.version,
     upvotes: r.upvotes,
@@ -450,7 +462,7 @@ function toPublicListing(r: ListingRow): PublicListing {
   }
 }
 
-/** Published listings whose owner has a public name, joined to their latest version. */
+/** Published listings whose owner has a public name (or was deleted), joined to their latest version. */
 function listingQuery(db: Db) {
   return db
     .select(listingColumns)
@@ -459,9 +471,8 @@ function listingQuery(db: Db) {
       sharedPlanVersion,
       and(eq(sharedPlanVersion.sharedPlanId, sharedPlan.id), eq(sharedPlanVersion.version, sharedPlan.latestVersion)),
     )
-    .innerJoin(profile, eq(profile.userId, sharedPlan.ownerId))
+    .leftJoin(profile, eq(profile.userId, sharedPlan.ownerId))
 }
-const visible = and(eq(sharedPlan.status, 'published'), isNotNull(profile.displayName))
 
 export function createPublicService(db: Db): PublicService {
   return {

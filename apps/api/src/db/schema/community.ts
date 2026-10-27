@@ -13,9 +13,9 @@ export const sharedPlan = pgTable(
   'shared_plan',
   {
     id: uuid('id').primaryKey(),
-    ownerId: text('owner_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    // Null once the owner deleted their account: the published listing stays as "Deleted user"
+    // (deleteAccount removes the owner's other listings and anonymises this one in one transaction).
+    ownerId: text('owner_id').references(() => user.id, { onDelete: 'set null' }),
     title: text('title').notNull(),
     description: text('description').notNull().default(''),
     level: text('level'),

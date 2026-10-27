@@ -2,7 +2,8 @@ import { createMiddleware } from 'hono/factory'
 import type { Auth } from './auth.js'
 import { isTrustedOrigin, type OriginEnv } from './origins.js'
 
-export type AppEnv = { Variables: { userId: string; email: string } }
+/** `sessionEnded`: the handler ended the session (account deleted); no refreshed cookie may follow. */
+export type AppEnv = { Variables: { userId: string; email: string; sessionEnded?: boolean } }
 
 /** Session cookie required; every failure looks the same (never says why). */
 export function requireUser(auth: Auth) {
@@ -15,6 +16,7 @@ export function requireUser(auth: Auth) {
     await next()
     // Better Auth renews the session at most daily; forward the refreshed cookie so the
     // browser's expiry slides with the database row.
+    if (c.get('sessionEnded')) return
     for (const cookie of result.headers.getSetCookie()) c.res.headers.append('set-cookie', cookie)
   })
 }

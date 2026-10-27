@@ -18,6 +18,7 @@ import type {
 import type { ExerciseProgression } from './rules.js'
 import type { ListingMeta, SharedListing, SharedSnapshot } from './community.js'
 import type { Effective } from './effective.js'
+import type { ExportAccount, ExportCommunity } from './export.js'
 import type { Outcome } from './progression.js'
 import type { Units } from './units.js'
 
@@ -64,6 +65,10 @@ export type ExportData = {
   item_states: ItemState[]
   workout_sessions: WorkoutSession[]
   set_logs: SetLog[]
+  /** Server exports only: the sign-in email. Never imported. */
+  account?: ExportAccount
+  /** Server exports only: listings, votes and downloads. Never imported. */
+  community?: ExportCommunity
 }
 export type ProgressionRow = {
   plan_id: string

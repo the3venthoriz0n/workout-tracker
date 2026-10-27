@@ -31,6 +31,7 @@ import {
 } from './sessions.js'
 import { owns, type OwnedKind } from './ownership.js'
 import { exportAll, importAll } from './transfer.js'
+import { deleteAccount } from './account.js'
 import { adoptSharedPlan, hasVoted, listMyShared, publishPlan, setVote, unpublishPlan } from './community.js'
 
 export type Service = Repo & {
@@ -38,6 +39,8 @@ export type Service = Repo & {
   addPlanItem(planDayId: string, exerciseId: string, id?: string): Promise<PlanItem>
   /** True when `id` is a live row of this kind owned by the user (used for 404 on deletes). */
   owns(kind: OwnedKind, id: string): Promise<boolean>
+  /** Deletes the account and everything it owns (the route checks the password first). */
+  deleteAccount(): Promise<void>
 }
 
 export function createService(db: Db, userId: string): Service {
@@ -92,5 +95,7 @@ export function createService(db: Db, userId: string): Service {
     adoptSharedPlan: (input) => adoptSharedPlan(db, userId, input),
     setVote: (id, voted) => setVote(db, userId, id, voted),
     hasVoted: (id) => hasVoted(db, userId, id),
+
+    deleteAccount: () => deleteAccount(db, userId),
   }
 }

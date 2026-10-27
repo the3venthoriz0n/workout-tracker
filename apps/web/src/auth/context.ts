@@ -26,6 +26,12 @@ export type AuthState = {
   retrySession(): void
   dismissError(): void
   clearVerifyEmail(): void
+  /**
+   * Deletes the account after the server checked the password, then forgets everything of it on
+   * this device (queries, outbox, mirror, hint) and starts a fresh guest database. Resolves to the
+   * error kind (nothing changed) or null on success; never touches `error`.
+   */
+  deleteAccount(password: string): Promise<AuthErrorKind | null>
   /** Plain pass-throughs: they do not touch the session state. */
   resendVerification(email: string): Promise<void>
   requestPasswordReset(email: string): Promise<void>

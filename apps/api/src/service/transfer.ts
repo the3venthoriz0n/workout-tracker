@@ -1,16 +1,24 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { AlreadyHasDataError, ImportInvalidError, LIMITS, ProfileNotFoundError, exportDataSchema } from '@workout/shared'
-import type { ExportData } from '@workout/shared'
+import type { ExportData, SharedListing } from '@workout/shared'
+
+type ListingLevel = SharedListing['level']
+type ListingStatus = SharedListing['status']
 import {
   exercise,
   gear,
   itemState,
   plan,
   planDay,
+  planDownload,
   planItem,
+  planVote,
   profile,
   progressionRule,
   setLog,
+  sharedPlan,
+  sharedPlanVersion,
+  user,
   workoutSession,
 } from '../db/schema.js'
 import type { Db } from '../db/types.js'
@@ -47,7 +55,25 @@ export async function exportAll(db: Db, userId: string): Promise<ExportData> {
         states: await tx.select().from(itemState).where(eq(itemState.userId, userId)).orderBy(asc(itemState.createdAt), asc(itemState.planItemId)),
         sessions: await tx.select().from(workoutSession).where(eq(workoutSession.userId, userId)).orderBy(asc(workoutSession.createdAt), asc(workoutSession.id)),
         logs: await tx.select().from(setLog).where(eq(setLog.userId, userId)).orderBy(asc(setLog.createdAt), asc(setLog.sessionId), asc(setLog.position), asc(setLog.setNo), asc(setLog.id)),
+        account: await tx.select({ email: user.email, createdAt: user.createdAt }).from(user).where(eq(user.id, userId)),
+        listings: await tx
+          .select({ l: sharedPlan, planId: plan.id })
+          .from(sharedPlan)
+          .leftJoin(plan, and(eq(plan.userId, sharedPlan.ownerId), eq(plan.sharedPlanId, sharedPlan.id), isNull(plan.deletedAt)))
+          .where(eq(sharedPlan.ownerId, userId))
+          .orderBy(asc(sharedPlan.createdAt), asc(sharedPlan.id)),
+        votes: await tx.select().from(planVote).where(eq(planVote.userId, userId)).orderBy(asc(planVote.createdAt), asc(planVote.sharedPlanId)),
+        downloads: await tx.select().from(planDownload).where(eq(planDownload.userId, userId)).orderBy(asc(planDownload.createdAt), asc(planDownload.sharedPlanId)),
       }
+      const listingIds = rows.listings.map((r) => r.l.id)
+      const versions =
+        listingIds.length === 0
+          ? []
+          : await tx
+              .select({ id: sharedPlanVersion.sharedPlanId, version: sharedPlanVersion.version, snapshot: sharedPlanVersion.snapshot, createdAt: sharedPlanVersion.createdAt })
+              .from(sharedPlanVersion)
+              .where(inArray(sharedPlanVersion.sharedPlanId, listingIds))
+              .orderBy(asc(sharedPlanVersion.sharedPlanId), asc(sharedPlanVersion.version))
       return {
         version: 1 as const,
         exported_at: now().toISOString(),
@@ -61,6 +87,31 @@ export async function exportAll(db: Db, userId: string): Promise<ExportData> {
         item_states: rows.states.map(toItemState),
         workout_sessions: rows.sessions.map(toSession),
         set_logs: rows.logs.map(toSetLog),
+        ...(rows.account[0] && { account: { email: rows.account[0].email, created_at: rows.account[0].createdAt.toISOString() } }),
+        community: {
+          listings: rows.listings.map(({ l, planId }) => ({
+            id: l.id,
+            plan_id: planId,
+            title: l.title,
+            description: l.description,
+            level: l.level as ListingLevel,
+            status: l.status as ListingStatus,
+            version: l.latestVersion,
+            upvotes: l.upvoteCount,
+            downloads: l.downloadCount,
+            created_at: l.createdAt.toISOString(),
+            updated_at: l.updatedAt.toISOString(),
+            versions: versions
+              .filter((v) => v.id === l.id)
+              .map((v) => ({ version: v.version, created_at: v.createdAt.toISOString(), snapshot: v.snapshot as unknown as Record<string, unknown> })),
+          })),
+          votes: rows.votes.map((v) => ({ shared_plan_id: v.sharedPlanId, created_at: v.createdAt.toISOString() })),
+          downloads: rows.downloads.map((d) => ({
+            shared_plan_id: d.sharedPlanId,
+            first_version: d.firstVersion,
+            created_at: d.createdAt.toISOString(),
+          })),
+        },
       }
     },
     { isolationLevel: 'repeatable read', accessMode: 'read only' },

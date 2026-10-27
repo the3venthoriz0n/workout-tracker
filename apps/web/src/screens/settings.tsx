@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useProfile, useUpdateProfile } from '@/repo/hooks'
 import { useRepo } from '@/repo/provider'
 import { AccountCard } from '@/components/account-card'
+import { DeleteAccountCard } from '@/components/delete-account-card'
 import { PublicNameCard } from '@/components/public-name-card'
 import { useSignedIn } from '@/auth/context'
 import { downloadExport } from '@/lib/download-export'
@@ -116,6 +117,7 @@ export function SettingsScreen() {
 
         <AccountCard />
         {signedIn && <PublicNameCard />}
+        {signedIn && <DeleteAccountCard />}
       </div>
     </div>
   )

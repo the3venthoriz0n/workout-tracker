@@ -21,6 +21,11 @@ Nothing here is automated: do it in the GitHub and DigitalOcean UIs. Deploy acce
 - [ ] **`TRUSTED_ORIGINS`** (optional, comma separated, exact origins such as `https://example.com`): leave unset for the web app, which is the `BETTER_AUTH_URL` origin. Add the Capacitor origins only when the mobile builds ship, after verifying their exact strings.
 - [ ] **Migrations** run twice per deploy by design: `deploy.sh` runs `migrate.js` after the pre-migration dump (the old app keeps serving), and the new app runs them again on boot (a no-op). A failing migration aborts the deploy before anything changes. Keep migrations backward compatible.
 
+### Data protection basics
+
+- [ ] **Export and deletion exist** (M2c): a signed-in user can download everything the account holds (Settings, "Export my data": library, plans, history, profile and public name, email, listings, votes, downloads) and delete the account (password + DELETE). Deletion is immediate and leaves no personal data in the database; published listings stay as "Deleted user". Mention both in the privacy notice before opening sign-up.
+- [ ] **Backups still hold deleted accounts** until they rotate out (pre-deploy dumps keep the newest 5; set the off-box retention to match and say so in the privacy notice).
+
 ### Resend (production and staging)
 
 Do this once per sending domain; production and staging can share the account (use separate API keys).
@@ -90,7 +95,7 @@ Staging runs on a self-hosted Docker host behind an existing Cloudflare Tunnel; 
 
 ## Known limits (staging)
 
-- Community plans: public names can imitate someone else (nothing checks look-alike names; moderation is hiding a listing). Deleting an account (not built yet) would remove its votes and download rows without decrementing other listings' counters, so counters can drift.
+- Community plans: public names can imitate someone else (nothing checks look-alike names; moderation is hiding a listing). A listing kept after its owner deleted the account ("Deleted user") can only be taken down by hiding it.
 
 - The sign-up allowlist (when set) checks an address, not a person. Email verification narrows the old takeover risk: a sign-up for an existing unverified address mails its owner a "choose your password" link, and using it sets their password and signs everyone else out.
 - Other containers on the shared tunnel network can bypass per-IP rate limits; only put trusted containers on that network.

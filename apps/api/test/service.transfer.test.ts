@@ -96,13 +96,15 @@ describe('importAll', () => {
     await dst.s.importAll(data)
     const copy = await dst.s.exportAll()
     const strip = (d: ExportData) =>
-      JSON.parse(JSON.stringify({ ...d, exported_at: undefined }, (k, v: unknown) => (k === 'user_id' ? undefined : v)))
+      // `account` is the exporting account itself (email), which is never imported.
+      JSON.parse(JSON.stringify({ ...d, exported_at: undefined, account: undefined }, (k, v: unknown) => (k === 'user_id' ? undefined : v)))
     const sorted = (d: ExportData) => {
       const x = strip(d)
       for (const k of Object.keys(x)) if (Array.isArray(x[k])) x[k].sort((a: any, b: any) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
       return x
     }
     expect(sorted(copy)).toEqual(sorted(data))
+    expect(copy.account?.email).toBe(`${dst.id}@example.test`)
     expect(copy.profile.user_id).toBe(dst.id)
     expect(copy.gear.every((g) => g.user_id === dst.id)).toBe(true)
     expect(await dst.s.listExercises()).toHaveLength(16)

@@ -142,3 +142,18 @@ test('offline detail load says so', async () => {
   renderApp(await guestRepo(), path)
   expect(await screen.findByText(/You're offline/)).toBeTruthy()
 })
+
+test('a listing kept after its author deleted the account shows "Deleted user" and can still be used', async () => {
+  const user = userEvent.setup()
+  servePlan(detail({ author: 'Deleted user' }))
+  const repo = await guestRepo()
+  const { router } = renderApp(repo, path)
+  expect(await screen.findByText(/by Deleted user/)).toBeTruthy()
+  await user.click(await screen.findByRole('button', { name: 'Use this plan' }))
+  await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/plans\/(?!community)/))
+  const plans = await repo.listPlans()
+  expect(plans[0]!.source).toMatchObject({ author: 'Deleted user' })
+  // The plans list shows the attribution as text.
+  await router.navigate('/plans')
+  expect(await screen.findByText(/Based on Strong Start by Deleted user/)).toBeTruthy()
+})
