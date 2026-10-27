@@ -15,6 +15,27 @@
       "when": 1792906768060,
       "tag": "0001_violet_bill_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793044144328,
+      "tag": "0002_outgoing_argent",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793045114756,
+      "tag": "0003_melodic_killraven",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793045115754,
+      "tag": "0004_backfill_search",
+      "breakpoints": true
     }
   ]
 }

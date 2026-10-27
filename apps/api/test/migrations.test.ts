@@ -61,3 +61,54 @@ describe('migration 0001 (day colour, angle, AMRAP, supersets, layered rules)', 
     }
   })
 })
+
+describe('migration 0002 (community plans)', () => {
+  it('loads profiles and plans written by the previous release with display_name and source null', async () => {
+    const { withTestDb } = await import('./harness.js')
+    const { createService } = await import('../src/service/index.js')
+    const t = await withTestDb({ upTo: 2 })
+    try {
+      const u = 'u_before_community'
+      const plan = '00000000-0000-4000-8000-000000000013'
+      await t.sql(`insert into "user" (id, name, email) values ('${u}', 'old', 'old2@example.test')`)
+      await t.sql(`insert into profile (user_id, weight_increment) values ('${u}', 5)`)
+      await t.sql(`insert into plan (id, user_id, name) values ('${plan}', '${u}', 'Old plan')`)
+      await t.migrateRest()
+      const repo = createService(t.db, u)
+      expect((await repo.getProfile()).display_name).toBeNull()
+      expect(await repo.getPlan(plan)).toMatchObject({ source: null, published: null })
+      expect((await repo.listPlans())[0]).toMatchObject({ source: null, published: null })
+      expect(await repo.listMyShared()).toEqual([])
+    } finally {
+      await t.cleanup()
+    }
+  })
+})
+
+describe('migrations 0003/0004 (search columns)', () => {
+  it('backfills search_text, no_gear and day_count of versions published before them', async () => {
+    const { withTestDb } = await import('./harness.js')
+    const { createPublicService } = await import('../src/service/community.js')
+    const t = await withTestDb({ upTo: 3 })
+    try {
+      const u = 'u_before_search'
+      const id = '00000000-0000-4000-8000-000000000021'
+      const snapshot = JSON.stringify({
+        name: 'Old', units: 'lb',
+        days: [{ name: 'D', color: null, items: [{ exercise: 'Zercher Squat', gear: [], supports_angle: false, sets: 3, reps: 5, weight: 100, angle: null, amrap_last: false, superset: null, rule: null }] }],
+      })
+      await t.sql(`insert into "user" (id, name, email) values ('${u}', 'old', 'old3@example.test')`)
+      await t.sql(`insert into profile (user_id, weight_increment, display_name) values ('${u}', 5, 'Old Timer')`)
+      await t.sql(`insert into shared_plan (id, owner_id, title, latest_version) values ('${id}', '${u}', 'Legacy Title', 1)`)
+      await t.sql(`insert into shared_plan_version (shared_plan_id, version, snapshot) values ('${id}', 1, '${snapshot}'::jsonb)`)
+      await t.migrateRest()
+      const pub = createPublicService(t.db)
+      for (const q of ['zercher', 'legacy']) {
+        const page = await pub.listPlans({ q, gear: 'none', days: 1, sort: 'top', limit: 20 })
+        expect(page.items.map((l) => [l.id, l.day_count]), q).toEqual([[id, 1]])
+      }
+    } finally {
+      await t.cleanup()
+    }
+  })
+})

@@ -4,6 +4,7 @@ import { createAuth } from './auth.js'
 import { db, sql } from './db/index.js'
 import { env } from './env.js'
 import { runMigrations } from './migrations.js'
+import { createPublicService } from './service/community.js'
 import { createService } from './service/index.js'
 
 // Fail loudly: if migrations cannot be applied the process exits and never serves.
@@ -19,6 +20,7 @@ const app = createApp({
   auth: createAuth(db, env),
   env,
   getService: (userId) => createService(db, userId),
+  getPublic: () => createPublicService(db),
   sqlHealth: async () => {
     try {
       await sql`select 1`

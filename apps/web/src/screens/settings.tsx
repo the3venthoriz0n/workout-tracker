@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useProfile, useUpdateProfile } from '@/repo/hooks'
 import { useRepo } from '@/repo/provider'
 import { AccountCard } from '@/components/account-card'
+import { PublicNameCard } from '@/components/public-name-card'
+import { useSignedIn } from '@/auth/context'
 import { downloadExport } from '@/lib/download-export'
 import { notifyError } from '@/lib/notify'
 import { confirmBox, segmentedItem, segmentedTrack } from '@/lib/styles'
@@ -17,6 +19,7 @@ export function SettingsScreen() {
   const profile = useProfile().data
   const updateProfile = useUpdateProfile()
   const repo = useRepo()
+  const signedIn = useSignedIn()
   const [pendingUnits, setPendingUnits] = useState<Units | null>(null)
   const [unitsError, setUnitsError] = useState<string | null>(null)
 
@@ -112,6 +115,7 @@ export function SettingsScreen() {
         </Card>
 
         <AccountCard />
+        {signedIn && <PublicNameCard />}
       </div>
     </div>
   )

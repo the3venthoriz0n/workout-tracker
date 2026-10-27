@@ -54,7 +54,7 @@ export async function exportAll(db: Db, userId: string): Promise<ExportData> {
         profile: toProfile(prof),
         gear: rows.gear.map(toGear),
         exercises: rows.exercises.map(toExercise),
-        plans: rows.plans.map(toPlan),
+        plans: rows.plans.map((r) => toPlan(r)),
         plan_days: rows.days.map(toPlanDay),
         plan_items: rows.items.map(toPlanItem),
         progression_rules: rows.rules.map(toRule),
@@ -199,6 +199,7 @@ export async function importAll(db: Db, userId: string, raw: ExportData): Promis
           units: d.profile.units,
           weightIncrement: dec(d.profile.weight_increment),
           defaultRule: d.profile.default_rule ?? null,
+          displayName: d.profile.display_name,
           ...sync(d.profile),
         })
         .onConflictDoNothing()
@@ -228,7 +229,8 @@ export async function importAll(db: Db, userId: string, raw: ExportData): Promis
         ),
       )
       await insertChunked(d.plans, (c) =>
-        tx.insert(plan).values(c.map((r) => ({ id: r.id, userId, name: r.name, archived: r.archived, ...sync(r) }))),
+        // `source` travels with the plan; `published` never does (a listing belongs to the account).
+        tx.insert(plan).values(c.map((r) => ({ id: r.id, userId, name: r.name, archived: r.archived, source: r.source, ...sync(r) }))),
       )
       await insertChunked(d.plan_days, (c) =>
         tx

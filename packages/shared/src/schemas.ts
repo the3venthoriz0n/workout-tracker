@@ -77,6 +77,90 @@ const checkRule = (r: { success_action: string; success_amount: number }, ctx: z
 export const ruleInputSchema = z.object(ruleFields).superRefine(checkRule)
 export type RuleInput = z.infer<typeof ruleInputSchema>
 
+// C0/C1 control characters (MULTILINE keeps the newline), and format characters (zero-width,
+// bidi overrides, soft hyphen) plus the Unicode line/paragraph separators, which can disguise text.
+const CONTROLS = /[\u0000-\u001f\u007f-\u009f]/g
+const CONTROLS_MULTILINE = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g
+const FORMAT = /[\p{Cf}\u00ad\u2028\u2029]/gu
+// Full-stop look-alikes that NFKC leaves alone (or maps to another look-alike) become '.', so the
+// stored text and the link check see the same dot.
+const DOTS = /[\u3002\uff61\u2024\ufe52\uff0e]/g
+
+/** Strips format and control characters, applies NFKC (full-width letters become ASCII), then trims. */
+export function cleanText(s: string, multiline = false): string {
+  return s
+    .replace(FORMAT, '')
+    .normalize('NFKC')
+    .replace(FORMAT, '')
+    .replace(DOTS, '.')
+    .replace(multiline ? CONTROLS_MULTILINE : CONTROLS, '')
+    .trim()
+}
+
+// Links and their usual disguises: http(s)://, hxxp(s)://, www., bare domains (a letter or digit,
+// a dot, then two or more letters: "spam.com", "shop.example.co.uk"), IPv4 literals and IPv6
+// literals (bracketed, with "::", or four or more colon groups). Checked on cleaned text.
+const LINK =
+  /(h[tx]{2}ps?:\/\/|www\.|[\p{L}\p{N}]\.\p{L}{2,}|\b\d{1,3}(?:\.\d{1,3}){3}\b|\[[0-9a-f.]*:[0-9a-f:.]*\]|[0-9a-f]::|::[0-9a-f]|\b(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}\b)/iu
+
+/** True when cleaned public text holds no link. */
+export const isLinkFree = (s: string): boolean => !LINK.test(s)
+export const LINK_MESSAGE = 'Links are not allowed'
+
+/**
+ * Every string shown publicly (titles, descriptions, names, snapshot text): cleaned with
+ * `cleanText`, length-bounded and free of links. The cleaned form is what gets stored.
+ */
+export const publicText = (min: number, max: number, multiline = false) =>
+  z
+    .string()
+    .transform((s) => cleanText(s, multiline))
+    .pipe(z.string().min(min).max(max).refine(isLinkFree, LINK_MESSAGE))
+
+/** Matching key for exercise and gear names: NFKC, trimmed, inner whitespace collapsed, lowercase. */
+export function nameKey(s: string): string {
+  return s.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+/** The only identity shown publicly (community plans). */
+export const displayNameSchema = z
+  .string()
+  .transform((s) => cleanText(s))
+  .pipe(
+    z
+      .string()
+      .min(2)
+      .max(30)
+      .regex(/^[\p{L}\p{M}\p{N} _-]+$/u, 'Use letters, digits, spaces, _ and - only')
+      .refine((s) => !/\p{M}{3}/u.test(s), 'Too many accents on one letter')
+      .refine(isLinkFree, LINK_MESSAGE),
+  )
+
+export const LEVELS = ['beginner', 'intermediate', 'advanced'] as const
+export const levelSchema = z.enum(LEVELS)
+export type Level = z.infer<typeof levelSchema>
+
+/** `hidden` is set by the service owner in the database; the sharer cannot reverse it. */
+export const listingStatusSchema = z.enum(['published', 'unpublished', 'hidden'])
+export type ListingStatus = z.infer<typeof listingStatusSchema>
+
+/** "Based on <title> by <author>": where an adopted plan came from. */
+export const planSourceSchema = z.object({
+  shared_plan_id: id,
+  version: z.number().int().min(1).max(1_000_000),
+  title: publicText(1, 60),
+  author: publicText(1, 30),
+})
+export type PlanSource = z.infer<typeof planSourceSchema>
+
+/** The plan's own community listing (server only; always null on the device). */
+export const planPublishedSchema = z.object({
+  shared_plan_id: id,
+  version: z.number().int().min(1).max(1_000_000),
+  status: listingStatusSchema,
+})
+export type PlanPublished = z.infer<typeof planPublishedSchema>
+
 export const profileSchema = z.object({
   user_id: userId,
   plan: planTierSchema,
@@ -84,6 +168,8 @@ export const profileSchema = z.object({
   weight_increment: stepAmount,
   // Rule new plan items start with; absent means defaultRule(weight_increment)
   default_rule: ruleInputSchema.optional(),
+  // Public name for community plans; required to publish.
+  display_name: displayNameSchema.nullable().default(null),
   ...base,
 })
 export type Profile = z.infer<typeof profileSchema>
@@ -124,6 +210,10 @@ export const planSchema = z.object({
   id,
   name,
   archived: z.boolean(),
+  // Set on copies of community plans; null on the user's own plans.
+  source: planSourceSchema.nullable().default(null),
+  // The user's own listing of this plan, if any (computed by the server; not imported).
+  published: planPublishedSchema.nullable().default(null),
   ...owned,
 })
 export type Plan = z.infer<typeof planSchema>

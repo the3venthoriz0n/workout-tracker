@@ -139,3 +139,54 @@ describe('ApiRepo: day colours, angle, AMRAP, supersets and layered rules', () =
     expect(JSON.parse(s.calls[3]!.init.body as string)).toEqual({ rule: null })
   })
 })
+
+describe('ApiRepo: community plans', () => {
+  it('calls the community routes and never sends a client snapshot when adopting', async () => {
+    const s = stub(200, {})
+    await s.repo.publishPlan('p1', { title: 'Strong 5x5', description: 'd', level: 'beginner' })
+    await s.repo.unpublishPlan('p1')
+    await s.repo.listMyShared()
+    await s.repo.setVote('l1', true)
+    await s.repo.setVote('l1', false)
+    await s.repo.adoptSharedPlan({
+      shared_plan_id: 'l1',
+      version: 2,
+      snapshot: { name: 'FORGED', units: 'lb', days: [] },
+      title: 'FORGED',
+      author: 'FORGED',
+    })
+    await s.repo.adoptSharedPlan({ shared_plan_id: 'l1' })
+    expect(s.calls.map((c) => `${c.init.method} ${c.url}`)).toEqual([
+      'POST /api/v1/plans/p1/publish',
+      'DELETE /api/v1/plans/p1/publish',
+      'GET /api/v1/shared-plans/mine',
+      'PUT /api/v1/shared-plans/l1/vote',
+      'DELETE /api/v1/shared-plans/l1/vote',
+      'POST /api/v1/shared-plans/l1/adopt',
+      'POST /api/v1/shared-plans/l1/adopt',
+    ])
+    expect(JSON.parse(s.calls[0]!.init.body as string)).toEqual({ title: 'Strong 5x5', description: 'd', level: 'beginner' })
+    expect(JSON.parse(s.calls[5]!.init.body as string)).toEqual({ version: 2 })
+    expect(JSON.parse(s.calls[6]!.init.body as string)).toEqual({})
+  })
+  it('hasVoted reads GET /shared-plans/:id/vote', async () => {
+    const s = stub(200, { voted: true })
+    expect(await s.repo.hasVoted('l1')).toBe(true)
+    expect(`${s.calls[0]!.init.method} ${s.calls[0]!.url}`).toBe('GET /api/v1/shared-plans/l1/vote')
+  })
+  it('maps 429 publish_limit to PublishLimitError (an ApiError 429)', async () => {
+    const { PublishLimitError } = await import('../src/repo.js')
+    const err = await stub(429, { error: 'publish_limit' }).repo.publishPlan('p1', { title: 'abc' }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PublishLimitError)
+    expect(err).toMatchObject({ status: 429, code: 'publish_limit' })
+  })
+})
+
+describe('ApiRepo: own listing', () => {
+  it('maps 409 own_listing to OwnListingError', async () => {
+    const { OwnListingError } = await import('../src/repo.js')
+    const err = await stub(409, { error: 'own_listing' }).repo.setVote('l1', true).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(OwnListingError)
+    expect(err).toMatchObject({ status: 409, code: 'own_listing' })
+  })
+})

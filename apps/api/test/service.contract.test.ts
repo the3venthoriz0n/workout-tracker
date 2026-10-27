@@ -15,5 +15,5 @@ runRepoContract(
     if (!opts?.empty) await repo.init()
     return { repo, cleanup, importAll: (data) => repo.importAll(data) }
   },
-  { groups: ['profile', 'gear', 'exercises', 'plans', 'progression', 'sessions', 'transfer'] },
+  { groups: ['profile', 'gear', 'exercises', 'plans', 'progression', 'sessions', 'transfer', 'community'] },
 )

@@ -45,6 +45,9 @@ const schema = z.object({
         .filter(Boolean),
     )
     .pipe(z.array(z.email('invalid email in list'))),
+  // `off` disables the per-IP rate limit of the public community area outside production
+  // (local load testing); production always keeps it on.
+  AUTH_RATE_LIMIT: z.enum(['on', 'off']).default('on'),
   // Directory of the built SPA; set only in the production image.
   STATIC_DIR: z.string().optional(),
 })

@@ -5,12 +5,15 @@ import {
   ImportInvalidError,
   NotFoundError,
   OfflineError,
+  OwnListingError,
   ProfileNotFoundError,
+  PublishLimitError,
   SessionInProgressError,
   UnauthenticatedError,
   ValidationError,
 } from './repo.js'
 import type { ExportData, FinishSummary, PlanTree, ProgressionRow, Repo, SessionDetail } from './repo.js'
+import type { SharedListing } from './community.js'
 import type { ExerciseProgression } from './rules.js'
 import { newId } from './id.js'
 import type { Exercise, Gear, Plan, PlanDay, PlanItem, Profile, SetLog, WorkoutSession } from './schemas.js'
@@ -29,6 +32,38 @@ type Result = { status: number; data: unknown }
 const V1 = '/api/v1'
 const seg = encodeURIComponent
 
+/** The body as JSON, or undefined (empty or not JSON). */
+export async function readJson(res: Response): Promise<unknown> {
+  const text = await res.text().catch(() => '')
+  if (!text) return undefined
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return undefined
+  }
+}
+
+/** Maps a non-2xx response to a typed error. Only the server's error code is ever surfaced, never the raw body. */
+export function responseError(status: number, data: unknown, notFound?: () => Error): Error {
+  const code = typeof (data as { error?: unknown } | undefined)?.error === 'string'
+    ? ((data as { error: string }).error.slice(0, 64) as string)
+    : undefined
+  if (status === 401) return new UnauthenticatedError()
+  if (status === 404) return notFound ? notFound() : new NotFoundError()
+  if (status === 409) {
+    if (code === 'session_in_progress') return new SessionInProgressError()
+    if (code === 'already_has_data') return new AlreadyHasDataError()
+    if (code === 'conflict') return new ConflictError()
+    if (code === 'own_listing') return new OwnListingError()
+  }
+  if (status === 429 && code === 'publish_limit') return new PublishLimitError()
+  if (status === 400 && code === 'invalid') {
+    const issue = (data as { issues?: { path?: unknown }[] } | undefined)?.issues?.[0]
+    return new ValidationError(typeof issue?.path === 'string' ? issue.path.slice(0, 200) : '')
+  }
+  return new ApiError(status, code)
+}
+
 export function createApiRepo(opts: ApiRepoOptions = {}): ApiRepo {
   const base = (opts.baseUrl ?? '').replace(/\/+$/, '')
 
@@ -45,33 +80,10 @@ export function createApiRepo(opts: ApiRepoOptions = {}): ApiRepo {
     } catch {
       throw new OfflineError()
     }
-    const text = await res.text().catch(() => '')
-    let data: unknown
-    if (text) {
-      try {
-        data = JSON.parse(text)
-      } catch {
-        data = undefined
-      }
-    }
+    const data = await readJson(res)
     if (res.ok) return { status: res.status, data }
-    // Only the server's error code is ever surfaced, never the raw body.
-    const code = typeof (data as { error?: unknown } | undefined)?.error === 'string'
-      ? ((data as { error: string }).error.slice(0, 64) as string)
-      : undefined
-    if (res.status === 401) throw new UnauthenticatedError()
-    if (res.status === 404) throw notFound ? notFound() : new NotFoundError()
-    if (res.status === 409) {
-      if (code === 'session_in_progress') throw new SessionInProgressError()
-      if (code === 'already_has_data') throw new AlreadyHasDataError()
-      if (code === 'conflict') throw new ConflictError()
-    }
     if (res.status === 400 && path === '/import') throw new ImportInvalidError()
-    if (res.status === 400 && code === 'invalid') {
-      const issue = (data as { issues?: { path?: unknown }[] } | undefined)?.issues?.[0]
-      throw new ValidationError(typeof issue?.path === 'string' ? issue.path.slice(0, 200) : '')
-    }
-    throw new ApiError(res.status, code)
+    throw responseError(res.status, data, notFound)
   }
 
   const get = async <T>(path: string, notFound?: () => Error) => (await send('GET', path, undefined, notFound)).data as T
@@ -81,6 +93,7 @@ export function createApiRepo(opts: ApiRepoOptions = {}): ApiRepo {
   const del = async (path: string) => {
     await send('DELETE', path)
   }
+  const delJson = async <T>(path: string) => (await send('DELETE', path)).data as T
   const profileMissing = () => new ProfileNotFoundError()
 
   return {
@@ -169,6 +182,17 @@ export function createApiRepo(opts: ApiRepoOptions = {}): ApiRepo {
     listProgressionByExercise: () => get<ExerciseProgression[]>('/progression/exercises'),
     async importAll(data) {
       await post('/import', data)
+    },
+    publishPlan: (planId, meta) => post(`/plans/${seg(planId)}/publish`, meta),
+    unpublishPlan: (planId) => del(`/plans/${seg(planId)}/publish`),
+    listMyShared: () => get<SharedListing[]>('/shared-plans/mine'),
+    // Never sends a snapshot: the server loads it by id.
+    adoptSharedPlan: ({ shared_plan_id, version }) =>
+      post(`/shared-plans/${seg(shared_plan_id)}/adopt`, version === undefined ? {} : { version }),
+    setVote: (id, voted) =>
+      voted ? put(`/shared-plans/${seg(id)}/vote`, {}) : delJson(`/shared-plans/${seg(id)}/vote`),
+    async hasVoted(id) {
+      return (await get<{ voted: boolean }>(`/shared-plans/${seg(id)}/vote`)).voted === true
     },
   }
 }

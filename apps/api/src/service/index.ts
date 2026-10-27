@@ -31,6 +31,7 @@ import {
 } from './sessions.js'
 import { owns, type OwnedKind } from './ownership.js'
 import { exportAll, importAll } from './transfer.js'
+import { adoptSharedPlan, hasVoted, listMyShared, publishPlan, setVote, unpublishPlan } from './community.js'
 
 export type Service = Repo & {
   importAll(data: ExportData): Promise<void>
@@ -83,5 +84,13 @@ export function createService(db: Db, userId: string): Service {
     exportAll: () => exportAll(db, userId),
     importAll: (data) => importAll(db, userId, data),
     owns: (kind, id) => owns(db, userId, kind, id),
+
+    // community plans
+    publishPlan: (planId, meta) => publishPlan(db, userId, planId, meta),
+    unpublishPlan: (planId) => unpublishPlan(db, userId, planId),
+    listMyShared: () => listMyShared(db, userId),
+    adoptSharedPlan: (input) => adoptSharedPlan(db, userId, input),
+    setVote: (id, voted) => setVote(db, userId, id, voted),
+    hasVoted: (id) => hasVoted(db, userId, id),
   }
 }

@@ -18,6 +18,7 @@ import { exercise, itemState, plan, planDay, planItem, profile, progressionRule 
 import type { Db } from '../db/types.js'
 import { dissolveLonelyGroups, softDeleteItemsWhere, type Tx } from './items.js'
 import { assertUuid, dec, isUuid, now, toExercise, toPlan, toPlanDay, toPlanItem, toProfile, toRule } from './mappers.js'
+import { publishedOf, unpublishListing } from './community.js'
 
 /** Effective rule of an item (spec §6 layering); `row` is its stored override, if any. */
 export function ruleOf(
@@ -48,8 +49,9 @@ export async function listPlans(db: Db, userId: string): Promise<Plan[]> {
     .select()
     .from(plan)
     .where(and(eq(plan.userId, userId), isNull(plan.deletedAt)))
+  const published = await publishedOf(db, userId, rows)
   return rows
-    .map(toPlan)
+    .map((r) => toPlan(r, published.get(r.id) ?? null))
     .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.name.localeCompare(b.name))
 }
 
@@ -99,7 +101,8 @@ export async function getPlan(db: Db, userId: string, id: string): Promise<PlanT
           return { ...item, exercise: ex, rule, ruleSource: source, effective: effectiveValues(item, ex) }
         }),
     }))
-    return { ...toPlan(planRow), days }
+    const published = await publishedOf(tx, userId, [planRow])
+    return { ...toPlan(planRow, published.get(planRow.id) ?? null), days }
   })
 }
 
@@ -112,7 +115,8 @@ export async function savePlan(db: Db, userId: string, input: { id?: string; nam
     .values({ id, userId, name: input.name, archived: false, createdAt: ts, updatedAt: ts })
     .onConflictDoUpdate({ target: [plan.userId, plan.id], set: { name: input.name, updatedAt: ts } })
     .returning()
-  return toPlan(row!)
+  const published = await publishedOf(db, userId, [row!])
+  return toPlan(row!, published.get(row!.id) ?? null)
 }
 
 async function softDeleteItemsOfDays(tx: Tx, userId: string, dayIds: string[], ts: Date): Promise<void> {
@@ -128,8 +132,10 @@ export async function deletePlan(db: Db, userId: string, id: string): Promise<vo
       .update(plan)
       .set({ deletedAt: ts, updatedAt: ts })
       .where(and(eq(plan.userId, userId), eq(plan.id, id), isNull(plan.deletedAt)))
-      .returning({ id: plan.id })
+      .returning({ id: plan.id, sharedPlanId: plan.sharedPlanId })
     if (!deleted) return
+    // A deleted plan cannot be managed any more, so its listing leaves the public area.
+    if (deleted.sharedPlanId) await unpublishListing(tx, userId, deleted.sharedPlanId)
     // Every day of the plan, including any already soft-deleted: their items must not stay live.
     const days = await tx
       .select({ id: planDay.id, deletedAt: planDay.deletedAt })

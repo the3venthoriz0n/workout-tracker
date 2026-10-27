@@ -69,7 +69,16 @@ Staging runs on a self-hosted Docker host behind an existing Cloudflare Tunnel; 
 - [ ] **Scheduler** runs `update.sh` with `REPO=<owner>/<repo>`; check its log after the first merge to `main`.
 - [ ] **Backups**: copy a `pg_dump` off the host before trusting staging with data you care about.
 
+## Community plans
+
+- [ ] **Public area**: `/api/public/*` is reachable by anyone who can reach the site. Check it through the tunnel before announcing: `GET /api/public/plans` works signed out and returns no private fields.
+- [ ] **Sign-up is open**: leave `SIGNUP_ALLOWLIST` unset (empty) for staging while community plans are tried out; the allowlist code stays and can be turned back on at any time by setting it. Anyone can then create an account and publish.
+- [ ] **Recommend M2b email verification before wide exposure.** Without it, accounts can be created with any address, so publishing and upvotes are cheap to abuse.
+- [ ] **Hiding a listing** (moderation is by hand): `update shared_plan set status='hidden' where id='<listing id>';`. A hidden listing is gone from the public list and 404s everywhere, and its owner cannot reverse it. Set it back to `published` to restore.
+
 ## Known limits (staging)
+
+- Community plans: public names can imitate someone else (nothing checks look-alike names; moderation is hiding a listing). Deleting an account (not built yet) would remove its votes and download rows without decrementing other listings' counters, so counters can drift.
 
 - The sign-up allowlist checks an address, not a person: anyone who knows a listed address can claim it before its owner does. Email verification (M2b) closes this.
 - The sign-up response can reveal whether a listed address is already registered.

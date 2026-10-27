@@ -59,5 +59,17 @@ export class AppDb extends Dexie {
           .toCollection()
           .modify((l) => fill(l, { angle: null, amrap: false, seq: null, superset_group: null, superset_label: null }))
       })
+    // v3: community plans. Same indexes; the public name and a plan's source start empty, and a
+    // guest plan is never published.
+    this.version(3)
+      .stores({})
+      .upgrade(async (tx) => {
+        const fill = (row: object, defaults: Record<string, unknown>) => {
+          const r = row as Record<string, unknown>
+          for (const [k, v] of Object.entries(defaults)) if (r[k] === undefined) r[k] = v
+        }
+        await tx.table('profile').toCollection().modify((p) => fill(p, { display_name: null }))
+        await tx.table('plans').toCollection().modify((p) => fill(p, { source: null, published: null }))
+      })
   }
 }

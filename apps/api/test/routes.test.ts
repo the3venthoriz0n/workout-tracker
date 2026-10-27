@@ -271,7 +271,7 @@ describe('404 for unknown ids', () => {
   it('every id route answers 404 {"error":"not_found"} for a random UUID', async () => {
     // No active session, so POST /sessions reaches the day lookup instead of 409.
     const f = randomFixture(await buildFixture(u, { active: false }))
-    for (const spec of ROUTES.filter((r) => r.foreign === 'not_found')) {
+    for (const spec of ROUTES.filter((r) => r.foreign === 'not_found' || r.foreign === 'public')) {
       const res = await u.call(spec.method, fill(spec, f), spec.body?.(f))
       expect(res.status, label(spec)).toBe(404)
       expect(res.json, label(spec)).toEqual({ error: 'not_found' })
@@ -319,6 +319,9 @@ describe('errors', () => {
     const app = createApp({
       auth: h.auth,
       env: h.env,
+      getPublic: () => {
+        throw new Error('unused')
+      },
       getService: (id) => ({
         ...createService(h.db, id),
         listGear: async () => {

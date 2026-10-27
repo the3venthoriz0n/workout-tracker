@@ -6,6 +6,8 @@ import {
   LIMITS,
   ProfileNotFoundError,
   SEED_GEAR,
+  ValidationError,
+  displayNameSchema,
   convertWeight,
   newId,
   roundToIncrement,
@@ -77,7 +79,7 @@ function mapping(values: number[], convert: (w: number) => number): Map<number, 
   return new Map(values.map((v) => [v, convert(v)]))
 }
 
-type Patch = { units?: Units; weight_increment?: number; default_rule?: RuleInput }
+type Patch = { units?: Units; weight_increment?: number; default_rule?: RuleInput; display_name?: string }
 
 // Converts every stored weight (live and soft-deleted rows alike, as LocalRepo does) in the
 // caller's transaction. Rows are matched on distinct values, so cost is bounded by the number of
@@ -159,6 +161,12 @@ export async function updateProfile(db: Db, userId: string, patch: Patch): Promi
     throw new Error('weight_increment must be greater than 0')
   }
   const defaultRule = patch.default_rule === undefined ? undefined : ruleInputSchema.parse(patch.default_rule)
+  let displayName: string | undefined
+  if (patch.display_name !== undefined) {
+    const r = displayNameSchema.safeParse(patch.display_name)
+    if (!r.success) throw new ValidationError('display_name', r.error.issues[0]?.message ?? 'Invalid public name')
+    displayName = r.data
+  }
   return db.transaction(async (tx) => {
     // Lock the profile row so concurrent unit switches serialize instead of converting twice.
     const [row] = await tx.select().from(profile).where(eq(profile.userId, userId)).for('update')
@@ -178,7 +186,7 @@ export async function updateProfile(db: Db, userId: string, patch: Patch): Promi
     if (defaultRule !== undefined) rule = defaultRule
     const [updated] = await tx
       .update(profile)
-      .set({ units, weightIncrement: dec(step), defaultRule: rule ?? null, updatedAt: ts })
+      .set({ units, weightIncrement: dec(step), defaultRule: rule ?? null, ...(displayName === undefined ? {} : { displayName }), updatedAt: ts })
       .where(eq(profile.userId, userId))
       .returning()
     return toProfile(updated!)

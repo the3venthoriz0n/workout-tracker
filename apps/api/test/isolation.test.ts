@@ -2,7 +2,7 @@
 // needs a valid session. Cases are generated from ROUTES so a new route cannot be forgotten.
 import { newId, type ExportData } from '@workout/shared'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { ROUTES, type Fixture } from '../src/routes/table.js'
+import { PUBLIC_ROUTES, ROUTES, type Fixture } from '../src/routes/table.js'
 import { buildFixture, fill, randomFixture, signUpClient, type Client } from './fixture.js'
 import { setupApp, type Harness } from './helpers.js'
 
@@ -106,7 +106,7 @@ describe('user B using user A\'s ids', () => {
       if (Array.isArray(v)) for (const row of v as { id?: string }[]) if (row.id) idsOfA.add(row.id)
     }
     expect(idsOfA.size).toBeGreaterThan(8)
-    for (const path of ['gear', 'exercises', 'plans', 'sessions', 'progression', 'export', 'sessions/active', 'me']) {
+    for (const path of ['gear', 'exercises', 'plans', 'sessions', 'progression', 'export', 'sessions/active', 'me', 'shared-plans/mine']) {
       const res = await b.call('GET', `/api/v1/${path}`)
       expect(res.status, path).toBe(200)
       for (const id of idsOfA) expect(res.text, `${path} leaks ${id}`).not.toContain(id)
@@ -172,6 +172,56 @@ describe('user B using user A\'s ids', () => {
     expect(await snapshot(a)).toBe(beforeA)
     const again = await c.call('POST', '/api/v1/import', fa.export)
     expect(again.status).toBe(409)
+  })
+})
+
+describe('community listings of another user (foreign: public)', () => {
+  const specs = ROUTES.filter((r) => r.foreign === 'public')
+  it('the table has them', () => {
+    expect(specs.map(label).sort()).toEqual([
+      'DELETE /api/v1/shared-plans/:id/vote',
+      'GET /api/v1/shared-plans/:id/vote',
+      'POST /api/v1/shared-plans/:id/adopt',
+      'PUT /api/v1/shared-plans/:id/vote',
+    ])
+  })
+
+  it('B can vote on and adopt another user\'s published listing without touching A\'s data', async () => {
+    const beforeA = await snapshot(a)
+    for (const spec of specs) {
+      const res = await b.call(spec.method, fill(spec, fa), spec.body?.(fa))
+      expect(res.status, `${label(spec)} ${res.text}`).toBe(spec.status)
+    }
+    expect(await snapshot(a)).toBe(beforeA)
+  })
+
+  it('A\'s unpublished or hidden listing is the same 404 as a random id, for every listing route', async () => {
+    const plan = newId()
+    const day = newId()
+    await a.call('PUT', `/api/v1/plans/${plan}`, { name: 'Soon gone' })
+    await a.call('PUT', `/api/v1/days/${day}`, { plan_id: plan, name: 'D' })
+    await a.call('POST', `/api/v1/days/${day}/items`, { exercise_id: fa.exercise })
+    const pub = await a.call('POST', `/api/v1/plans/${plan}/publish`, { title: 'Soon gone' })
+    expect(pub.status, pub.text).toBe(200)
+    const id = (pub.json as { shared_plan_id: string }).shared_plan_id
+    const theirs: Fixture = { ...fa, shared: id }
+    const check = async (what: string) => {
+      const beforeA = await snapshot(a)
+      for (const spec of specs) {
+        const foreign = await b.call(spec.method, fill(spec, theirs), spec.body?.(theirs))
+        const nobody = await b.call(spec.method, fill(spec, fakes), spec.body?.(fakes))
+        expect(foreign.status, `${what} ${label(spec)}`).toBe(404)
+        expect(foreign.text).toBe('{"error":"not_found"}')
+        expect(foreign.text).toBe(nobody.text)
+        expect(foreign.headers.get('content-type')).toBe(nobody.headers.get('content-type'))
+      }
+      expect(await snapshot(a)).toBe(beforeA)
+    }
+    expect((await a.call('DELETE', `/api/v1/plans/${plan}/publish`)).status).toBe(204)
+    await check('unpublished')
+    expect((await a.call('POST', `/api/v1/plans/${plan}/publish`, { title: 'Back again' })).status).toBe(200)
+    await h.sql(`update shared_plan set status = 'hidden' where id = '${id}'`)
+    await check('hidden')
   })
 })
 
@@ -251,11 +301,41 @@ describe('route table completeness', () => {
     expect(new Set(known).size).toBe(known.length)
   })
 
-  it('every other route under /api (ALL included) except /api/auth/* requires a session', async () => {
+  it('every registered /api/public route is in PUBLIC_ROUTES and vice versa; all GET, none under /api/v1', () => {
+    const registered = h.app.routes
+      .filter((r) => r.path.startsWith('/api/public/') && r.method !== 'ALL')
+      .map((r) => `${r.method} ${r.path}`)
+    const known = PUBLIC_ROUTES.map(label)
+    expect(registered.filter((r) => !known.includes(r)), 'registered but missing from PUBLIC_ROUTES').toEqual([])
+    expect(known.filter((r) => !registered.includes(r)), 'in PUBLIC_ROUTES but not registered').toEqual([])
+    expect(new Set(known).size).toBe(known.length)
+    for (const r of PUBLIC_ROUTES) {
+      expect(r.method).toBe('GET')
+      expect(r.path.startsWith('/api/public/')).toBe(true)
+    }
+    for (const r of ROUTES) expect(r.path.startsWith('/api/v1/'), label(r)).toBe(true)
+    // Hono adds HEAD/ALL entries for middleware only; nothing else may be mounted under /api/public.
+    const others = h.app.routes.filter((r) => r.path.startsWith('/api/public') && !['GET', 'ALL'].includes(r.method))
+    expect(others.map((r) => `${r.method} ${r.path}`)).toEqual([])
+  })
+
+  it('every public route answers without a session and with the public cache header', async () => {
+    for (const r of PUBLIC_ROUTES) {
+      const res = await h.request(r.sample(fa.shared))
+      expect(res.status, label(r)).toBe(200)
+      expect(res.headers.get('cache-control')).toBe('public, max-age=30')
+      expect(res.headers.get('set-cookie')).toBeNull()
+      const parsed = r.response.safeParse(await res.json())
+      expect(parsed.success, `${label(r)} ${JSON.stringify(parsed.error?.issues)}`).toBe(true)
+    }
+  })
+
+  it('every other route under /api (ALL included) except /api/auth/* and the public area requires a session', async () => {
     const extras = h.app.routes.filter(
       (r) =>
         r.path.startsWith('/api') &&
         !r.path.startsWith('/api/auth/') &&
+        !PUBLIC_ROUTES.some((t) => t.method === r.method && t.path === r.path) &&
         !ROUTES.some((t) => t.method === r.method && t.path === r.path),
     )
     expect(extras.length).toBeGreaterThan(0)
@@ -277,9 +357,9 @@ describe('route table completeness', () => {
   it('every route that takes an id (path or body) declares how foreign ids behave', () => {
     const probe: Fixture = {
       gear: newId(), exercise: newId(), plan: newId(), day: newId(), item: newId(), item2: newId(), group: newId(),
-      session: newId(), set: newId(), completedSession: newId(), export: {} as ExportData,
+      session: newId(), set: newId(), completedSession: newId(), shared: newId(), publishedPlan: newId(), export: {} as ExportData,
     }
-    const ids = ['gear', 'exercise', 'plan', 'day', 'item', 'item2', 'group', 'session', 'set'].map(
+    const ids = ['gear', 'exercise', 'plan', 'day', 'item', 'item2', 'group', 'session', 'set', 'shared', 'publishedPlan'].map(
       (k) => probe[k as keyof Fixture] as string,
     )
     for (const spec of ROUTES) {

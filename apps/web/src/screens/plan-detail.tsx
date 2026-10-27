@@ -1,8 +1,8 @@
-import { ChevronDown, ChevronLeft, ChevronUp, Link2, Plus, Unlink } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronUp, Link2, Plus, Share, Unlink } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Link, useParams } from 'react-router'
-import { SettingsLink, StickyBar } from '@/app/screen'
+import { SettingsLink, StickyBar, headerIconButton } from '@/app/screen'
 import {
   DayColorButton,
   DayColorPicker,
@@ -14,6 +14,7 @@ import { ExercisePicker } from '@/components/exercise-picker'
 import { ExerciseSheet } from '@/components/exercise-sheet'
 import { DayDot, Rail } from '@/components/plan-bits'
 import { PlanItemRow } from '@/components/plan-item-row'
+import { ShareSheet } from '@/components/share-sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { dayColorOf } from '@/lib/day-colors'
@@ -86,6 +87,7 @@ export function PlanDetailScreen() {
   const [colorDay, setColorDay] = useState<string | null>(null)
   const [linkDay, setLinkDay] = useState<string | null>(null)
   const setSuperset = useSetSuperset()
+  const [sharing, setSharing] = useState(false)
 
   if (plan.isPending) return <div className="p-4" aria-busy="true" />
   const tree = plan.data
@@ -114,7 +116,18 @@ export function PlanDetailScreen() {
             <ChevronLeft className="size-5" aria-hidden />
             Plans
           </Link>
-          <SettingsLink />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={`${headerIconButton} w-auto gap-1.5 px-4 text-[15px] font-medium`}
+              aria-haspopup="dialog"
+              onClick={() => setSharing(true)}
+            >
+              <Share className="size-[18px]" aria-hidden />
+              Share
+            </button>
+            <SettingsLink />
+          </div>
         </div>
       </StickyBar>
       <InlineName
@@ -300,6 +313,7 @@ export function PlanDetailScreen() {
         <Plus aria-hidden /> Add day
       </Button>
 
+      <ShareSheet tree={tree} open={sharing} onOpenChange={setSharing} />
       <ExercisePicker
         open={pickerDay !== null}
         onOpenChange={(open) => !open && setPickerDay(null)}

@@ -24,8 +24,9 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-import type { RuleInput } from '@workout/shared'
+import type { PlanSource, RuleInput } from '@workout/shared'
 import { user } from './auth.js'
+import { sharedPlan } from './community.js'
 
 const ts = (name: string) => timestamp(name, { withTimezone: true })
 
@@ -49,6 +50,8 @@ export const profile = pgTable(
     units: text('units').notNull().default('lb'),
     weightIncrement: numeric('weight_increment', { precision: 8, scale: 2 }).notNull(),
     defaultRule: jsonb('default_rule').$type<RuleInput>(),
+    // Public name for community plans; null until set.
+    displayName: text('display_name'),
     ...syncColumns(),
   },
   (t) => [
@@ -99,6 +102,10 @@ export const plan = pgTable(
     ...owner(),
     name: text('name').notNull(),
     archived: boolean('archived').notNull().default(false),
+    // Copies of community plans: where they came from (validated by the shared zod schema).
+    source: jsonb('source').$type<PlanSource>(),
+    // This plan's own listing, set by the first publish (server only; never imported).
+    sharedPlanId: uuid('shared_plan_id').references(() => sharedPlan.id, { onDelete: 'set null' }),
     ...syncColumns(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.id] })],

@@ -7,15 +7,23 @@ import { secureHeaders } from 'hono/secure-headers'
 import type { Auth } from './auth.js'
 import { mapDomainError } from './routes/http.js'
 import { registerRoutes } from './routes/index.js'
+import { createPublicApp, type PublicRateLimit } from './routes/public.js'
+import { rateLimitIpHeaders } from './auth.js'
 import { sanitizeError } from './logging.js'
 import type { Env } from './env.js'
 import { csrfGuard, requireUser, type AppEnv } from './middleware.js'
+import type { PublicService } from './service/community.js'
 import type { Service } from './service/index.js'
 
 export type AppDeps = {
   auth: Auth
-  env: Pick<Env, 'NODE_ENV' | 'BETTER_AUTH_URL' | 'TRUSTED_ORIGINS' | 'STATIC_DIR'>
+  env: Pick<Env, 'NODE_ENV' | 'BETTER_AUTH_URL' | 'TRUSTED_ORIGINS' | 'STATIC_DIR'> &
+    Partial<Pick<Env, 'CLIENT_IP_HEADER' | 'AUTH_RATE_LIMIT'>>
   getService: (userId: string) => Service
+  /** Session-less reads for the public community area. */
+  getPublic: () => PublicService
+  /** Overrides of the public area's per-IP limit (defaults come from env; tests turn it off). */
+  publicRateLimit?: Partial<PublicRateLimit>
   /** Resolves true when the database answers; defaults to always healthy (tests). */
   sqlHealth?: () => Promise<boolean>
 }
@@ -67,6 +75,15 @@ export function createApp(deps: AppDeps): Hono {
   v1.use('*', requireUser(auth))
   registerRoutes(v1, { getService: deps.getService })
   app.route(API_PREFIX, v1)
+
+  // Public community area: outside the /api/v1 session guard, GET only, never reads a session.
+  const rateLimit: PublicRateLimit = {
+    ipHeaders: rateLimitIpHeaders(env),
+    // AUTH_RATE_LIMIT=off is honoured outside production only.
+    enabled: env.NODE_ENV === 'production' || env.AUTH_RATE_LIMIT !== 'off',
+    ...deps.publicRateLimit,
+  }
+  app.route('/api/public', createPublicApp({ getPublic: deps.getPublic, rateLimit }))
 
   // Unknown API routes get a JSON 404, never the SPA.
   app.all('/api/*', (c) => c.json({ error: 'not_found' }, 404))

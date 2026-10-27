@@ -32,3 +32,12 @@ export function useAuth(): AuthState {
   if (!v) throw new Error('useAuth must be used inside AuthProvider')
   return v
 }
+
+/**
+ * True when the app talks to the account (signed in and past any upload/discard decision).
+ * Safe outside AuthProvider (tests, previews): no provider means guest.
+ */
+export function useSignedIn(): boolean {
+  const v = use(AuthContext)
+  return !!v && v.status === 'signed-in' && !v.pendingUpload && !v.confirmingDiscard
+}
