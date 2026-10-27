@@ -45,6 +45,9 @@ export const COMMUNITY = {
   queryMax: 100,
 } as const
 
+/** The author shown for a published listing whose owner deleted their account. */
+export const DELETED_AUTHOR = 'Deleted user'
+
 /** Title, description and level of a listing (publish request). Text is cleaned before the checks. */
 export const listingMetaSchema = z.object({
   title: publicText(COMMUNITY.titleMin, COMMUNITY.titleMax),

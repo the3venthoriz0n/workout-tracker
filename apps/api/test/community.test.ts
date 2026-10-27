@@ -4,7 +4,7 @@ import { newId, type ExportData } from '@workout/shared'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { PUBLIC_ROUTES } from '../src/routes/table.js'
 import { makeClient, type Client } from './fixture.js'
-import { cookieJar, setupApp, type Harness } from './helpers.js'
+import { GOOD_PASSWORD, cookieJar, setupApp, type Harness } from './helpers.js'
 
 let h: Harness
 beforeAll(async () => {
@@ -437,22 +437,25 @@ describe('the public area', () => {
       '/api/public/plans?q=trap', '/api/public/plans?sort=used&limit=1', '/api/public/plans?gear=none&days=1&level=advanced',
       `/api/public/plans/${newId()}`, '/api/public/plans?limit=999', `/api/public/plans/${id}/versions/99`, '/api/public/plans?cursor=bogus',
     ]
-    const keys = new Set<string>()
-    for (const path of paths) {
-      const res = await h.app.request(path)
-      const text = await res.text()
-      expect(res.status, path).toBeLessThan(500)
-      walk(JSON.parse(text), keys)
-      for (const secret of [email, me.user_id, plan, day, ...items, ...exerciseIds, gearId, s.id, 'SECRET', 'video.example']) {
-        expect(text, `${path} leaks ${secret}`).not.toContain(secret)
+    const walkAll = async (secrets: string[]) => {
+      const keys = new Set<string>()
+      for (const path of paths) {
+        const res = await h.app.request(path)
+        const text = await res.text()
+        expect(res.status, path).toBeLessThan(500)
+        walk(JSON.parse(text), keys)
+        for (const secret of [email, me.user_id, plan, day, ...items, ...exerciseIds, gearId, s.id, 'SECRET', 'video.example', ...secrets]) {
+          expect(text, `${path} leaks ${secret}`).not.toContain(secret)
+        }
+        expect(res.headers.get('set-cookie'), path).toBeNull()
+        if (res.status === 200) expect(res.headers.get('cache-control'), path).toBe('public, max-age=30')
+        // A cookie (even a valid session) changes nothing: the session is never read.
+        const withCookie = await h.app.request(path, { headers: { cookie: a.cookie } })
+        expect(await withCookie.text(), path).toBe(text)
       }
-      expect(res.headers.get('set-cookie'), path).toBeNull()
-      if (res.status === 200) expect(res.headers.get('cache-control'), path).toBe('public, max-age=30')
-      // A cookie (even a valid session) changes nothing: the session is never read.
-      const withCookie = await h.app.request(path, { headers: { cookie: a.cookie } })
-      expect(await withCookie.text(), path).toBe(text)
+      expect([...keys].filter((k) => !PUBLIC_KEYS.has(k)), 'keys outside the whitelist').toEqual([])
     }
-    expect([...keys].filter((k) => !PUBLIC_KEYS.has(k)), 'keys outside the whitelist').toEqual([])
+    await walkAll([])
     const detail = (await pub(`/plans/${id}`)).json as Detail
     expect(detail.snapshot.days[0]!.items[0]).toMatchObject({ exercise: 'Trap Bar Deadlift', gear: ['Trap bar'], angle: 'incline', superset: 'A' })
 
@@ -463,6 +466,12 @@ describe('the public area', () => {
       expect(await res.json()).toEqual({ error: 'not_found' })
     }
     expect((await pub(`/plans/${id}`)).status).toBe(200)
+
+    // The owner deletes the account: the listing stays, same whitelist, author "Deleted user",
+    // and the old public name appears nowhere.
+    expect((await a.call('DELETE', '/api/v1/account', { password: GOOD_PASSWORD })).status).toBe(204)
+    await walkAll(['Leak Check'])
+    expect(((await pub(`/plans/${id}`)).json as Detail).listing.author).toBe('Deleted user')
   })
 
   it('search: case-insensitive over title, description and exercise names; wildcards are literal; bounded input', async () => {

@@ -225,6 +225,29 @@ describe('community listings of another user (foreign: public)', () => {
   })
 })
 
+describe('account deletion (foreign: none) only ever removes the caller', () => {
+  it('E deleting their account leaves A and B byte-identical and signed in; E\'s cookie is then 401 everywhere', async () => {
+    const e = await signUpClient(h, 'erin@example.com')
+    const fe = await buildFixture(e, { active: true })
+    // E voted on and adopted A's listing.
+    expect((await e.call('PUT', `/api/v1/shared-plans/${fa.shared}/vote`)).status).toBe(200)
+    expect((await e.call('POST', `/api/v1/shared-plans/${fa.shared}/adopt`, {})).status).toBe(201)
+    const beforeA = await snapshot(a)
+    const beforeB = await snapshot(b)
+    const wrong = await e.call('DELETE', '/api/v1/account', { password: 'not the password' })
+    expect(wrong.status).toBe(403)
+    expect(wrong.text).toBe('{"error":"invalid_password"}')
+    const res = await e.call('DELETE', '/api/v1/account', { password: fe.password })
+    expect(res.status, res.text).toBe(204)
+    expect(await snapshot(a)).toBe(beforeA)
+    expect(await snapshot(b)).toBe(beforeB)
+    for (const spec of ROUTES) {
+      const r = await e.call(spec.method, fill(spec, fe), spec.body?.(fe))
+      expect(r.status, label(spec)).toBe(401)
+    }
+  })
+})
+
 describe('authentication on every route', () => {
   it('no cookie, a tampered cookie, a garbage cookie and a signed-out cookie are all 401', async () => {
     const d = await signUpClient(h, 'dave@example.com')
@@ -357,7 +380,7 @@ describe('route table completeness', () => {
   it('every route that takes an id (path or body) declares how foreign ids behave', () => {
     const probe: Fixture = {
       gear: newId(), exercise: newId(), plan: newId(), day: newId(), item: newId(), item2: newId(), group: newId(),
-      session: newId(), set: newId(), completedSession: newId(), shared: newId(), publishedPlan: newId(), export: {} as ExportData,
+      session: newId(), set: newId(), completedSession: newId(), shared: newId(), publishedPlan: newId(), export: {} as ExportData, password: 'not-an-id',
     }
     const ids = ['gear', 'exercise', 'plan', 'day', 'item', 'item2', 'group', 'session', 'set', 'shared', 'publishedPlan'].map(
       (k) => probe[k as keyof Fixture] as string,

@@ -36,6 +36,13 @@
       "when": 1793045115754,
       "tag": "0004_backfill_search",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793124792307,
+      "tag": "0005_black_inertia",
+      "breakpoints": true
     }
   ]
 }

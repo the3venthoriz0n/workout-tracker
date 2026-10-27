@@ -1,3 +1,4 @@
+import { registerAccount } from './account.js'
 import { registerCommunity } from './community.js'
 import { registerExercises } from './exercises.js'
 import { registerGear } from './gear.js'
@@ -20,4 +21,5 @@ export function registerRoutes(v1: V1, deps: RouteDeps) {
   registerSessions(v1, deps)
   registerTransfer(v1, deps)
   registerCommunity(v1, deps)
+  registerAccount(v1, deps)
 }

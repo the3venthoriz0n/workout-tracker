@@ -73,7 +73,7 @@ export function createApp(deps: AppDeps): Hono {
 
   const v1 = new Hono<AppEnv>()
   v1.use('*', requireUser(auth))
-  registerRoutes(v1, { getService: deps.getService })
+  registerRoutes(v1, { getService: deps.getService, auth })
   app.route(API_PREFIX, v1)
 
   // Public community area: outside the /api/v1 session guard, GET only, never reads a session.
