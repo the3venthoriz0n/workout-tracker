@@ -13,7 +13,7 @@ flowchart LR
   subgraph host["Self-hosted staging host (compose)"]
     app["Hono app: SPA, /api/v1, /api/public"] --> db[("Postgres")]
   end
-  app -- "verification and reset email (never awaited)" --> mailer["Mailer: Resend (console in dev)"]
+  app -- "set-up and reset email (never awaited)" --> mailer["Mailer: Resend (console in dev)"]
   mailer --> resend["Resend"]
   main["push to main"] --> gha["GitHub Actions"]
   gha -- "publishes :staging" --> ghcr["GHCR image"]
@@ -56,9 +56,9 @@ flowchart TD
   contract -.-> service
 ```
 
-## 4. Sign-up, verification, sign-in and guest data upload
+## 4. Sign-up, set-up link, sign-in and guest data upload
 
-Sign-up creates no session and uploads nothing: guest data stays on the device until the first successful sign-in. A new account is imported once and the local database is cleared only after the server confirms; an account that already has data replaces the guest data after confirmation. The same screens handle "forgot password"; a reset (or the set-up link mailed for an unverified account) verifies the address and revokes every session.
+Sign-up takes the email only, creates no session and uploads nothing: the password is chosen through the mailed set-up link, which confirms the address, and guest data stays on the device until the first successful sign-in. A new account is imported once and the local database is cleared only after the server confirms; an account that already has data replaces the guest data after confirmation. The same screens handle "forgot password"; a reset (or the set-up link mailed for an unverified account) verifies the address and revokes every session.
 
 ```mermaid
 sequenceDiagram
@@ -67,16 +67,16 @@ sequenceDiagram
   participant A as API
   participant D as Postgres
   participant M as Mailer (Resend, console in dev)
-  Note over U,M: Sign up and verify
-  U->>W: Create account
-  W->>A: POST /api/auth/sign-up/email
+  Note over U,M: Sign up, then choose the password
+  U->>W: Create account (email only)
+  W->>A: POST /api/auth/sign-up/email (random throwaway password)
   A->>D: Create unverified user (no session)
-  A-->>M: Verification link (not awaited)
+  A-->>M: Set-up link /reset-password?setup=1 (not awaited)
   A-->>W: Uniform 200 (same for known addresses)
   W->>U: Check your email (guest data untouched)
-  U->>A: Open link (any device)
-  A->>D: Mark email verified (no session)
-  A-->>U: Redirect to /verified
+  U->>W: Open link (any device), choose password
+  W->>A: POST /api/auth/reset-password
+  A->>D: Set password, verify email, delete other links, revoke sessions
   Note over U,M: Forgot password
   U->>W: Forgot password
   W->>A: POST /api/auth/request-password-reset
