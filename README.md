@@ -25,6 +25,10 @@ There is no email verification or password reset yet (both need an email provide
 
 State-changing API requests must come from a trusted origin: the origin of `BETTER_AUTH_URL`, plus `TRUSTED_ORIGINS` (comma separated) if set. In development, `localhost` and private-network addresses on the Vite port are also accepted so a phone on the same Wi-Fi can sign up.
 
+### Community plans
+
+The Plans tab has a "Community" view with plans other people have shared. Anyone can browse, search and filter the public list without an account. Sign in to publish one of your plans (you pick a public name first; only that name is shown), to upvote, and to have your copies counted. "Use this plan" gives you your own copy, as a guest too. A copy is independent: editing it never changes the original, and the sharer's later edits or unpublishing never change your copy.
+
 ### Testing on a phone (same Wi-Fi)
 
 The dev web port (5173) listens on all interfaces; Postgres and the API stay on loopback, and the Vite dev server only serves the web app's own files. Set `DEV_BIND=127.0.0.1` to keep it loopback-only, or `DEV_ALLOWED_HOSTS=name.local` to also allow opening it by machine name. None of this applies to production (`deploy/` publishes only ports 80/443, and CI enforces that).
