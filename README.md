@@ -19,9 +19,15 @@ The first run creates `.env` with random local-only secrets (database password, 
 
 ### Accounts and sync
 
-The app works as a guest with all data on the device. Signing up (email + password, 10-128 characters) creates an account, uploads the guest data once, and from then on the data lives in Postgres behind the REST API (`/api/v1`) and is the same on every device you sign in on. While signed in, set logging keeps working offline: set edits are queued on the device and replayed when the connection returns (last write wins). Starting or finishing a workout needs a connection. Signing out returns to a fresh guest database; the account's data stays on the server.
+The app works as a guest with all data on the device. Signing up (email + password, 10-128 characters) creates an account and mails a verification link; you can sign in only after confirming the address. Your guest data stays untouched on the device until the first successful sign-in, which uploads it once. From then on the data lives in Postgres behind the REST API (`/api/v1`) and is the same on every device you sign in on. While signed in, set logging keeps working offline: set edits are queued on the device and replayed when the connection returns (last write wins). Starting or finishing a workout needs a connection. Signing out returns to a fresh guest database; the account's data stays on the server.
 
-There is no email verification or password reset yet (both need an email provider), so there is no account recovery.
+A forgotten password is reset by email ("Forgot password?"). Resetting also confirms the address and signs out every session. Mail goes through Resend in production and staging (`RESEND_API_KEY`, `MAIL_FROM`); the API refuses to start in production without both.
+
+### Testing email flows locally
+
+`just dev` needs no mail account: the API prints every verification and reset link in its log, on lines starting with `[mail]` (development only; follow them with `just logs dev`). `just preview` runs in production mode with placeholder mail settings, so emails cannot be sent there and new accounts cannot verify; to try the sign-up and reset flows, use `just dev`.
+
+Dev accounts created before email verification existed are unverified and cannot sign in. Either wipe them (`just psql`, then `truncate "user" cascade;`) or follow the verification link logged when you request one again (sign up with the address, or use "Forgot password?").
 
 State-changing API requests must come from a trusted origin: the origin of `BETTER_AUTH_URL`, plus `TRUSTED_ORIGINS` (comma separated) if set. In development, `localhost` and private-network addresses on the Vite port are also accepted so a phone on the same Wi-Fi can sign up.
 
@@ -43,7 +49,7 @@ apps/
   web/            React + Vite SPA (Capacitor iOS/Android later)
 packages/
   shared/         zod schemas, types and logic shared by api and web
-deploy/           production compose stack, Caddyfile, deploy script (runs on the server)
+deploy/           production compose stack, Caddyfile, deploy script (runs on the server); self-hosted/ staging stack
 infra/terraform/  DigitalOcean Droplet, firewall and reserved IP
 docs/             spec, architecture diagrams (docs/architecture.md), plans, release checklist
 .github/          CI, release/deploy, CodeQL, Dependabot
@@ -62,7 +68,7 @@ git tag v0.1.0 && git push origin v0.1.0
 
 ## Staging (self-hosted)
 
-Every push to `main` publishes `ghcr.io/<owner>/<repo>:staging` (`.github/workflows/staging.yml`; no deploy step, no secrets beyond `GITHUB_TOKEN`). A self-hosted Docker host that already runs a Cloudflare Tunnel pulls it on a schedule with `deploy/self-hosted/update.sh`. The stack there (`deploy/self-hosted/compose.yaml`) is the app and Postgres only, publishes no ports, joins the tunnel's existing Docker network, and limits sign-up to `SIGNUP_ALLOWLIST`. Setup: [deploy/self-hosted/README.md](deploy/self-hosted/README.md). Known limits of the invite list: it checks an address, not a person (anyone who knows a listed address can register it before its owner does until email verification lands in M2b), the sign-up response can reveal whether a listed address is already registered, and other containers on the shared tunnel network can bypass per-IP rate limits, so only put trusted containers on that network. Site-specific values (domain, network name, secrets) live only in the host's `.env`; `just public-check` fails if personal info slips into a tracked file (it fails closed outside a work tree). Set `PUBLIC_SAFE_DENYLIST=/path/to/file` (untracked, one case-insensitive term per line, never printed) to also scan for terms only you know.
+Every push to `main` publishes `ghcr.io/<owner>/<repo>:staging` (`.github/workflows/staging.yml`; no deploy step, no secrets beyond `GITHUB_TOKEN`). A self-hosted Docker host that already runs a Cloudflare Tunnel pulls it on a schedule with `deploy/self-hosted/update.sh`. The stack there (`deploy/self-hosted/compose.yaml`) is the app and Postgres only, publishes no ports, joins the tunnel's existing Docker network, and can limit sign-up to `SIGNUP_ALLOWLIST` (open when empty, the default). Setup: [deploy/self-hosted/README.md](deploy/self-hosted/README.md). The allowlist is optional: when `SIGNUP_ALLOWLIST` is empty, sign-up is open (the default). Known limits of the invite list: it checks an address, not a person (email verification narrows this: a sign-up for an existing unverified address mails its owner a "choose your password" link, but the first verification mail from an attacker's sign-up still reaches the victim), and other containers on the shared tunnel network can bypass per-IP rate limits, so only put trusted containers on that network. Site-specific values (domain, network name, secrets) live only in the host's `.env`; `just public-check` fails if personal info slips into a tracked file (it fails closed outside a work tree). Set `PUBLIC_SAFE_DENYLIST=/path/to/file` (untracked, one case-insensitive term per line, never printed) to also scan for terms only you know.
 
 ## First-time infrastructure setup
 
