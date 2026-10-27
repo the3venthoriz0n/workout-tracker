@@ -12,6 +12,8 @@ export type AuthState = {
   confirmingDiscard: boolean
   /** Set edits queued while offline that have not reached the server (0 in guest mode). */
   pendingChanges: number
+  /** Address a verification mail was just sent to (guest, no session yet); null otherwise. */
+  verifyEmail: string | null
   busy: boolean
   error: AuthErrorKind | null
   signUp(email: string, password: string): Promise<void>
@@ -23,6 +25,11 @@ export type AuthState = {
   cancelDiscard(): Promise<void>
   retrySession(): void
   dismissError(): void
+  clearVerifyEmail(): void
+  /** Plain pass-throughs: they do not touch the session state. */
+  resendVerification(email: string): Promise<void>
+  requestPasswordReset(email: string): Promise<void>
+  resetPassword(token: string, newPassword: string): Promise<void>
 }
 
 export const AuthContext = createContext<AuthState | null>(null)

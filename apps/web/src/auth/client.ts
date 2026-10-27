@@ -8,6 +8,8 @@ export type AuthErrorKind =
   | 'server'
   | 'check_failed'
   | 'unsynced_changes'
+  | 'email_not_verified'
+  | 'invalid_token'
 
 // Typed, body-free error: the server's response text is never kept or shown.
 export class AuthError extends Error {
@@ -17,6 +19,8 @@ export class AuthError extends Error {
   }
 }
 
+export const toKind = (e: unknown): AuthErrorKind => (e instanceof AuthError ? e.kind : 'server')
+
 export type SessionUser = { userId: string; email: string }
 
 export interface AuthClient {
@@ -24,12 +28,21 @@ export interface AuthClient {
   signIn(email: string, password: string): Promise<SessionUser>
   signOut(): Promise<void>
   session(): Promise<SessionUser | null>
+  /** Same answer for known and unknown addresses; the server never says which. */
+  resendVerification(email: string): Promise<void>
+  requestPasswordReset(email: string): Promise<void>
+  resetPassword(token: string, newPassword: string): Promise<void>
 }
 
 type Opts = { fetch?: typeof fetch; baseUrl?: string }
 
-function kindForStatus(status: number, signUp: boolean): AuthErrorKind {
+type Mode = 'sign-in' | 'sign-up' | 'reset'
+
+function kindForStatus(status: number, mode: Mode, code: string): AuthErrorKind {
+  const signUp = mode === 'sign-up'
   if (status === 429) return 'rate_limited'
+  if (mode === 'sign-in' && status === 403 && code === 'EMAIL_NOT_VERIFIED') return 'email_not_verified'
+  if (mode === 'reset' && status === 400 && code === 'INVALID_TOKEN') return 'invalid_token'
   if (signUp && status === 422) return 'email_taken'
   if (signUp && status === 403) return 'signup_closed'
   if (status === 401) return 'invalid_credentials'
@@ -48,13 +61,18 @@ export function createAuthClient(opts: Opts = {}): AuthClient {
       throw new AuthError('offline')
     }
   }
-  async function post(path: string, body: unknown, signUp = false): Promise<unknown> {
+  async function post(path: string, body: unknown, mode: Mode = 'sign-in'): Promise<unknown> {
     const res = await request(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    if (!res.ok) throw new AuthError(kindForStatus(res.status, signUp))
+    if (!res.ok) {
+      // Only the machine-readable code is read; message text is never kept.
+      const data = await res.json().catch(() => null)
+      const code = (data as { code?: unknown } | null)?.code
+      throw new AuthError(kindForStatus(res.status, mode, typeof code === 'string' ? code : ''))
+    }
     return res.json().catch(() => ({}))
   }
   const userOf = (data: unknown, email: string): SessionUser => {
@@ -68,13 +86,22 @@ export function createAuthClient(opts: Opts = {}): AuthClient {
   return {
     // Better Auth requires a display name; the app has none, so the email is used.
     async signUp(email, password) {
-      return userOf(await post('/sign-up/email', { email, password, name: email }, true), email)
+      return userOf(await post('/sign-up/email', { email, password, name: email }, 'sign-up'), email)
     },
     async signIn(email, password) {
       return userOf(await post('/sign-in/email', { email, password }), email)
     },
     async signOut() {
       await post('/sign-out', {})
+    },
+    async resendVerification(email) {
+      await post('/send-verification-email', { email })
+    },
+    async requestPasswordReset(email) {
+      await post('/request-password-reset', { email })
+    },
+    async resetPassword(token, newPassword) {
+      await post('/reset-password', { token, newPassword }, 'reset')
     },
     async session() {
       const res = await request('/get-session', { method: 'GET' })

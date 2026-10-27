@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { SessionPrompt } from '@/components/session-prompt'
 import { isOfflineRepo, type OfflineRepo } from '@/repo/offline'
 import { RepoProvider } from '@/repo/provider'
-import { AuthError, type AuthClient, type AuthErrorKind } from './client'
+import { AuthError, toKind, type AuthClient, type AuthErrorKind } from './client'
 import { AuthContext, type AuthState } from './context'
 import {
   cancelDiscard as cancelDiscardFlow,
@@ -64,8 +64,6 @@ function readHint(): { present: boolean; id?: string; email?: string; phase?: Hi
   }
 }
 
-const toKind = (e: unknown): AuthErrorKind => (e instanceof AuthError ? e.kind : 'server')
-
 export function AuthProvider({
   auth,
   local,
@@ -82,6 +80,7 @@ export function AuthProvider({
   const [s, setS] = useState<S>({ kind: 'loading' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<AuthErrorKind | null>(null)
+  const [verifyEmail, setVerifyEmail] = useState<string | null>(null)
   const busyRef = useRef(false)
   const sRef = useRef(s)
   sRef.current = s
@@ -131,6 +130,7 @@ export function AuthProvider({
   const go = useCallback(
     (next: S) => {
       queryClient.clear()
+      setVerifyEmail(null)
       if (next.kind === 'signed-in') setHint({ id: accountRef.current, email: next.email, phase: next.phase === 'ready' ? undefined : next.phase })
       else if (next.kind === 'guest') setHint(null)
       setS(next)
@@ -229,7 +229,7 @@ export function AuthProvider({
 
   const applyOutcome = useCallback(
     (o: FlowOutcome, email: string) => {
-      const phase: Phase = o === 'signed-in' ? 'ready' : o === 'confirm-discard' ? 'confirm-discard' : 'pending-upload'
+      const phase: Phase = o === 'signed-in' || o === 'verify-email' ? 'ready' : o === 'confirm-discard' ? 'confirm-discard' : 'pending-upload'
       go({ kind: 'signed-in', email, phase })
     },
     [go],
@@ -262,10 +262,16 @@ export function AuthProvider({
     pendingUpload: s.kind === 'signed-in' && s.phase === 'pending-upload',
     confirmingDiscard: s.kind === 'signed-in' && s.phase === 'confirm-discard',
     pendingChanges: s.kind === 'signed-in' || s.kind === 'expired' ? pendingChanges : 0,
+    verifyEmail,
     busy,
     error,
     signUp: (email, password) =>
-      run(async () => applyOutcome(await signUpFlow(deps(), email, password), email)),
+      run(async () => {
+        // No session comes back, so the plain client is used: nothing about an account is learned or switched.
+        const o = await signUpFlow({ ...deps(), auth }, email, password)
+        if (o === 'verify-email') setVerifyEmail(email)
+        else applyOutcome(o, email)
+      }),
     signIn: (email, password) =>
       run(async () => {
         if (sRef.current.kind === 'expired') {
@@ -331,6 +337,10 @@ export function AuthProvider({
       setAttempt((n) => n + 1)
     },
     dismissError: () => setError(null),
+    clearVerifyEmail: () => setVerifyEmail(null),
+    resendVerification: (email) => auth.resendVerification(email),
+    requestPasswordReset: (email) => auth.requestPasswordReset(email),
+    resetPassword: (token, pw) => auth.resetPassword(token, pw),
   }
 
   const apiActive = s.kind === 'signed-in' && s.phase === 'ready'

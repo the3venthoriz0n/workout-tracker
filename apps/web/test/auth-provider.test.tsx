@@ -26,6 +26,9 @@ function makeAuth(session: AuthClient['session'], over: Partial<AuthClient> = {}
     signUp: vi.fn(async () => ({ userId: 'u', email: 'a@example.com' })),
     signIn: vi.fn(async () => ({ userId: 'u', email: 'a@example.com' })),
     signOut: vi.fn(async () => {}),
+    resendVerification: vi.fn(async () => {}),
+    requestPasswordReset: vi.fn(async () => {}),
+    resetPassword: vi.fn(async () => {}),
     session,
     ...over,
   }
@@ -38,6 +41,7 @@ function Probe() {
   return (
     <div>
       <p data-testid="s">{`${a.status}|${repo.tag}|${a.pendingUpload}|${a.confirmingDiscard}|${a.error ?? ''}|${q.data ?? ''}`}</p>
+      <p data-testid="v">{a.verifyEmail ?? ''}</p>
       <button onClick={() => void a.signUp('a@example.com', 'longenough1')}>up</button>
       <button onClick={() => void a.signIn('a@example.com', 'longenough1')}>in</button>
       <button onClick={() => void a.signOut()}>out</button>
@@ -81,13 +85,31 @@ test('an existing session on an empty account keeps local data and offers upload
   await waitFor(() => expect(state()).toMatch(/^signed-in\|local\|true/))
 })
 
-test('sign-up success switches to the API repo and clears the query cache', async () => {
+test('sign-up stays a guest: no session, no upload, no reset, verifyEmail is set', async () => {
+  const user = userEvent.setup()
+  const api = makeApi({ getProfile: vi.fn(async () => { throw new ProfileNotFoundError() }) })
+  const auth = makeAuth(async () => null)
+  const { local } = setup(auth, makeLocal(), api)
+  await waitFor(() => expect(state()).toMatch(/\|local$/))
+  await user.click(screen.getByText('up'))
+  await waitFor(() => expect(screen.getByTestId('v').textContent).toBe('a@example.com'))
+  expect(state()).toMatch(/^guest\|local\|false\|false\|\|local$/)
+  expect(auth.signUp).toHaveBeenCalledTimes(1)
+  expect(local.reset).not.toHaveBeenCalled()
+  expect(api.importAll).not.toHaveBeenCalled()
+  expect(api.getProfile).not.toHaveBeenCalled()
+})
+
+test('sign-in after verifying uploads the guest data and switches to the API repo', async () => {
   const user = userEvent.setup()
   const api = makeApi({ getProfile: vi.fn(async () => { throw new ProfileNotFoundError() }) })
   const { qc, local } = setup(makeAuth(async () => null), makeLocal(), api)
   await waitFor(() => expect(state()).toMatch(/\|local$/))
   await user.click(screen.getByText('up'))
+  await waitFor(() => expect(screen.getByTestId('v').textContent).toBe('a@example.com'))
+  await user.click(screen.getByText('in'))
   await waitFor(() => expect(state()).toMatch(/^signed-in\|api\|false\|false\|\|api$/))
+  expect(screen.getByTestId('v').textContent).toBe('')
   expect(local.reset).toHaveBeenCalled()
   expect(api.importAll).toHaveBeenCalledTimes(1)
   expect(qc.getQueryData(['probe'])).toBe('api')
@@ -96,10 +118,10 @@ test('sign-up success switches to the API repo and clears the query cache', asyn
 test('upload failure leaves local data, shows pending upload, and can retry', async () => {
   const user = userEvent.setup()
   const importAll = vi.fn().mockRejectedValueOnce(new OfflineError()).mockResolvedValue(undefined)
-  const api = makeApi({ importAll })
+  const api = makeApi({ importAll, getProfile: vi.fn(async () => { throw new ProfileNotFoundError() }) })
   const { local } = setup(makeAuth(async () => null), makeLocal(), api)
   await waitFor(() => expect(state()).toMatch(/^guest/))
-  await user.click(screen.getByText('up'))
+  await user.click(screen.getByText('in'))
   await waitFor(() => expect(state()).toMatch(/^signed-in\|local\|true/))
   expect(local.reset).not.toHaveBeenCalled()
   await user.click(screen.getByText('retry'))

@@ -9,8 +9,9 @@ export type FlowDeps = { auth: AuthClient; local: LocalSide; api: ApiSide }
 /**
  * signed-in: the API repo is now authoritative. confirm-discard: signed in, account has data,
  * waiting for the user to decide. upload-failed: signed in, guest data kept, retry available.
+ * verify-email: the account exists but has no session until the email is confirmed.
  */
-export type FlowOutcome = 'signed-in' | 'confirm-discard' | 'upload-failed'
+export type FlowOutcome = 'signed-in' | 'confirm-discard' | 'upload-failed' | 'verify-email'
 
 // Upload guest data; clear it locally only after the server confirmed.
 async function upload({ local, api }: FlowDeps): Promise<FlowOutcome> {
@@ -24,8 +25,9 @@ async function upload({ local, api }: FlowDeps): Promise<FlowOutcome> {
 }
 
 export async function signUpFlow(deps: FlowDeps, email: string, password: string): Promise<FlowOutcome> {
+  // No session yet: guest data is neither uploaded nor cleared. The first successful sign-in does that.
   await deps.auth.signUp(email, password)
-  return upload(deps)
+  return 'verify-email'
 }
 
 export async function signInFlow(deps: FlowDeps, email: string, password: string): Promise<FlowOutcome> {

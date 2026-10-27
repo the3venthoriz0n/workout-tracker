@@ -43,6 +43,9 @@ function makeAuth(session: AuthClient['session'], over: Partial<AuthClient> = {}
     signUp: vi.fn(async () => ({ userId: 'a', email: 'a@example.com' })),
     signIn: vi.fn(async () => ({ userId: 'a', email: 'a@example.com' })),
     signOut: vi.fn(async () => {}),
+    resendVerification: vi.fn(async () => {}),
+    requestPasswordReset: vi.fn(async () => {}),
+    resetPassword: vi.fn(async () => {}),
     session,
     ...over,
   }

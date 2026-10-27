@@ -90,6 +90,7 @@ function authState(signedIn: boolean): AuthState {
     pendingUpload: false,
     confirmingDiscard: false,
     pendingChanges: 0,
+    verifyEmail: null,
     busy: false,
     error: null,
     signUp: noop,
@@ -100,6 +101,10 @@ function authState(signedIn: boolean): AuthState {
     cancelDiscard: noop,
     retrySession: () => undefined,
     dismissError: () => undefined,
+    clearVerifyEmail: () => undefined,
+    resendVerification: noop,
+    requestPasswordReset: noop,
+    resetPassword: noop,
   }
 }
 

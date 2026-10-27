@@ -7,8 +7,10 @@ import { LibraryScreen } from '@/screens/library'
 import { PlanDetailScreen } from '@/screens/plan-detail'
 import { PlansScreen } from '@/screens/plans'
 import { ProgressionScreen } from '@/screens/progression'
+import { ResetPasswordScreen } from '@/screens/reset-password'
 import { SettingsScreen } from '@/screens/settings'
 import { TodayScreen } from '@/screens/today'
+import { VerifiedScreen } from '@/screens/verified'
 import { Layout } from './layout'
 
 export const routes: RouteObject[] = [
@@ -25,6 +27,8 @@ export const routes: RouteObject[] = [
       { path: '/history', element: <HistoryScreen /> },
       { path: '/history/:id', element: <HistoryDetailScreen /> },
       { path: '/settings', element: <SettingsScreen /> },
+      { path: '/verified', element: <VerifiedScreen /> },
+      { path: '/reset-password', element: <ResetPasswordScreen /> },
     ],
   },
 ]

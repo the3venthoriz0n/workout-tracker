@@ -70,3 +70,49 @@ test('session returns user or null, and throws offline/server', async () => {
   const srv = await createAuthClient({ fetch: stub(json(503, {})) }).session().catch((e: unknown) => e)
   expect((srv as AuthError).kind).toBe('server')
 })
+
+test('sign-in 403 EMAIL_NOT_VERIFIED maps to email_not_verified', async () => {
+  const body = { code: 'EMAIL_NOT_VERIFIED', message: 'SECRET-DETAIL' }
+  const err = await createAuthClient({ fetch: stub(json(403, body)) }).signIn('a@example.com', 'longenough1').catch((e: unknown) => e)
+  expect((err as AuthError).kind).toBe('email_not_verified')
+  expect(String((err as AuthError).message)).not.toContain('SECRET')
+})
+
+test('resendVerification, requestPasswordReset and resetPassword post JSON bodies', async () => {
+  const f = stub(json(200, { status: true }))
+  const c = createAuthClient({ fetch: f })
+  await c.resendVerification('a@example.com')
+  await c.requestPasswordReset('a@example.com')
+  await c.resetPassword('tok', 'newlongpass1')
+  expect(f.mock.calls.map((x) => x[0])).toEqual([
+    '/api/auth/send-verification-email',
+    '/api/auth/request-password-reset',
+    '/api/auth/reset-password',
+  ])
+  expect(JSON.parse(f.mock.calls[0]![1]!.body as string)).toEqual({ email: 'a@example.com' })
+  expect(JSON.parse(f.mock.calls[1]![1]!.body as string)).toEqual({ email: 'a@example.com' })
+  expect(JSON.parse(f.mock.calls[2]![1]!.body as string)).toEqual({ token: 'tok', newPassword: 'newlongpass1' })
+  for (const [, init] of f.mock.calls) {
+    expect(init?.method).toBe('POST')
+    expect(init?.credentials).toBe('include')
+    expect(new Headers(init?.headers).get('content-type')).toBe('application/json')
+  }
+})
+
+test.each([
+  [429, {}, 'rate_limited'],
+  [400, { code: 'INVALID_TOKEN', message: 'SECRET' }, 'invalid_token'],
+  [400, { code: 'PASSWORD_TOO_SHORT' }, 'invalid_input'],
+  [500, {}, 'server'],
+])('resetPassword %i maps to %s', async (status, body, kind) => {
+  const err = await createAuthClient({ fetch: stub(json(status, body)) }).resetPassword('t', 'newlongpass1').catch((e: unknown) => e)
+  expect((err as AuthError).kind).toBe(kind)
+  expect(String((err as AuthError).message)).not.toContain('SECRET')
+})
+
+test('email requests map 429 and network failure', async () => {
+  const e1 = await createAuthClient({ fetch: stub(json(429, {})) }).requestPasswordReset('a@example.com').catch((e: unknown) => e)
+  expect((e1 as AuthError).kind).toBe('rate_limited')
+  const e2 = await createAuthClient({ fetch: stub(new TypeError('x')) }).resendVerification('a@example.com').catch((e: unknown) => e)
+  expect((e2 as AuthError).kind).toBe('offline')
+})

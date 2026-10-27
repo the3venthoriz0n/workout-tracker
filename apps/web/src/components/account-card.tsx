@@ -8,12 +8,16 @@ import { notifyError } from '@/lib/notify'
 import { confirmBox, segmentedItem, segmentedTrack } from '@/lib/styles'
 import { useRepo } from '@/repo/provider'
 import { CredentialsForm } from './credentials-form'
+import { ForgotPasswordForm } from './forgot-password-form'
+import { ResendEmail } from './resend-email'
 
 export function AccountCard() {
   const a = useAuth()
   const repo = useRepo()
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in')
   const [confirmingSignOut, setConfirmingSignOut] = useState(false)
+  const [forgot, setForgot] = useState(false)
+  const [lastEmail, setLastEmail] = useState('')
 
   const exportGuest = () => downloadExport(repo).catch((err) => notifyError(err, 'Export failed'))
 
@@ -104,6 +108,27 @@ export function AccountCard() {
         )}
       </div>
     )
+  } else if (a.verifyEmail) {
+    body = (
+      <div className="flex flex-col gap-3">
+        <p className="font-semibold">Check your email</p>
+        <p className="text-sm">
+          We sent a link to <strong className="break-all">{a.verifyEmail}</strong>. Open it to confirm your address, then
+          sign in. Your guest data stays on this device until you do.
+        </p>
+        <ResendEmail email={a.verifyEmail} />
+        <Button variant="outline" className="min-h-11" onClick={() => a.clearVerifyEmail()}>
+          Use a different email
+        </Button>
+      </div>
+    )
+  } else if (forgot) {
+    body = (
+      <div className="flex flex-col gap-3">
+        <p className="text-muted-foreground text-sm">Enter your email and we will send a link to choose a new password.</p>
+        <ForgotPasswordForm onBack={() => setForgot(false)} />
+      </div>
+    )
   } else {
     body = (
       <div className="flex flex-col gap-3">
@@ -134,8 +159,17 @@ export function AccountCard() {
           busyLabel={mode === 'sign-in' ? 'Signing in...' : 'Creating account...'}
           busy={a.busy}
           error={a.error}
-          onSubmit={(e, p) => void (mode === 'sign-in' ? a.signIn(e, p) : a.signUp(e, p))}
+          onSubmit={(e, p) => {
+            setLastEmail(e)
+            void (mode === 'sign-in' ? a.signIn(e, p) : a.signUp(e, p))
+          }}
         />
+        {mode === 'sign-in' && a.error === 'email_not_verified' && lastEmail && <ResendEmail email={lastEmail} />}
+        {mode === 'sign-in' && (
+          <Button type="button" variant="ghost" className="min-h-11" onClick={() => { a.dismissError(); setForgot(true) }}>
+            Forgot password?
+          </Button>
+        )}
       </div>
     )
   }
