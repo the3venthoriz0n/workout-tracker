@@ -94,8 +94,9 @@ export function createAuthClient(opts: Opts = {}): AuthClient {
     async signOut() {
       await post('/sign-out', {})
     },
+    // For an unverified account the reset mail is the set-up link: choosing a password verifies the email.
     async resendVerification(email) {
-      await post('/send-verification-email', { email })
+      await post('/request-password-reset', { email })
     },
     async requestPasswordReset(email) {
       await post('/request-password-reset', { email })

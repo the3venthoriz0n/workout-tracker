@@ -113,8 +113,8 @@ export function AccountCard() {
       <div className="flex flex-col gap-3">
         <p className="font-semibold">Check your email</p>
         <p className="text-sm">
-          We sent a link to <strong className="break-all">{a.verifyEmail}</strong>. Open it to confirm your address, then
-          sign in. Your guest data stays on this device until you do.
+          We sent you a link to finish setting up your account at <strong className="break-all">{a.verifyEmail}</strong>. Open it
+          and choose a password. Your guest data stays on this device until you sign in.
         </p>
         <ResendEmail email={a.verifyEmail} />
         <Button variant="outline" className="min-h-11" onClick={() => a.clearVerifyEmail()}>

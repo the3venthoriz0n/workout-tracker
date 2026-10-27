@@ -85,6 +85,7 @@ test('sign-up shows check your email, keeps guest data, and does not upload', as
   await fill(user, 'a@example.com', 'longenough1')
   await user.click(screen.getByRole('button', { name: 'Create account' }))
   expect(await screen.findByText('Check your email')).toBeTruthy()
+  expect(screen.getByText(/finish setting up your account/i)).toBeTruthy()
   expect(screen.getByText('a@example.com')).toBeTruthy()
   expect(auth.signUp).toHaveBeenCalledTimes(1)
   expect(importAll).not.toHaveBeenCalled()

@@ -23,6 +23,6 @@ export function validateCredentials(email: string, password: string): string | n
 }
 
 export const RESET_SENT_TEXT = 'If that address has an account, we sent a link.'
-export const RESEND_SENT_TEXT = 'If that address is waiting to be confirmed, we sent a new link.'
+export const RESEND_SENT_TEXT = 'If that address is waiting to be set up, we sent a new link.'
 export const EMAIL_INVALID_TEXT = 'Enter a valid email address.'
 export const isEmail = (email: string) => EMAIL_RE.test(email.trim())

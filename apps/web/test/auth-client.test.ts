@@ -85,7 +85,7 @@ test('resendVerification, requestPasswordReset and resetPassword post JSON bodie
   await c.requestPasswordReset('a@example.com')
   await c.resetPassword('tok', 'newlongpass1')
   expect(f.mock.calls.map((x) => x[0])).toEqual([
-    '/api/auth/send-verification-email',
+    '/api/auth/request-password-reset',
     '/api/auth/request-password-reset',
     '/api/auth/reset-password',
   ])
