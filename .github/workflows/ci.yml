@@ -99,15 +99,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Self-hosted compose validates with the example env and publishes no ports
+      - name: Self-hosted compose validates with the example env and publishes only on loopback
         env:
           IMAGE_REF: ghcr.io/example/app@sha256:0000000000000000000000000000000000000000000000000000000000000000
         run: |
           docker compose -f deploy/self-hosted/compose.yaml --env-file deploy/self-hosted/.env.example config --format json > config.json
           jq -e '[.services | keys[]] | sort == ["app","db"]' config.json
-          published=$(jq -c '[.services[].ports[]?]' config.json)
+          published=$(jq -c '[.services[].ports[]? | {service: .target, host_ip, published}]' config.json)
           echo "published ports: $published"
-          test "$published" = "[]"
+          jq -e '[.services[].ports[]? | select(.host_ip != "127.0.0.1")] | length == 0' config.json
+          jq -e '[.services.db.ports[]?] | length == 0' config.json
           jq -e '.services.app.networks.tunnel.aliases | index("workout-tracker-app")' config.json
       - name: Self-hosted compose refuses a missing SIGNUP_ALLOWLIST, RESEND_API_KEY or MAIL_FROM
         env:

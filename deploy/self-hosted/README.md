@@ -1,6 +1,6 @@
 # Self-hosted staging behind a Cloudflare Tunnel
 
-Runs the app and Postgres on any Linux Docker host that already runs `cloudflared` (a Cloudflare Tunnel) in its own container on a shared Docker network. This stack does not include `cloudflared` and publishes no ports: the only way in is the tunnel.
+Runs the app and Postgres on any Linux Docker host that already runs `cloudflared` (a Cloudflare Tunnel) in its own container. This stack does not include `cloudflared`; the only way in is the tunnel. The app is published on `127.0.0.1` only (never the LAN), for a `cloudflared` with host networking.
 
 Images come from `ghcr.io/<owner>/<repo>`; the `staging` tag is rebuilt on every push to `main` (`.github/workflows/staging.yml`). The host pulls, nothing in CI can reach it. Keep every site-specific value in `.env` on the host; this repository is public.
 
@@ -22,6 +22,12 @@ cp .env.example .env && chmod 600 .env
 Edit `.env`: `DOMAIN`, `TUNNEL_NETWORK`, the database password and `BETTER_AUTH_SECRET` (`openssl rand -hex 32` for each), `SIGNUP_ALLOWLIST` (comma separated emails that may create an account; the line is required, and an explicitly empty value means open sign-up; compose refuses to start when it is missing), and `RESEND_API_KEY` and `MAIL_FROM` (verification and password-reset email through Resend; sign-in needs a verified email, so both are required and compose refuses to start without them; use a sending-only API key and a sender on a domain verified in Resend). `.env` never leaves the host, and is gitignored. Back it up somewhere private: losing the secret signs everyone out.
 
 ## 3. Tunnel public hostname
+
+Two ways to connect the tunnel, depending on how your `cloudflared` container is networked:
+
+- **Shared Docker network** (cloudflared on a bridge/custom network): service `http://workout-tracker-app:3000`, and `TUNNEL_NETWORK` is that network's name.
+- **Host network mode** (cloudflared's network type is `host`; it cannot join Docker networks or resolve container names): service `http://127.0.0.1:18080` (or your `APP_HOST_PORT`). For `TUNNEL_NETWORK` use any empty network you create once, e.g. `docker network create workout-tunnel` (compose needs one to exist; nothing else uses it).
+
 
 In the Cloudflare dashboard (Zero Trust, Networks, Tunnels, your tunnel, Public Hostname) add a hostname for `DOMAIN` with service `http://workout-tracker-app:3000`. That name is a network alias the app container gets on the tunnel's network; use it instead of `app`, which any other stack on that network could also claim. Cloudflare terminates TLS; the app trusts `cf-connecting-ip` for per-client rate limits only because nothing else can reach it.
 
