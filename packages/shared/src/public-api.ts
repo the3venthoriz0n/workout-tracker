@@ -15,7 +15,8 @@ export type PublicApiOptions = {
 }
 
 async function getPublic<S extends z.ZodType>(path: string, schema: S, opts: PublicApiOptions): Promise<z.infer<S>> {
-  const base = (opts.baseUrl ?? '').replace(/\/+$/, '')
+  let base = opts.baseUrl ?? ''
+  while (base.endsWith('/')) base = base.slice(0, -1)
   let res: Response
   try {
     res = await (opts.fetch ?? globalThis.fetch)(`${base}/api/public${path}`, { method: 'GET', credentials: 'omit' })
