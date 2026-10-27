@@ -24,9 +24,9 @@ async function upload({ local, api }: FlowDeps): Promise<FlowOutcome> {
   return 'signed-in'
 }
 
-export async function signUpFlow(deps: FlowDeps, email: string, password: string): Promise<FlowOutcome> {
+export async function signUpFlow(deps: FlowDeps, email: string): Promise<FlowOutcome> {
   // No session yet: guest data is neither uploaded nor cleared. The first successful sign-in does that.
-  await deps.auth.signUp(email, password)
+  await deps.auth.signUp(email)
   return 'verify-email'
 }
 

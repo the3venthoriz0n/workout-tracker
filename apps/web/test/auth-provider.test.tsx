@@ -43,7 +43,7 @@ function Probe() {
     <div>
       <p data-testid="s">{`${a.status}|${repo.tag}|${a.pendingUpload}|${a.confirmingDiscard}|${a.error ?? ''}|${q.data ?? ''}`}</p>
       <p data-testid="v">{a.verifyEmail ?? ''}</p>
-      <button onClick={() => void a.signUp('a@example.com', 'longenough1')}>up</button>
+      <button onClick={() => void a.signUp('a@example.com')}>up</button>
       <button onClick={() => void a.signIn('a@example.com', 'longenough1')}>in</button>
       <button onClick={() => void a.signOut()}>out</button>
       <button onClick={() => void a.confirmDiscard()}>confirm</button>

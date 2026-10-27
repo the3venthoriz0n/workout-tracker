@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { Screen } from '@/app/screen'
-import { ForgotPasswordForm } from '@/components/forgot-password-form'
+import { EmailLinkForm, ForgotPasswordForm } from '@/components/forgot-password-form'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -10,14 +10,16 @@ import { useAuth } from '@/auth/context'
 import { toKind } from '@/auth/client'
 import { AUTH_ERROR_TEXT } from '@/lib/auth-messages'
 
-// The reset email links straight here with ?token=. The token is kept in memory only and
-// removed from the address bar right away.
+// The reset and set-up emails link straight here with ?token= (set-up links add ?setup=1, which only
+// changes the wording: choosing the first password vs. resetting one). The token is kept in memory
+// only and removed from the address bar right away.
 export function ResetPasswordScreen() {
   const a = useAuth()
   const id = useId()
   const navigate = useNavigate()
   const { pathname, search } = useLocation()
   const [token] = useState(() => new URLSearchParams(search).get('token') ?? '')
+  const [setup] = useState(() => new URLSearchParams(search).get('setup') === '1')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [state, setState] = useState<'idle' | 'sending' | 'done' | 'expired'>(token ? 'idle' : 'expired')
@@ -47,7 +49,7 @@ export function ResetPasswordScreen() {
   if (state === 'done') {
     body = (
       <>
-        <p role="status">Password changed. Sign in with your new password.</p>
+        <p role="status">{setup ? 'Password set. Sign in to continue.' : 'Password changed. Sign in with your new password.'}</p>
         <Button asChild className="min-h-11">
           <Link to="/settings">Sign in</Link>
         </Button>
@@ -59,7 +61,7 @@ export function ResetPasswordScreen() {
         <p role="alert" className="text-destructive text-sm">
           {AUTH_ERROR_TEXT.invalid_token}
         </p>
-        <ForgotPasswordForm />
+        {setup ? <EmailLinkForm kind="setup" /> : <ForgotPasswordForm />}
       </>
     )
   } else {
@@ -73,7 +75,7 @@ export function ResetPasswordScreen() {
         }}
       >
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor={`${id}-pw`}>New password</Label>
+          <Label htmlFor={`${id}-pw`}>{setup ? 'Password' : 'New password'}</Label>
           <Input
             id={`${id}-pw`}
             type={show ? 'text' : 'password'}
@@ -92,7 +94,7 @@ export function ResetPasswordScreen() {
           </p>
         )}
         <Button type="submit" className="min-h-11" disabled={state === 'sending'}>
-          {state === 'sending' ? 'Changing...' : 'Change password'}
+          {state === 'sending' ? (setup ? 'Saving...' : 'Changing...') : setup ? 'Set password' : 'Change password'}
         </Button>
       </form>
     )
@@ -100,7 +102,7 @@ export function ResetPasswordScreen() {
 
   return (
     <div>
-      <Screen title="Reset password" />
+      <Screen title={setup ? 'Choose your password' : 'Reset password'} />
       <div className="flex flex-col gap-4 px-4 pb-6">
         <Card>
           <CardContent className="flex flex-col gap-3">{body}</CardContent>

@@ -7,8 +7,9 @@ import { toKind } from '@/auth/client'
 import { AUTH_ERROR_TEXT, EMAIL_INVALID_TEXT, RESEND_SENT_TEXT, RESET_SENT_TEXT, isEmail } from '@/lib/auth-messages'
 
 // Asks for an address and always ends on the same sentence, whether or not it has an account.
-// kind 'reset' sends a password reset link; 'verify' sends a new confirmation link.
-export function EmailLinkForm({ kind, onBack }: { kind: 'reset' | 'verify'; onBack?: () => void }) {
+// kind 'reset' sends a password reset link; 'setup' sends a new set-up link (both go through
+// request-password-reset; the server picks the mail by whether the address is confirmed).
+export function EmailLinkForm({ kind, onBack }: { kind: 'reset' | 'setup'; onBack?: () => void }) {
   const a = useAuth()
   const id = useId()
   const [email, setEmail] = useState('')

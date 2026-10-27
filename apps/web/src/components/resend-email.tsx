@@ -6,7 +6,7 @@ import { AUTH_ERROR_TEXT, RESEND_SENT_TEXT } from '@/lib/auth-messages'
 
 export const RESEND_COOLDOWN_MS = 30_000
 
-// "Resend email" for an address waiting to be confirmed. The answer is the same for any address;
+// "Resend email" for an address waiting to be set up (a new set-up link). The answer is the same for any address;
 // the button stays disabled for 30 seconds after each use.
 export function ResendEmail({ email }: { email: string }) {
   const a = useAuth()

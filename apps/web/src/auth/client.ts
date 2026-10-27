@@ -26,7 +26,8 @@ export const toKind = (e: unknown): AuthErrorKind => (e instanceof AuthError ? e
 export type SessionUser = { userId: string; email: string }
 
 export interface AuthClient {
-  signUp(email: string, password: string): Promise<SessionUser>
+  /** Email only: the password is chosen later through the emailed set-up link. */
+  signUp(email: string): Promise<SessionUser>
   signIn(email: string, password: string): Promise<SessionUser>
   signOut(): Promise<void>
   session(): Promise<SessionUser | null>
@@ -39,6 +40,18 @@ export interface AuthClient {
 }
 
 type Opts = { fetch?: typeof fetch; baseUrl?: string }
+
+/**
+ * Better Auth's sign-up needs a password, but the user chooses theirs only after confirming the
+ * email (the set-up link replaces this one). 32 random bytes, base64url; sent once, never kept,
+ * shown or logged. Uses getRandomValues, which also works on plain-http LAN origins.
+ */
+export function generateSignupPassword(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32))
+  let bin = ''
+  for (const b of bytes) bin += String.fromCharCode(b)
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
 
 type Mode = 'sign-in' | 'sign-up' | 'reset'
 
@@ -98,8 +111,8 @@ export function createAuthClient(opts: Opts = {}): AuthClient {
 
   return {
     // Better Auth requires a display name; the app has none, so the email is used.
-    async signUp(email, password) {
-      return userOf(await post('/sign-up/email', { email, password, name: email }, 'sign-up'), email)
+    async signUp(email) {
+      return userOf(await post('/sign-up/email', { email, password: generateSignupPassword(), name: email }, 'sign-up'), email)
     },
     async signIn(email, password) {
       return userOf(await post('/sign-in/email', { email, password }), email)

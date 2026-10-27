@@ -33,7 +33,7 @@ function deps(over: { getProfile?: () => Promise<unknown>; importAll?: () => Pro
 
 test('sign-up ends in verify-email and neither uploads nor clears guest data', async () => {
   const d = deps()
-  expect(await signUpFlow(d, 'a@example.com', 'longenough1')).toBe('verify-email')
+  expect(await signUpFlow(d, 'a@example.com')).toBe('verify-email')
   expect(d.calls).toEqual(['signUp'])
   expect(d.api.importAll).not.toHaveBeenCalled()
   expect(d.api.getProfile).not.toHaveBeenCalled()
@@ -61,7 +61,7 @@ test('sign-in of an unverified account throws and touches nothing', async () => 
 
 test('sign-up account creation failure throws and touches nothing', async () => {
   const d = deps({ signUp: async () => { throw new AuthError('email_taken') } })
-  await expect(signUpFlow(d, 'a@example.com', 'longenough1')).rejects.toBeInstanceOf(AuthError)
+  await expect(signUpFlow(d, 'a@example.com')).rejects.toBeInstanceOf(AuthError)
   expect(d.local.exportAll).not.toHaveBeenCalled()
   expect(d.local.reset).not.toHaveBeenCalled()
 })

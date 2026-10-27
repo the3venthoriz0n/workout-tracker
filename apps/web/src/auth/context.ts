@@ -16,7 +16,8 @@ export type AuthState = {
   verifyEmail: string | null
   busy: boolean
   error: AuthErrorKind | null
-  signUp(email: string, password: string): Promise<void>
+  /** Email only; the password is chosen through the emailed set-up link. */
+  signUp(email: string): Promise<void>
   signIn(email: string, password: string): Promise<void>
   /** With unsent edits this refuses (error 'unsynced_changes') unless `discardPending` says the user confirmed. */
   signOut(opts?: { discardPending?: boolean }): Promise<void>

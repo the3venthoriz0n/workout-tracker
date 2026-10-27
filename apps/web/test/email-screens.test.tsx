@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
@@ -34,23 +34,41 @@ function setup(url: string, over: Partial<AuthClient> = {}, session = false) {
   return { auth, router }
 }
 
-test('verified screen: success', async () => {
-  setup('/verified')
-  expect(await screen.findByText('Email confirmed. Sign in to continue.')).toBeTruthy()
-  const link = screen.getByRole('link', { name: 'Sign in' })
-  expect(link.getAttribute('href')).toBe('/settings')
-  expect(link.className).toContain('min-h-11')
+test('the old /verified page is gone and an unknown page says so with a way home', async () => {
+  for (const url of ['/verified', '/verified?error=TOKEN_EXPIRED', '/no-such-page']) {
+    setup(url)
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeTruthy()
+    expect(screen.queryByText(/email confirmed/i)).toBeNull()
+    const home = screen.getByRole('link', { name: 'Go to Today' })
+    expect(home.getAttribute('href')).toBe('/')
+    expect(home.className).toContain('min-h-11')
+    cleanup()
+  }
 })
 
-test.each([
-  ['TOKEN_EXPIRED', /link has expired/i],
-  ['INVALID_TOKEN', /isn.t valid or was already used/i],
-  ['SOMETHING', /isn.t valid or was already used/i],
-])('verified screen handles error=%s and offers a new link', async (code, re) => {
+test('a set-up link (?setup=1) reads "Choose your password", removes token and flag from the address bar, ends on "Password set"', async () => {
   const user = userEvent.setup()
-  const { auth } = setup(`/verified?error=${code}`)
-  expect((await screen.findByRole('alert')).textContent).toMatch(re)
-  expect(screen.queryByText('Email confirmed. Sign in to continue.')).toBeNull()
+  const { auth, router } = setup('/reset-password?token=setup123&setup=1')
+  expect(await screen.findByRole('heading', { name: 'Choose your password' })).toBeTruthy()
+  expect(screen.queryByText(/reset password/i)).toBeNull()
+  expect(router.state.location.search).toBe('')
+  const field = screen.getByLabelText('Password')
+  expect(field.getAttribute('autocomplete')).toBe('new-password')
+  await user.type(field, 'my chosen password')
+  await user.click(screen.getByRole('button', { name: 'Set password' }))
+  expect((await screen.findByRole('status')).textContent).toBe('Password set. Sign in to continue.')
+  expect(auth.resetPassword).toHaveBeenCalledWith('setup123', 'my chosen password')
+  const signIn = screen.getByRole('link', { name: 'Sign in' })
+  expect(signIn.getAttribute('href')).toBe('/settings')
+  expect(signIn.className).toContain('min-h-11')
+})
+
+test('an expired set-up link offers a new set-up link (through request-password-reset)', async () => {
+  const user = userEvent.setup()
+  const { auth } = setup('/reset-password?token=old&setup=1', { resetPassword: vi.fn(async () => { throw new AuthError('invalid_token') }) })
+  await user.type(await screen.findByLabelText('Password'), 'my chosen password')
+  await user.click(screen.getByRole('button', { name: 'Set password' }))
+  expect((await screen.findByRole('alert')).textContent).toBe('This link has expired. Request a new one.')
   await user.type(screen.getByLabelText('Email'), 'a@example.com')
   await user.click(screen.getByRole('button', { name: 'Send a new link' }))
   expect((await screen.findByRole('status')).textContent).toMatch(/new link/i)
@@ -61,6 +79,7 @@ test('reset screen removes the token from the address bar and submits it once', 
   const user = userEvent.setup()
   const { auth, router } = setup('/reset-password?token=abc123')
   const field = await screen.findByLabelText('New password')
+  expect(screen.getByRole('heading', { name: 'Reset password' })).toBeTruthy()
   expect(router.state.location.search).toBe('')
   expect(field.getAttribute('type')).toBe('password')
   expect(field.getAttribute('autocomplete')).toBe('new-password')
