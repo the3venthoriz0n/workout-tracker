@@ -1,7 +1,8 @@
 # Self-hosted stack for any Linux Docker host that already runs a Cloudflare Tunnel (cloudflared)
 # in its own container. cloudflared is NOT part of this stack: it reaches the app over an
 # existing, external Docker network (TUNNEL_NETWORK) at http://workout-tracker-app:3000 (a unique
-# alias: plain `app` could also be another stack's service on that shared network). Nothing is published
+# alias: plain `app` could also be another stack's service on that shared network). The only published
+# port is on 127.0.0.1 (for a cloudflared in host network mode, see the README).
 # on the host. Setup: deploy/self-hosted/README.md.
 name: workout-tracker-selfhosted
 
@@ -34,6 +35,11 @@ services:
       # loudly instead of silently opening sign-up.
       SIGNUP_ALLOWLIST: ${SIGNUP_ALLOWLIST?set SIGNUP_ALLOWLIST in .env (empty means open sign-up)}
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
+    ports:
+      # Loopback only (never the LAN): lets a cloudflared that runs with host networking reach the
+      # app at http://127.0.0.1:${APP_HOST_PORT:-18080}. With cloudflared on the shared Docker
+      # network you can ignore this and use the alias below.
+      - 127.0.0.1:${APP_HOST_PORT:-18080}:3000
     healthcheck:
       test: [CMD, wget, -qO-, 'http://127.0.0.1:3000/healthz']
       interval: 30s
