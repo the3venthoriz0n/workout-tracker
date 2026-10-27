@@ -2,6 +2,8 @@ import { z } from 'zod'
 
 const isTest = process.env.NODE_ENV === 'test'
 
+const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v)
+
 const schema = z.object({
   // Required, no default: a missing NODE_ENV must stop the process, never silently pick the
   // permissive development origin policy.
@@ -48,8 +50,31 @@ const schema = z.object({
   // `off` disables the per-IP rate limit of the public community area outside production
   // (local load testing); production always keeps it on.
   AUTH_RATE_LIMIT: z.enum(['on', 'off']).default('on'),
+  // Email (verification and password-reset links). Required in production, where the process
+  // refuses to start without them; elsewhere a missing pair prints mail to the log instead.
+  // The key is never echoed: the error report lists variable names only.
+  RESEND_API_KEY: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^\S+$/, 'must not contain whitespace')
+      .optional(),
+  ),
+  // Sender: `no-reply@example.invalid` or `Workout Tracker <no-reply@example.invalid>`, one address.
+  MAIL_FROM: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^(?:[^\r\n<>@,]* <[^\s<>@,]+@[^\s<>@,]+>|[^\s<>@,]+@[^\s<>@,]+)$/, 'must be one address, optionally with a name')
+      .optional(),
+  ),
   // Directory of the built SPA; set only in the production image.
   STATIC_DIR: z.string().optional(),
+}).superRefine((v, ctx) => {
+  if (v.NODE_ENV !== 'production') return
+  for (const name of ['RESEND_API_KEY', 'MAIL_FROM'] as const) {
+    if (!v[name]) ctx.addIssue({ code: 'custom', path: [name], message: 'required in production' })
+  }
 })
 
 const parsed = schema.safeParse(process.env)

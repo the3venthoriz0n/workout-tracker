@@ -8,7 +8,7 @@ runRepoContract(
   'ApiRepo (HTTP -> Hono -> Postgres)',
   async (opts) => {
     const h = await setupApp()
-    const res = await h.signUp(`u_${randomUUID()}@example.test`)
+    const res = await h.signUpVerified(`u_${randomUUID()}@example.test`)
     if (res.status !== 200) throw new Error(`sign-up failed: ${res.status}`)
     const cookie = cookieJar(res)
     const fetchImpl = ((url: string, init: RequestInit = {}) => {

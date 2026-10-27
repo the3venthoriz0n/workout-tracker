@@ -28,7 +28,7 @@ let seq = 0
 /** Sign-up is rate limited per IP (10 an hour), so every account here signs up from its own address. */
 async function signUpClient(_h: Harness, email: string): Promise<Client> {
   const n = ++seq
-  const res = await h.signUp(email, undefined, { ip: `10.250.${Math.floor(n / 250)}.${n % 250}` })
+  const res = await h.signUpVerified(email, undefined, { ip: `10.250.${Math.floor(n / 250)}.${n % 250}` })
   if (res.status !== 200) throw new Error(`sign-up failed: ${res.status}`)
   return makeClient(h, cookieJar(res))
 }

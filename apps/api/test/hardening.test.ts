@@ -49,6 +49,8 @@ describe('NODE_ENV fails closed', () => {
 
     it('loads with an explicit valid value', async () => {
       process.env.NODE_ENV = 'production'
+      process.env.RESEND_API_KEY = 'test-resend-key-123'
+      process.env.MAIL_FROM = 'no-reply@example.invalid'
       const { env } = await import('../src/env.js')
       expect(env.NODE_ENV).toBe('production')
     })
@@ -89,7 +91,7 @@ describe('rateLimitIpHeaders', () => {
 describe('Better Auth origin protection is live on its own', () => {
   it('auth.handler rejects a foreign Origin with a session cookie (bypassing csrfGuard)', async () => {
     h = await setupApp()
-    const jar = cookieJar(await h.signUp('a@example.com'))
+    const jar = cookieJar(await h.signUpVerified('a@example.com'))
     const call = (origin: string) =>
       h!.auth.handler(
         new Request(`${h!.origin}/api/auth/sign-out`, {

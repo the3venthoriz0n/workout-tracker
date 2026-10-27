@@ -19,7 +19,7 @@ cd deploy/self-hosted
 cp .env.example .env && chmod 600 .env
 ```
 
-Edit `.env`: `DOMAIN`, `TUNNEL_NETWORK`, the database password and `BETTER_AUTH_SECRET` (`openssl rand -hex 32` for each), and `SIGNUP_ALLOWLIST` (comma separated emails that may create an account; the line is required, and an explicitly empty value means open sign-up; compose refuses to start when it is missing). `.env` never leaves the host, and is gitignored. Back it up somewhere private: losing the secret signs everyone out.
+Edit `.env`: `DOMAIN`, `TUNNEL_NETWORK`, the database password and `BETTER_AUTH_SECRET` (`openssl rand -hex 32` for each), `SIGNUP_ALLOWLIST` (comma separated emails that may create an account; the line is required, and an explicitly empty value means open sign-up; compose refuses to start when it is missing), and `RESEND_API_KEY` and `MAIL_FROM` (verification and password-reset email through Resend; sign-in needs a verified email, so both are required and compose refuses to start without them; use a sending-only API key and a sender on a domain verified in Resend). `.env` never leaves the host, and is gitignored. Back it up somewhere private: losing the secret signs everyone out.
 
 ## 3. Tunnel public hostname
 
@@ -27,8 +27,7 @@ In the Cloudflare dashboard (Zero Trust, Networks, Tunnels, your tunnel, Public 
 
 Known limits (also in the spec):
 - Any other container on the tunnel network can reach the app directly and send its own `cf-connecting-ip`, bypassing per-IP rate limits. Put only trusted containers on that network.
-- The allowlist checks an email address, not a person: anyone who knows a listed address can register it before its owner does. Email verification (planned in M2b) closes this.
-- The sign-up response can reveal whether a listed address is already registered.
+- The allowlist checks an email address, not a person. An account cannot sign in until its address is verified through a link sent to that address.
 
 ## 4. First deploy
 

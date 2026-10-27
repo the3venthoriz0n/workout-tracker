@@ -1,16 +1,20 @@
 import { betterAuth } from 'better-auth'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+import { and, eq, like, ne } from 'drizzle-orm'
 import type { Db } from './db/index.js'
 import { account, session, user, verification } from './db/schema.js'
 import type { Env } from './env.js'
 import { sanitizedLog } from './logging.js'
+import { logMailFailure, resetEmail, verificationEmail, type Mail, type Mailer } from './mail.js'
 import { configuredOrigins, isTrustedOrigin } from './origins.js'
 
 export type AuthEnv = Pick<Env, 'NODE_ENV' | 'BETTER_AUTH_URL' | 'BETTER_AUTH_SECRET' | 'TRUSTED_ORIGINS'> &
   Partial<Pick<Env, 'CLIENT_IP_HEADER' | 'SIGNUP_ALLOWLIST'>>
 
 export type AuthOptions = {
+  /** Sends verification and password-reset mail. Never awaited inside a request. */
+  mailer: Mailer
   /**
    * Request header that carries the client IP for rate limiting. Default: `x-forwarded-for` in
    * production, none elsewhere. Exposed so tests can give each test its own client.
@@ -36,8 +40,29 @@ export function rateLimitIpHeaders(env: Pick<Env, 'NODE_ENV'> & Partial<Pick<Env
   return env.NODE_ENV === 'production' ? ['x-forwarded-for'] : []
 }
 
-export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions = {}) {
+/** Where the emailed links land (SPA routes, same origin as the API). */
+export const VERIFIED_PATH = '/verified'
+export const RESET_PASSWORD_PATH = '/reset-password'
+
+export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
   const production = env.NODE_ENV === 'production'
+
+  // Links are built from BETTER_AUTH_URL only, never from the request (Host, X-Forwarded-*,
+  // or a client-supplied callbackURL), so a forged request cannot point a real email elsewhere.
+  const link = (path: string, params: Record<string, string>) => {
+    const url = new URL(path, env.BETTER_AUTH_URL)
+    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
+    return url.href
+  }
+
+  // Fire and forget: the HTTP answer never waits for, or depends on, the mail provider.
+  const send = (mail: Mail) => {
+    try {
+      opts.mailer.send(mail).catch(logMailFailure)
+    } catch (err) {
+      logMailFailure(err)
+    }
+  }
 
   const ipAddressHeaders = opts.clientIpHeader ? [opts.clientIpHeader] : rateLimitIpHeaders(env)
 
@@ -70,10 +95,38 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions = {}) {
     },
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: false,
-      autoSignIn: true,
+      // Sign-in needs a verified email (403 EMAIL_NOT_VERIFIED otherwise). With this on, Better
+      // Auth answers a sign-up for an existing email with the same 200 shape as a new one and
+      // creates nothing (no session either way, as autoSignIn is off).
+      requireEmailVerification: true,
+      autoSignIn: false,
       minPasswordLength: 10,
       maxPasswordLength: 128,
+      resetPasswordTokenExpiresIn: 60 * 60,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user: u, token }) => {
+        // One live reset link per user: a newer request invalidates the older links.
+        await db
+          .delete(verification)
+          .where(
+            and(
+              eq(verification.value, u.id),
+              like(verification.identifier, 'reset-password:%'),
+              ne(verification.identifier, `reset-password:${token}`),
+            ),
+          )
+        send(resetEmail(u.email, link(RESET_PASSWORD_PATH, { token })))
+      },
+    },
+    emailVerification: {
+      sendOnSignUp: true,
+      sendOnSignIn: false,
+      // Verifying creates no session: the link may be opened on another device.
+      autoSignInAfterVerification: false,
+      expiresIn: 60 * 60 * 24,
+      sendVerificationEmail: async ({ user: u, token }) => {
+        send(verificationEmail(u.email, link('/api/auth/verify-email', { token, callbackURL: VERIFIED_PATH })))
+      },
     },
     session: {
       expiresIn: 60 * 60 * 24 * 30,
@@ -97,6 +150,8 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions = {}) {
       customRules: {
         '/sign-in/email': { window: 60, max: 5 },
         '/sign-up/email': { window: 60 * 60, max: 10 },
+        '/request-password-reset': { window: 60 * 60, max: 5 },
+        '/send-verification-email': { window: 60 * 60, max: 5 },
       },
     },
   })

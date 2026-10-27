@@ -9,6 +9,8 @@ describe('env.ts optional settings', () => {
     process.env.DATABASE_URL = 'postgres://u:p@localhost:5432/d'
     process.env.BETTER_AUTH_SECRET = 'x'.repeat(40)
     process.env.BETTER_AUTH_URL = 'https://app.example.com'
+    process.env.RESEND_API_KEY = 'test-resend-key-123'
+    process.env.MAIL_FROM = 'Workout Tracker <no-reply@example.invalid>'
     delete process.env.CLIENT_IP_HEADER
     delete process.env.SIGNUP_ALLOWLIST
   })
@@ -67,5 +69,48 @@ describe('env.ts optional settings', () => {
         expect(out).not.toContain(bad)
       })
     }
+  })
+
+  describe('RESEND_API_KEY and MAIL_FROM', () => {
+    it('are read in production', async () => {
+      const { env } = await import('../src/env.js')
+      expect(env.RESEND_API_KEY).toBe('test-resend-key-123')
+      expect(env.MAIL_FROM).toBe('Workout Tracker <no-reply@example.invalid>')
+    })
+    for (const name of ['RESEND_API_KEY', 'MAIL_FROM'] as const) {
+      for (const value of [undefined, '']) {
+        it(`production exits when ${name} is ${value === undefined ? 'unset' : 'empty'}, without echoing the other`, async () => {
+          if (value === undefined) delete process.env[name]
+          else process.env[name] = value
+          const out = await rejects(name)
+          expect(out).not.toContain('test-resend-key-123')
+        })
+      }
+    }
+    for (const NODE_ENV of ['development', 'test']) {
+      it(`${NODE_ENV} loads without them`, async () => {
+        process.env.NODE_ENV = NODE_ENV
+        delete process.env.RESEND_API_KEY
+        delete process.env.MAIL_FROM
+        const { env } = await import('../src/env.js')
+        expect(env.RESEND_API_KEY).toBeUndefined()
+        expect(env.MAIL_FROM).toBeUndefined()
+      })
+    }
+    it('accepts a bare address as MAIL_FROM', async () => {
+      process.env.MAIL_FROM = 'no-reply@example.invalid'
+      expect((await import('../src/env.js')).env.MAIL_FROM).toBe('no-reply@example.invalid')
+    })
+    for (const bad of ['not an address', 'Name <no-reply@example.invalid>\r\nBcc: x@example.invalid', 'a@example.invalid, b@example.invalid']) {
+      it(`rejects MAIL_FROM ${JSON.stringify(bad)}`, async () => {
+        process.env.MAIL_FROM = bad
+        await rejects('MAIL_FROM')
+      })
+    }
+    it('rejects a RESEND_API_KEY with whitespace, without echoing it', async () => {
+      process.env.RESEND_API_KEY = 'abc def-key-value'
+      const out = await rejects('RESEND_API_KEY')
+      expect(out).not.toContain('abc def-key-value')
+    })
   })
 })

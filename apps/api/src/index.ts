@@ -3,6 +3,7 @@ import { createApp } from './app.js'
 import { createAuth } from './auth.js'
 import { db, sql } from './db/index.js'
 import { env } from './env.js'
+import { mailerFromEnv } from './mail.js'
 import { runMigrations } from './migrations.js'
 import { createPublicService } from './service/community.js'
 import { createService } from './service/index.js'
@@ -17,7 +18,7 @@ try {
 }
 
 const app = createApp({
-  auth: createAuth(db, env),
+  auth: createAuth(db, env, { mailer: mailerFromEnv(env) }),
   env,
   getService: (userId) => createService(db, userId),
   getPublic: () => createPublicService(db),

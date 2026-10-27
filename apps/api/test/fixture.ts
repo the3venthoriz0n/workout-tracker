@@ -20,7 +20,7 @@ export function makeClient(h: Harness, cookie: string) {
 }
 
 export async function signUpClient(h: Harness, email: string): Promise<Client> {
-  const res = await h.signUp(email)
+  const res = await h.signUpVerified(email)
   if (res.status !== 200) throw new Error(`sign-up failed: ${res.status}`)
   return makeClient(h, cookieJar(res))
 }
@@ -48,7 +48,7 @@ function othersListing(h: Harness): Promise<string> {
   if (!p) {
     p = (async () => {
       const ip = `10.251.${randomInt(250)}.${randomInt(250)}`
-      const res = await h.signUp(`publisher-${newId()}@example.com`, undefined, { ip })
+      const res = await h.signUpVerified(`publisher-${newId()}@example.com`, undefined, { ip })
       if (res.status !== 200) throw new Error(`publisher sign-up failed: ${res.status}`)
       const c = makeClient(h, cookieJar(res))
       const ok = async (method: string, path: string, body?: unknown) => {

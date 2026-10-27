@@ -134,7 +134,7 @@ describe('requireUser', () => {
 
   it('401 with a garbage, truncated or tampered cookie', async () => {
     h = await setupApp()
-    const up = await h.signUp('a@example.com')
+    const up = await h.signUpVerified('a@example.com')
     expect(up.status).toBe(200)
     const jar = cookieJar(up)
     const [name, value] = jar.split('=') as [string, string]
@@ -155,7 +155,7 @@ describe('requireUser', () => {
 
   it('401 once the session has expired in the database', async () => {
     h = await setupApp()
-    const up = await h.signUp('a@example.com')
+    const up = await h.signUpVerified('a@example.com')
     const jar = cookieJar(up)
     expect((await h.request('/api/v1/progression', { cookie: jar })).status).toBe(200)
     await h.db.execute(sql`update session set expires_at = now() - interval '1 minute'`)
@@ -166,7 +166,7 @@ describe('requireUser', () => {
 
   it('returns the user id and keeps /healthz public', async () => {
     h = await setupApp()
-    const up = await h.signUp('a@example.com')
+    const up = await h.signUpVerified('a@example.com')
     const id = ((await up.json()) as { user: { id: string } }).user.id
     const cookie = cookieJar(up)
     const init = await h.request('/api/v1/me/init', { method: 'POST', body: {}, cookie })

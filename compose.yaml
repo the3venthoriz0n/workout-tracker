@@ -78,6 +78,10 @@ services:
       DATABASE_URL: *database-url
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?run just setup}
       BETTER_AUTH_URL: http://localhost:8080
+      # Production mode requires mail settings. Without a real key (RESEND_API_KEY and MAIL_FROM
+      # in .env) sending fails and is logged, so new preview accounts cannot verify by email.
+      RESEND_API_KEY: ${RESEND_API_KEY:-preview-no-mail}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@example.invalid}
     ports:
       - 127.0.0.1:8080:3000
     read_only: true

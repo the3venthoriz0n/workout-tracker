@@ -10,7 +10,7 @@ afterEach(async () => {
 describe('app', () => {
   it('returns JSON 404 for unknown API routes (once signed in)', async () => {
     h = await setupApp()
-    const jar = cookieJar(await h.signUp('a@example.com'))
+    const jar = cookieJar(await h.signUpVerified('a@example.com'))
     const res = await h.request('/api/v1/nope', { cookie: jar })
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: 'not_found' })

@@ -13,9 +13,13 @@ function sessionCookieAttrs(res: Response): string[] {
 }
 
 describe('sign up', () => {
-  it('creates the account, signs in and sets an HttpOnly, SameSite=Lax cookie (not Secure outside production)', async () => {
+  it('creates the account without a session; after verifying, sign-in sets an HttpOnly, SameSite=Lax cookie (not Secure outside production)', async () => {
     h = await setupApp()
-    const res = await h.signUp('Alice@Example.com')
+    const up = await h.signUp('Alice@Example.com')
+    expect(up.status).toBe(200)
+    expect(up.headers.getSetCookie()).toEqual([])
+    expect(((await up.json()) as { user: { email: string } }).user.email).toBe('alice@example.com')
+    const res = await h.signUpVerified('Bob@Example.com')
     expect(res.status).toBe(200)
     const attrs = sessionCookieAttrs(res)
     expect(attrs).toContain('httponly')
@@ -26,7 +30,7 @@ describe('sign up', () => {
       `max-age=${60 * 60 * 24 * 30}`,
     )
     const body = (await res.json()) as { user: { email: string } }
-    expect(body.user.email).toBe('alice@example.com')
+    expect(body.user.email).toBe('bob@example.com')
 
     const who = await h.request('/api/v1/progression', { cookie: cookieJar(res) })
     expect(who.status).toBe(200)
@@ -34,7 +38,7 @@ describe('sign up', () => {
 
   it('sets the Secure attribute in production', async () => {
     h = await setupApp({ NODE_ENV: 'production' })
-    const res = await h.signUp('alice@example.com')
+    const res = await h.signUpVerified('alice@example.com')
     expect(res.status).toBe(200)
     const attrs = sessionCookieAttrs(res)
     expect(attrs).toContain('secure')
@@ -71,14 +75,15 @@ describe('sign up', () => {
     }
   })
 
-  it('rejects a duplicate sign-up (any letter case) and keeps the first password', async () => {
+  it('a duplicate sign-up (any letter case) looks like a new one, creates nothing and keeps the first password', async () => {
     h = await setupApp()
-    expect((await h.signUp('dup@example.com')).status).toBe(200)
+    expect((await h.signUpVerified('dup@example.com')).status).toBe(200)
     const second = await h.signUp('DUP@example.com', 'another password!')
-    expect(second.status).toBeGreaterThanOrEqual(400)
-    expect(second.status).toBeLessThan(500)
+    expect(second.status).toBe(200)
     expect(second.headers.getSetCookie().length).toBe(0)
-    expect((await h.signIn('dup@example.com', GOOD_PASSWORD)).status).toBe(200)
+    const { user } = await import('../src/db/schema.js')
+    expect(await h.db.select().from(user)).toHaveLength(1)
+    expect((await h.signIn('dup@example.com', GOOD_PASSWORD, { ip: '203.0.113.60' })).status).toBe(200)
     expect((await h.signIn('dup@example.com', 'another password!')).status).toBe(401)
   })
 
@@ -105,6 +110,8 @@ describe('sign-up allowlist', () => {
     h = await setupApp({ SIGNUP_ALLOWLIST: allow })
     const up = await h.signUp('ALICE@Example.COM')
     expect(up.status).toBe(200)
+    expect(h.mail.sent.map((m) => m.to)).toEqual(['alice@example.com'])
+    await h.verify('alice@example.com')
     expect((await h.signIn('alice@example.com', GOOD_PASSWORD)).status).toBe(200)
   })
 
@@ -115,6 +122,7 @@ describe('sign-up allowlist', () => {
     expect(res.headers.getSetCookie().length).toBe(0)
     expect(await res.json()).toEqual({ code: 'SIGNUP_CLOSED', message: 'signup_closed' })
     expect(await counts(h.db)).toEqual({ users: 0, sessions: 0 })
+    expect(h.mail.sent).toEqual([])
     expect((await h.signIn('mallory@example.com', GOOD_PASSWORD)).status).toBe(401)
   })
 
@@ -144,11 +152,11 @@ describe('sign-up allowlist', () => {
 
   it('does not affect sign-in of accounts that already exist', async () => {
     h = await setupApp()
-    expect((await h.signUp('legacy@example.com')).status).toBe(200)
+    expect((await h.signUpVerified('legacy@example.com')).status).toBe(200)
     const { createAuth } = await import('../src/auth.js')
     const { createApp } = await import('../src/app.js')
     const env = { ...h.env, SIGNUP_ALLOWLIST: allow }
-    const auth = createAuth(h.db, env, { clientIpHeader: 'x-test-client-ip' })
+    const auth = createAuth(h.db, env, { mailer: h.mail, clientIpHeader: 'x-test-client-ip' })
     const app = createApp({
       auth,
       env,
@@ -176,7 +184,7 @@ describe('sign-up allowlist', () => {
 describe('sign in and out', () => {
   it('a wrong password and an unknown email give the same generic failure', async () => {
     h = await setupApp()
-    await h.signUp('real@example.com')
+    await h.signUpVerified('real@example.com')
     const wrong = await h.signIn('real@example.com', 'wrong password!')
     const unknown = await h.signIn('nobody@example.com', 'wrong password!')
     expect(wrong.status).toBe(401)
@@ -190,7 +198,7 @@ describe('sign in and out', () => {
 
   it('signs in with the right password and the new cookie works', async () => {
     h = await setupApp()
-    await h.signUp('real@example.com')
+    await h.signUpVerified('real@example.com')
     const res = await h.signIn('real@example.com', GOOD_PASSWORD)
     expect(res.status).toBe(200)
     expect((await h.request('/api/v1/progression', { cookie: cookieJar(res) })).status).toBe(200)
@@ -198,7 +206,7 @@ describe('sign in and out', () => {
 
   it('sign out invalidates the cookie server-side, even if the client keeps it', async () => {
     h = await setupApp()
-    const up = await h.signUp('real@example.com')
+    const up = await h.signUpVerified('real@example.com')
     const jar = cookieJar(up)
     expect((await h.request('/api/v1/progression', { cookie: jar })).status).toBe(200)
     const out = await h.request('/api/auth/sign-out', { method: 'POST', body: {}, cookie: jar })
@@ -210,7 +218,7 @@ describe('sign in and out', () => {
 
   it('sign-in with a foreign Origin is refused and sets no cookie', async () => {
     h = await setupApp()
-    await h.signUp('real@example.com')
+    await h.signUpVerified('real@example.com')
     const res = await h.signIn('real@example.com', GOOD_PASSWORD, { origin: 'https://evil.example' })
     expect(res.status).toBe(403)
     expect(res.headers.getSetCookie().length).toBe(0)
@@ -220,7 +228,7 @@ describe('sign in and out', () => {
 describe('rate limiting', () => {
   it('returns 429 after 5 failed sign-ins in a minute, even for the right password afterwards', async () => {
     h = await setupApp()
-    await h.signUp('real@example.com')
+    await h.signUpVerified('real@example.com')
     const statuses: number[] = []
     for (let i = 0; i < 6; i++) statuses.push((await h.signIn('real@example.com', `wrong password ${i}`)).status)
     expect(statuses.slice(0, 5)).toEqual([401, 401, 401, 401, 401])
@@ -232,7 +240,7 @@ describe('rate limiting', () => {
 
   it('limits per client IP: another IP is not affected', async () => {
     h = await setupApp()
-    await h.signUp('real@example.com')
+    await h.signUpVerified('real@example.com')
     for (let i = 0; i < 6; i++) await h.signIn('real@example.com', `wrong password ${i}`)
     expect((await h.signIn('real@example.com', GOOD_PASSWORD)).status).toBe(429)
     expect((await h.signIn('real@example.com', GOOD_PASSWORD, { ip: '203.0.113.77' })).status).toBe(200)
@@ -248,7 +256,7 @@ describe('rate limiting', () => {
 
   it('does not trust X-Forwarded-For outside production (cannot be used to dodge the limit)', async () => {
     h = await setupApp()
-    await h.signUp('real@example.com')
+    await h.signUpVerified('real@example.com')
     // In this harness the client-IP header is x-test-client-ip, never XFF.
     const statuses: number[] = []
     for (let i = 0; i < 6; i++) {

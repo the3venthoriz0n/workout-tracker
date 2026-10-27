@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { createApp } from '../src/app.js'
 import { createAuth } from '../src/auth.js'
+import { createCaptureMailer, type Mail, type Mailer } from '../src/mail.js'
 import { createPublicService } from '../src/service/community.js'
 import { createService } from '../src/service/index.js'
 import type { OriginEnv } from '../src/origins.js'
@@ -38,11 +39,33 @@ type ReqOpts = {
   ip?: string
 }
 
-/** App over an isolated test schema. Each harness gets its own client IP so the process-wide rate-limit store never leaks between tests. */
-export async function setupApp(over: Partial<TestEnv> = {}) {
+/** A random client address, so a helper's own requests never use up the per-IP limits a test is measuring. */
+export function freshIp(): string {
+  return `10.${randomBytes(1)[0]}.${randomBytes(1)[0]}.${randomBytes(1)[0]}`
+}
+
+/** The one link in a mail's text body. */
+export function linkIn(mail: Mail): string {
+  const links = mail.text.match(/https?:\/\/[^\s<>"]+/g) ?? []
+  if (links.length !== 1) throw new Error(`expected one link in the mail, found ${links.length}`)
+  return links[0]!
+}
+
+/** Path and query of an absolute link, for app.request. */
+export function pathOf(link: string): string {
+  const u = new URL(link)
+  return u.pathname + u.search
+}
+
+/**
+ * App over an isolated test schema. Each harness gets its own client IP so the process-wide rate-limit store never leaks between tests.
+ * Mail goes to `mail` (a capture mailer) unless `opts.mailer` replaces it.
+ */
+export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mailer } = {}) {
   const t: TestDb = await withTestDb()
   const env = testEnv(over)
-  const auth = createAuth(t.db, env, { clientIpHeader: 'x-test-client-ip' })
+  const mail = createCaptureMailer()
+  const auth = createAuth(t.db, env, { mailer: opts.mailer ?? mail, clientIpHeader: 'x-test-client-ip' })
   const app = createApp({
     auth,
     env,
@@ -52,7 +75,7 @@ export async function setupApp(over: Partial<TestEnv> = {}) {
     publicRateLimit: { enabled: false },
   })
   const origin = env.BETTER_AUTH_URL
-  const ip = `10.${randomBytes(1)[0]}.${randomBytes(1)[0]}.${randomBytes(1)[0]}`
+  const ip = freshIp()
 
   function request(path: string, o: ReqOpts = {}) {
     const method = o.method ?? 'GET'
@@ -82,7 +105,34 @@ export async function setupApp(over: Partial<TestEnv> = {}) {
     return request('/api/auth/sign-in/email', { method: 'POST', body: { email, password }, ...o })
   }
 
-  return { ...t, env, auth, app, origin, request, signUp, signIn }
+  /** The newest captured mail to `email` whose link goes to `path`. */
+  async function lastMail(email: string, path: '/api/auth/verify-email' | '/reset-password'): Promise<Mail> {
+    await new Promise((r) => setImmediate(r)) // sending is never awaited by the request
+    const found = mail.sent.filter((m) => m.to === email.toLowerCase() && new URL(linkIn(m)).pathname === path).at(-1)
+    if (!found) throw new Error(`no ${path} mail to ${email}`)
+    return found
+  }
+
+  /** Opens the newest verification link sent to `email`, as a mail client would (no cookie, no Origin). */
+  async function verify(email: string, o: ReqOpts = {}) {
+    const res = await request(pathOf(linkIn(await lastMail(email, '/api/auth/verify-email'))), { ip: freshIp(), ...o })
+    if (res.status !== 302) throw new Error(`verify failed: ${res.status}`)
+    return res
+  }
+
+  /**
+   * Sign-up, verification through the emailed link, then sign-in: the response is the sign-in's
+   * (status 200, session cookie, `user`). A failed sign-up is returned as is. Verification and
+   * sign-in come from fresh addresses so they never count against the test's own per-IP limits.
+   */
+  async function signUpVerified(email: string, password = GOOD_PASSWORD, o: ReqOpts = {}) {
+    const up = await signUp(email, password, o)
+    if (up.status !== 200) return up
+    await verify(email)
+    return signIn(email, password, { ...o, ip: freshIp() })
+  }
+
+  return { ...t, env, auth, app, origin, mail, request, signUp, signIn, lastMail, verify, signUpVerified }
 }
 
 /** "name=value" pairs of all Set-Cookie headers, joined for a Cookie request header. */

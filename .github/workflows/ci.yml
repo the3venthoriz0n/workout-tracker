@@ -85,6 +85,8 @@ jobs:
           POSTGRES_DB: ci
           BETTER_AUTH_SECRET: ci
           BETTER_AUTH_URL: https://example.invalid
+          RESEND_API_KEY: ci
+          MAIL_FROM: no-reply@example.invalid
         run: |
           published=$(docker compose config --format json | jq -c '[.services[].ports[]? | .published] | map(tonumber) | unique')
           echo "published ports: $published"
@@ -107,15 +109,17 @@ jobs:
           echo "published ports: $published"
           test "$published" = "[]"
           jq -e '.services.app.networks.tunnel.aliases | index("workout-tracker-app")' config.json
-      - name: Self-hosted compose refuses a missing SIGNUP_ALLOWLIST
+      - name: Self-hosted compose refuses a missing SIGNUP_ALLOWLIST, RESEND_API_KEY or MAIL_FROM
         env:
           IMAGE_REF: ghcr.io/example/app@sha256:0000000000000000000000000000000000000000000000000000000000000000
         run: |
-          grep -v '^SIGNUP_ALLOWLIST=' deploy/self-hosted/.env.example > no-allowlist.env
-          if docker compose -f deploy/self-hosted/compose.yaml --env-file no-allowlist.env config > /dev/null 2>&1; then
-            echo "compose accepted a missing SIGNUP_ALLOWLIST" >&2
-            exit 1
-          fi
+          for name in SIGNUP_ALLOWLIST RESEND_API_KEY MAIL_FROM; do
+            grep -v "^$name=" deploy/self-hosted/.env.example > missing.env
+            if docker compose -f deploy/self-hosted/compose.yaml --env-file missing.env config > /dev/null 2>&1; then
+              echo "compose accepted a missing $name" >&2
+              exit 1
+            fi
+          done
 
   deploy-script:
     runs-on: ubuntu-24.04

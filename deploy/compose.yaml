@@ -37,6 +37,10 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?}
+      # Email for verification and password-reset links (Resend). The API refuses to start
+      # without them in production; add both to .env by hand (deploy.sh does not generate them).
+      RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY in .env}
+      MAIL_FROM: ${MAIL_FROM:?set MAIL_FROM in .env}
       # Extra allowed origins, comma separated (none needed for the web app; mobile builds later).
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
     depends_on:

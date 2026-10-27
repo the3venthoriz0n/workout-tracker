@@ -314,7 +314,7 @@ describe('body limits', () => {
 
 describe('errors', () => {
   it('a service failure is the sanitized 500, with nothing internal in the body', async () => {
-    const up = await h.signUp(`boom-${newId()}@example.com`)
+    const up = await h.signUpVerified(`boom-${newId()}@example.com`)
     const userId = ((await up.json()) as { user: { id: string } }).user.id
     const app = createApp({
       auth: h.auth,

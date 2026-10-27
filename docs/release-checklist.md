@@ -17,6 +17,7 @@ Nothing here is automated: do it in the GitHub and DigitalOcean UIs. Deploy acce
 
 - [ ] **Sign-up is open to anyone** who can reach the site: no email verification, no password reset, only Better Auth's rate limiting. Decide whether that is acceptable for the first release, and do the off-box backups below first, because the database now holds real accounts.
 - [ ] **`BETTER_AUTH_SECRET` and `BETTER_AUTH_URL`** are generated into `/opt/workout-tracker/.env` on the first deploy (`BETTER_AUTH_URL` is `https://<DOMAIN>`). The compose file refuses to start without them. After a domain change edit both `DOMAIN` and `BETTER_AUTH_URL` in that file. Rotating the secret signs every user out.
+- [ ] **`RESEND_API_KEY` and `MAIL_FROM`** (M2b) are not generated: add both to `/opt/workout-tracker/.env` by hand before the first deploy (a sending-only Resend API key, and a sender on a domain verified in Resend). The compose file and the API refuse to start without them in production.
 - [ ] **`TRUSTED_ORIGINS`** (optional, comma separated, exact origins such as `https://example.com`): leave unset for the web app, which is the `BETTER_AUTH_URL` origin. Add the Capacitor origins only when the mobile builds ship, after verifying their exact strings.
 - [ ] **Migrations** run twice per deploy by design: `deploy.sh` runs `migrate.js` after the pre-migration dump (the old app keeps serving), and the new app runs them again on boot (a no-op). A failing migration aborts the deploy before anything changes. Keep migrations backward compatible.
 
@@ -63,7 +64,7 @@ A rollback does not undo migrations. Restore from a pre-deploy dump only if a mi
 Staging runs on a self-hosted Docker host behind an existing Cloudflare Tunnel; see `deploy/self-hosted/README.md`. Nothing here deploys to production.
 
 - [ ] **GHCR package access**: the first push of `:staging` creates a private package. Either make it public (Package settings, Danger zone; one-way), or create a read-only token (`read:packages`) yourself and run `docker login ghcr.io` on the host. Without one of these, `update.sh` cannot resolve or pull the image.
-- [ ] **Host `.env`** created from `deploy/self-hosted/.env.example` (mode 600, never committed): `DOMAIN`, `TUNNEL_NETWORK`, generated secrets, `SIGNUP_ALLOWLIST`. Back it up privately.
+- [ ] **Host `.env`** created from `deploy/self-hosted/.env.example` (mode 600, never committed): `DOMAIN`, `TUNNEL_NETWORK`, generated secrets, `SIGNUP_ALLOWLIST`, `RESEND_API_KEY` and `MAIL_FROM` (sign-in needs a verified email, so staging must be able to send). Back it up privately.
 - [ ] **Tunnel public hostname** points at `http://app:3000` on the shared network. Do not publish any port on the host.
 - [ ] **Branch protection**: add the checks `self-hosted-config` and `public-safe` to the required list for `main`.
 - [ ] **Scheduler** runs `update.sh` with `REPO=<owner>/<repo>`; check its log after the first merge to `main`.
