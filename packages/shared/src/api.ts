@@ -71,3 +71,5 @@ export const AdoptBody = z.object({ version: z.number().int().min(1).max(1_000_0
 export const EmptyBody = z.object({})
 // Account deletion asks for the current password (Better Auth's own limits: at most 128 characters).
 export const DeleteAccountBody = z.object({ password: z.string().min(1).max(128) })
+/** POST /import/replace: the password plus an export file (validated separately, as ImportInvalidError). */
+export const ReplaceImportBody = z.object({ password: DeleteAccountBody.shape.password, data: z.unknown() })

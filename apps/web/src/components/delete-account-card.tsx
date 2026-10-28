@@ -6,35 +6,23 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/auth/context'
 import type { AuthErrorKind } from '@/auth/client'
 import { AUTH_ERROR_TEXT } from '@/lib/auth-messages'
-import { downloadExport } from '@/lib/download-export'
-import { notifyError } from '@/lib/notify'
 import { confirmBox } from '@/lib/styles'
-import { useRepo } from '@/repo/provider'
 
 const CONFIRM_WORD = 'DELETE'
 
 /**
- * Settings (signed in only): export, then delete the account. Deletion needs the password and the
+ * Settings (signed in only): delete the account (export lives in the "Your data" card right above). Deletion needs the password and the
  * word DELETE; on success the AuthProvider forgets the account on this device and returns to guest.
  * Errors keep the form as typed.
  */
 export function DeleteAccountCard() {
   const a = useAuth()
-  const repo = useRepo()
   const id = useId()
   const [open, setOpen] = useState(false)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<AuthErrorKind | null>(null)
   const ready = password.length > 0 && confirm === CONFIRM_WORD && !a.busy
-
-  async function exportData() {
-    try {
-      await downloadExport(repo)
-    } catch (err) {
-      notifyError(err, 'Export failed')
-    }
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -64,12 +52,9 @@ export function DeleteAccountCard() {
           from the server and signs you out everywhere. This can&apos;t be undone.
         </p>
         <p className="text-muted-foreground text-sm">
-          Plans you shared in Community stay there, shown as &ldquo;Deleted user&rdquo;. Download your data first if you
-          want a copy.
+          Plans you shared in Community stay there, shown as &ldquo;Deleted user&rdquo;. Export your data above first if
+          you want a copy.
         </p>
-        <Button variant="outline" className="min-h-11" onClick={() => void exportData()}>
-          Export my data
-        </Button>
         {open ? (
           <form role="alertdialog" aria-label="Confirm account deletion" className={confirmBox} noValidate onSubmit={submit}>
             <div className="flex flex-col gap-1.5">

@@ -79,6 +79,8 @@ export type RouteSpec = {
   noActiveSession?: boolean
   /** The happy path deletes the caller's account, so it runs as a throwaway account. */
   deletesAccount?: true
+  /** The happy path replaces the caller's data (and needs no published listing): a throwaway account. */
+  replacesData?: true
 }
 
 const rule = {
@@ -388,6 +390,15 @@ export const ROUTES: RouteSpec[] = [
     deletesAccount: true,
   },
   { method: 'POST', path: `${V1}/import`, body: (f) => f.export, status: 204, foreign: 'none', freshAccount: true },
+  // Restore: replaces the caller's own data only; the file's ids land under the caller (composite keys).
+  {
+    method: 'POST',
+    path: `${V1}/import/replace`,
+    body: (f) => ({ password: f.password, data: f.export }),
+    status: 204,
+    foreign: 'none',
+    replacesData: true,
+  },
 ]
 
 /**
