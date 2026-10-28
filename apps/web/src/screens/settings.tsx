@@ -5,6 +5,7 @@ import { Screen } from '@/app/screen'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useProfile, useUpdateProfile } from '@/repo/hooks'
+import { AboutFooter } from '@/components/about-footer'
 import { AccountCard } from '@/components/account-card'
 import { DataSection } from '@/components/data-section'
 import { DeleteAccountCard } from '@/components/delete-account-card'
@@ -123,6 +124,7 @@ export function SettingsScreen() {
           </Card>
         )}
         {signedIn && <DeleteAccountCard />}
+        <AboutFooter />
       </div>
     </div>
   )

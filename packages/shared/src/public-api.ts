@@ -1,4 +1,5 @@
-// Read-only client for the public community area (`/api/public/*`). Plain fetch, no cookies,
+// Read-only client for the public community area (`/api/public/*`). Plain fetch; same-origin cookies
+// ride along (a proxy login such as Cloudflare Access needs them; the server never reads a session here),
 // the same error mapping as ApiRepo. Responses are untrusted: they are parsed against the public
 // schemas (unknown keys dropped) and a response that does not match is an ApiError.
 import type { z } from 'zod'
@@ -19,7 +20,7 @@ async function getPublic<S extends z.ZodType>(path: string, schema: S, opts: Pub
   while (base.endsWith('/')) base = base.slice(0, -1)
   let res: Response
   try {
-    res = await (opts.fetch ?? globalThis.fetch)(`${base}/api/public${path}`, { method: 'GET', credentials: 'omit' })
+    res = await (opts.fetch ?? globalThis.fetch)(`${base}/api/public${path}`, { method: 'GET', credentials: 'same-origin' })
   } catch {
     throw new OfflineError()
   }
