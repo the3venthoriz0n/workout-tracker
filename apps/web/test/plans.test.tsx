@@ -73,7 +73,7 @@ test('plan list rows have no Delete text; deleting a plan lives on its page and 
   await user.click(screen.getByRole('button', { name: 'Confirm delete plan' }))
   await waitFor(async () => expect(await repo.listPlans()).toEqual([]))
   await waitFor(() => expect(router.state.location.pathname).toBe('/plans'))
-  expect(screen.queryByRole('link', { name: /Old/ })).toBeNull()
+  await waitFor(() => expect(screen.queryByRole('link', { name: /Old/ })).toBeNull())
 })
 
 describe('community source line', () => {
