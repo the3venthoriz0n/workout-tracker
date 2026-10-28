@@ -68,7 +68,6 @@ export const ImportBody = exportDataSchema
 export const PublishBody = listingMetaSchema
 // Only the version: the snapshot is always loaded from the database, never taken from the client.
 export const AdoptBody = z.object({ version: z.number().int().min(1).max(1_000_000).optional() })
-export const EmptyBody = z.object({})
 // Account deletion asks for the current password (Better Auth's own limits: at most 128 characters).
 export const DeleteAccountBody = z.object({ password: z.string().min(1).max(128) })
 /** POST /import/replace: the password plus an export file (validated separately, as ImportInvalidError). */

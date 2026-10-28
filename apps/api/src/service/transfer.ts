@@ -25,7 +25,6 @@ import type { Db } from '../db/types.js'
 import type { Tx } from './items.js'
 import {
   dec,
-  isUuid,
   now,
   toExercise,
   toGear,

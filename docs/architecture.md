@@ -4,7 +4,7 @@ Diagrams of what exists today, with parts that are not built yet marked "planned
 
 ## 1. System context
 
-Staging runs on a self-hosted Docker host behind an existing Cloudflare Tunnel (app and Postgres only, no published ports, pulled by `update.sh`). Production is planned for one Droplet running Caddy, the app and Postgres (M3, on hold). Both run the same image: Hono serving the SPA, `/api/v1` (session required) and the public community area `/api/public/*` (GET only, no session). Verification and reset email goes out through Resend (built); production and staging refuse to start without its settings, and in development the console mailer prints links to the API log instead.
+Staging runs on a self-hosted Docker host behind an existing Cloudflare Tunnel (app and Postgres only, the app port published on `127.0.0.1` only, pulled by `update.sh`). Production is planned for one Droplet running Caddy, the app and Postgres (M3, on hold). Both run the same image: Hono serving the SPA, `/api/v1` (session required) and the public community area `/api/public/*` (GET only, no session). Set-up and reset email goes out through Resend (built); production and staging refuse to start without its settings, and in development the console mailer prints links to the API log instead.
 
 ```mermaid
 flowchart LR

@@ -15,7 +15,7 @@ function setup(url: string, over: Partial<AuthClient> = {}, session = false) {
     signIn: vi.fn(async () => ({ userId: 'u', email: 'a@example.com' })),
     signOut: vi.fn(async () => {}),
     session: async () => (session ? { userId: 'u', email: 'me@example.test' } : null),
-    resendVerification: vi.fn(async () => {}),
+    resendSetupLink: vi.fn(async () => {}),
     requestPasswordReset: vi.fn(async () => {}),
     resetPassword: vi.fn(async () => {}),
     deleteAccount: vi.fn(async () => {}),
@@ -51,7 +51,7 @@ test('a set-up link (?setup=1) reads "Choose your password", removes token and f
   const { auth, router } = setup('/reset-password?token=setup123&setup=1')
   expect(await screen.findByRole('heading', { name: 'Choose your password' })).toBeTruthy()
   expect(screen.queryByText(/reset password/i)).toBeNull()
-  expect(router.state.location.search).toBe('')
+  await waitFor(() => expect(router.state.location.search).toBe(''))
   const field = screen.getByLabelText('Password')
   expect(field.getAttribute('autocomplete')).toBe('new-password')
   await user.type(field, 'my chosen password')
@@ -72,7 +72,7 @@ test('an expired set-up link offers a new set-up link (through request-password-
   await user.type(screen.getByLabelText('Email'), 'a@example.com')
   await user.click(screen.getByRole('button', { name: 'Send a new link' }))
   expect((await screen.findByRole('status')).textContent).toMatch(/new link/i)
-  expect(auth.resendVerification).toHaveBeenCalledWith('a@example.com')
+  expect(auth.resendSetupLink).toHaveBeenCalledWith('a@example.com')
 })
 
 test('reset screen removes the token from the address bar and submits it once', async () => {
@@ -80,7 +80,7 @@ test('reset screen removes the token from the address bar and submits it once', 
   const { auth, router } = setup('/reset-password?token=abc123')
   const field = await screen.findByLabelText('New password')
   expect(screen.getByRole('heading', { name: 'Reset password' })).toBeTruthy()
-  expect(router.state.location.search).toBe('')
+  await waitFor(() => expect(router.state.location.search).toBe(''))
   expect(field.getAttribute('type')).toBe('password')
   expect(field.getAttribute('autocomplete')).toBe('new-password')
   await user.type(field, 'short')

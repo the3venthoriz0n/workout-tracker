@@ -51,12 +51,6 @@ export function linkIn(mail: Mail): string {
   return links[0]!
 }
 
-/** Path and query of an absolute link, for app.request. */
-export function pathOf(link: string): string {
-  const u = new URL(link)
-  return u.pathname + u.search
-}
-
 /**
  * App over an isolated test schema. Each harness gets its own client IP so the process-wide rate-limit store never leaks between tests.
  * Mail goes to `mail` (a capture mailer) unless `opts.mailer` replaces it.

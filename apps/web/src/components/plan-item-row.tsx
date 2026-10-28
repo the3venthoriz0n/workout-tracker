@@ -11,7 +11,6 @@ import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import { summarizeRule } from '@/lib/rule-summary'
 import { segmentedItem, segmentedTrack } from '@/lib/styles'
-import { cn } from '@/lib/utils'
 import {
   useClearRule,
   useDeletePlanItem,

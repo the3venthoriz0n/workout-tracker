@@ -23,7 +23,7 @@ export function EmailLinkForm({ kind, onBack }: { kind: 'reset' | 'setup'; onBac
     setProblem(null)
     setState('sending')
     try {
-      await (kind === 'reset' ? a.requestPasswordReset(email.trim()) : a.resendVerification(email.trim()))
+      await (kind === 'reset' ? a.requestPasswordReset(email.trim()) : a.resendSetupLink(email.trim()))
       setState('sent')
     } catch (e) {
       setState('idle')
