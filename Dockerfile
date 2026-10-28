@@ -2,7 +2,7 @@
 
 # The Node image is pinned by tag and digest, written out in both FROM lines so Dependabot
 # can update them. CI checks the tag matches .node-version.
-FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS base
+FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN npm install --global pnpm@12.15.0
 WORKDIR /app
@@ -26,7 +26,7 @@ ARG APP_REPO=
 RUN pnpm build
 
 # Runtime: bundled API + static SPA only. No node_modules, no package managers, no source.
-FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS runtime
+FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS runtime
 RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn* /usr/local/bin/yarn*
 ENV NODE_ENV=production PORT=3000 STATIC_DIR=/app/public MIGRATIONS_DIR=/app/drizzle
 WORKDIR /app
