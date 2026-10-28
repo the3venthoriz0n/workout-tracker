@@ -10,7 +10,7 @@ import { ProgressionScreen } from '@/screens/progression'
 import { ResetPasswordScreen } from '@/screens/reset-password'
 import { SettingsScreen } from '@/screens/settings'
 import { TodayScreen } from '@/screens/today'
-import { VerifiedScreen } from '@/screens/verified'
+import { NotFoundScreen } from '@/screens/not-found'
 import { Layout } from './layout'
 
 export const routes: RouteObject[] = [
@@ -27,8 +27,9 @@ export const routes: RouteObject[] = [
       { path: '/history', element: <HistoryScreen /> },
       { path: '/history/:id', element: <HistoryDetailScreen /> },
       { path: '/settings', element: <SettingsScreen /> },
-      { path: '/verified', element: <VerifiedScreen /> },
       { path: '/reset-password', element: <ResetPasswordScreen /> },
+      // Unknown paths, including the retired /verified landing page of old confirmation mails.
+      { path: '*', element: <NotFoundScreen /> },
     ],
   },
 ]

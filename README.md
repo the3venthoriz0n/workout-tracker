@@ -19,7 +19,7 @@ The first run creates `.env` with random local-only secrets (database password, 
 
 ### Accounts and sync
 
-The app works as a guest with all data on the device. Signing up (email + password, 10-128 characters) creates an account and mails a verification link; you can sign in only after confirming the address. Your guest data stays untouched on the device until the first successful sign-in, which uploads it once. From then on the data lives in Postgres behind the REST API (`/api/v1`) and is the same on every device you sign in on. While signed in, set logging keeps working offline: set edits are queued on the device and replayed when the connection returns (last write wins). Starting or finishing a workout needs a connection. Signing out returns to a fresh guest database; the account's data stays on the server.
+The app works as a guest with all data on the device. Signing up asks for your email only and mails a link to finish setting up the account: open it to choose your password (10-128 characters), which also confirms the address; you can sign in only after that. Your guest data stays untouched on the device until the first successful sign-in, which uploads it once. From then on the data lives in Postgres behind the REST API (`/api/v1`) and is the same on every device you sign in on. While signed in, set logging keeps working offline: set edits are queued on the device and replayed when the connection returns (last write wins). Starting or finishing a workout needs a connection. Signing out returns to a fresh guest database; the account's data stays on the server.
 
 Settings → "Export my data" downloads everything as JSON; "Restore from a file" replaces all your plans, library and history with such a file after showing what it holds (type REPLACE; signed in, also your password).
 
@@ -29,9 +29,9 @@ A forgotten password is reset by email ("Forgot password?"). Resetting also conf
 
 ### Testing email flows locally
 
-`just dev` needs no mail account: the API prints every verification and reset link in its log, on lines starting with `[mail]` (development only; follow them with `just logs dev`). `just preview` runs in production mode with placeholder mail settings, so emails cannot be sent there and new accounts cannot verify; to try the sign-up and reset flows, use `just dev`.
+`just dev` needs no mail account: the API prints every set-up and reset link in its log, on lines starting with `[mail]` (development only; follow them with `just logs dev`). `just preview` runs in production mode with placeholder mail settings, so emails cannot be sent there and new accounts cannot verify; to try the sign-up and reset flows, use `just dev`.
 
-Dev accounts created before email verification existed are unverified and cannot sign in. Either wipe them (`just psql`, then `truncate "user" cascade;`) or follow the verification link logged when you request one again (sign up with the address, or use "Forgot password?").
+Dev accounts created before email verification existed are unverified and cannot sign in. Either wipe them (`just psql`, then `truncate "user" cascade;`) or follow the set-up link logged when you request one again (sign up with the address, or use "Forgot password?").
 
 State-changing API requests must come from a trusted origin: the origin of `BETTER_AUTH_URL`, plus `TRUSTED_ORIGINS` (comma separated) if set. In development, `localhost` and private-network addresses on the Vite port are also accepted so a phone on the same Wi-Fi can sign up.
 

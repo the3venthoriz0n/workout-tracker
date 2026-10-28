@@ -19,7 +19,7 @@ cd deploy/self-hosted
 cp .env.example .env && chmod 600 .env
 ```
 
-Edit `.env`: `DOMAIN`, `TUNNEL_NETWORK`, the database password and `BETTER_AUTH_SECRET` (`openssl rand -hex 32` for each), `SIGNUP_ALLOWLIST` (comma separated emails that may create an account; the line is required, and an explicitly empty value means open sign-up; compose refuses to start when it is missing), and `RESEND_API_KEY` and `MAIL_FROM` (verification and password-reset email through Resend; sign-in needs a verified email, so both are required and compose refuses to start without them; use a sending-only API key and a sender on a domain verified in Resend). `.env` never leaves the host, and is gitignored. Back it up somewhere private: losing the secret signs everyone out.
+Edit `.env`: `DOMAIN`, `TUNNEL_NETWORK`, the database password and `BETTER_AUTH_SECRET` (`openssl rand -hex 32` for each), `SIGNUP_ALLOWLIST` (comma separated emails that may create an account; the line is required, and an explicitly empty value means open sign-up; compose refuses to start when it is missing), and `RESEND_API_KEY` and `MAIL_FROM` (set-up and password-reset email through Resend; sign-in needs a confirmed email, so both are required and compose refuses to start without them; use a sending-only API key and a sender on a domain verified in Resend). `.env` never leaves the host, and is gitignored. Back it up somewhere private: losing the secret signs everyone out.
 
 ## 3. Tunnel public hostname
 
@@ -33,7 +33,7 @@ In the Cloudflare dashboard (Zero Trust, Networks, Tunnels, your tunnel, Public 
 
 Known limits (also in the spec):
 - Any other container on the tunnel network can reach the app directly and send its own `cf-connecting-ip`, bypassing per-IP rate limits. Put only trusted containers on that network.
-- The allowlist checks an email address, not a person, so anyone who knows a listed address can register it before its owner does. Email verification narrows this but does not fully close it: the owner may still click the verification link of a sign-up they did not make, which confirms the other person's password. It is mitigated because a sign-up for an existing unverified address mails the owner a "choose your password" link; using it sets their password, verifies the address and signs everyone else out.
+- The allowlist checks an email address, not a person, so anyone who knows a listed address can register it before its owner does. That gains nothing: the password is chosen only through the set-up link mailed to the address, and using it verifies the address and signs everyone else out.
 
 ## 4. First deploy
 

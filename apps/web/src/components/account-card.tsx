@@ -161,7 +161,7 @@ export function AccountCard() {
           error={a.error}
           onSubmit={(e, p) => {
             setLastEmail(e)
-            void (mode === 'sign-in' ? a.signIn(e, p) : a.signUp(e, p))
+            void (mode === 'sign-in' ? a.signIn(e, p) : a.signUp(e))
           }}
         />
         {mode === 'sign-in' && a.error === 'email_not_verified' && lastEmail && <ResendEmail email={lastEmail} />}

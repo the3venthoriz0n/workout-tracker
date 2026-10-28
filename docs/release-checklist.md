@@ -15,7 +15,7 @@ Nothing here is automated: do it in the GitHub and DigitalOcean UIs. Deploy acce
 
 ### Accounts and migrations (M2)
 
-- [ ] **Sign-up is open to anyone** who can reach the site, unless `SIGNUP_ALLOWLIST` is set. Email must be verified before the first sign-in, and password reset works by email; abuse limits are Better Auth's rate limiting plus the mail throttle (see "Accepted risks" below). Do the off-box backups below first, because the database now holds real accounts.
+- [ ] **Sign-up is open to anyone** who can reach the site, unless `SIGNUP_ALLOWLIST` is set. The password is chosen through the mailed set-up link, which confirms the address, before the first sign-in, and password reset works by email; abuse limits are Better Auth's rate limiting plus the mail throttle (see "Accepted risks" below). Do the off-box backups below first, because the database now holds real accounts.
 - [ ] **`BETTER_AUTH_SECRET` and `BETTER_AUTH_URL`** are generated into `/opt/workout-tracker/.env` on the first deploy (`BETTER_AUTH_URL` is `https://<DOMAIN>`). The compose file refuses to start without them. After a domain change edit both `DOMAIN` and `BETTER_AUTH_URL` in that file. Rotating the secret signs every user out.
 - [ ] **`RESEND_API_KEY` and `MAIL_FROM`** are not generated: add both to `/opt/workout-tracker/.env` by hand before the first deploy. The compose file and the API refuse to start without them in production. Set up Resend first (see "Resend (production and staging)" below).
 - [ ] **`TRUSTED_ORIGINS`** (optional, comma separated, exact origins such as `https://example.com`): leave unset for the web app, which is the `BETTER_AUTH_URL` origin. Add the Capacitor origins only when the mobile builds ship, after verifying their exact strings.
@@ -35,7 +35,7 @@ Do this once per sending domain; production and staging can share the account (u
 - [ ] Add the DNS records Resend lists: DKIM (a TXT or CNAME record), SPF (a TXT record, plus the MX record on the sending subdomain if Resend asks for it). Optional: a DMARC record.
 - [ ] Create an API key with sending access only, scoped to that domain if the plan allows it. Put it in the host's `.env` as `RESEND_API_KEY`; never commit it.
 - [ ] Set `MAIL_FROM` to an address on that verified domain, for example `Workout Tracker <no-reply@mail.example.invalid>` (use your own domain).
-- [ ] After the first deploy, sign up with an address you control and confirm the verification mail arrives and the link opens `https://<DOMAIN>/verified`; then try "Forgot password?".
+- [ ] After the first deploy, sign up with an address you control and confirm the set-up mail arrives, its link opens `https://<DOMAIN>/reset-password` reading "Choose your password", and you can sign in with the password you chose; then try "Forgot password?".
 
 ### DigitalOcean
 
@@ -97,12 +97,11 @@ Staging runs on a self-hosted Docker host behind an existing Cloudflare Tunnel; 
 
 - Community plans: public names can imitate someone else (nothing checks look-alike names; moderation is hiding a listing). A listing kept after its owner deleted the account ("Deleted user") can only be taken down by hiding it.
 
-- The sign-up allowlist (when set) checks an address, not a person. Email verification narrows the old takeover risk: a sign-up for an existing unverified address mails its owner a "choose your password" link, and using it sets their password and signs everyone else out.
+- The sign-up allowlist (when set) checks an address, not a person. Registering a listed address first gains nothing: the password is chosen only through the set-up link mailed to that address, and using it signs everyone else out.
 - Other containers on the shared tunnel network can bypass per-IP rate limits; only put trusted containers on that network.
 
 ## Accepted risks (email auth)
 
-- The first verification mail from an attacker's sign-up still reaches the victim (it is a real mail to a real address; the link only confirms the address and does not sign anyone in).
 - Mail bombing through plus-addressing: `name+1@`, `name+2@`, ... are different recipients for the throttle (3 per recipient per hour), so one inbox can still be sent many mails, bounded by the per-IP limits (10 sign-ups and 5 reset or resend requests per hour).
 - The mail throttle is in memory and resets when the API restarts.
 

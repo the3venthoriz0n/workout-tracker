@@ -8,7 +8,6 @@ import {
   resetEmail,
   setupEmail,
   throttled,
-  verificationEmail,
   type Mail,
 } from '../src/mail.js'
 
@@ -135,9 +134,8 @@ describe('throttled', () => {
 })
 
 describe('message builders', () => {
-  const link = 'https://app.example.com/api/auth/verify-email?token=abc.def&callbackURL=%2Fverified'
+  const link = 'https://app.example.com/reset-password?token=abc123&setup=1'
   for (const [name, build] of [
-    ['verificationEmail', verificationEmail],
     ['resetEmail', resetEmail],
     ['setupEmail', setupEmail],
   ] as const) {
@@ -153,8 +151,8 @@ describe('message builders', () => {
   }
 
   it('the two kinds have different subjects (the throttle keys on it)', () => {
-    const subjects = [verificationEmail, resetEmail, setupEmail].map((b) => b('a@example.com', link).subject)
-    expect(new Set(subjects).size).toBe(3)
+    const subjects = [resetEmail, setupEmail].map((b) => b('a@example.com', link).subject)
+    expect(new Set(subjects).size).toBe(2)
     expect(setupEmail('a@example.com', link).text.toLowerCase()).toContain('finish setting up your account: choose your password')
   })
 

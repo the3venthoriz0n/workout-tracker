@@ -9,7 +9,7 @@ export const AUTH_ERROR_TEXT: Record<AuthErrorKind, string> = {
   invalid_input: 'Check the email and password and try again.',
   server: 'Something went wrong on our side. Try again in a moment.',
   unsynced_changes: "Some changes haven't reached the server yet. Reconnect and try again, or sign out and discard them.",
-  email_not_verified: 'Confirm your email first. Open the link we sent you, then sign in.',
+  email_not_verified: 'Confirm your email first: open the link we sent you, choose a password, then sign in.',
   invalid_token: 'This link has expired. Request a new one.',
   invalid_password: 'Password is incorrect.',
   session_expired: 'Your session has ended. Sign in again, then try again.',

@@ -110,8 +110,8 @@ describe('sign-up allowlist', () => {
     h = await setupApp({ SIGNUP_ALLOWLIST: allow })
     const up = await h.signUp('ALICE@Example.COM')
     expect(up.status).toBe(200)
+    await h.setUp('alice@example.com')
     expect(h.mail.sent.map((m) => m.to)).toEqual(['alice@example.com'])
-    await h.verify('alice@example.com')
     expect((await h.signIn('alice@example.com', GOOD_PASSWORD)).status).toBe(200)
   })
 

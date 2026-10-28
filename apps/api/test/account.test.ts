@@ -336,6 +336,8 @@ describe('Better Auth endpoints a session holder could use to test passwords or 
     '/verify-password', '/change-password', '/change-email', '/update-user', '/delete-user', '/delete-user/callback',
     '/update-session', '/list-sessions', '/revoke-session', '/revoke-sessions', '/revoke-other-sessions',
     '/list-accounts', '/account-info', '/unlink-account', '/link-social', '/get-access-token', '/refresh-token',
+    // No verification mail is ever sent: sign-up mails the set-up (password) link instead.
+    '/verify-email', '/send-verification-email',
   ]
 
   it('answer 404 over HTTP and change nothing; DELETE /account (which checks the password directly) still works', async () => {
@@ -362,8 +364,8 @@ describe('Better Auth endpoints a session holder could use to test passwords or 
   })
 
   it('the flows the web app uses stay enabled', async () => {
-    for (const path of ['/get-session', '/sign-out', '/sign-in/email', '/sign-up/email', '/request-password-reset', '/reset-password', '/send-verification-email', '/verify-email']) {
-      const res = await h.request(`/api/auth${path}`, { method: path === '/get-session' || path === '/verify-email' ? 'GET' : 'POST', body: path === '/get-session' || path === '/verify-email' ? undefined : {}, ip: freshIp() })
+    for (const path of ['/get-session', '/sign-out', '/sign-in/email', '/sign-up/email', '/request-password-reset', '/reset-password']) {
+      const res = await h.request(`/api/auth${path}`, { method: path === '/get-session' ? 'GET' : 'POST', body: path === '/get-session' ? undefined : {}, ip: freshIp() })
       expect(res.status, path).not.toBe(404)
     }
   })

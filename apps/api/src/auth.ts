@@ -6,7 +6,7 @@ import type { Db } from './db/index.js'
 import { account, session, user, verification } from './db/schema.js'
 import type { Env } from './env.js'
 import { sanitizedLog } from './logging.js'
-import { logMailFailure, resetEmail, setupEmail, verificationEmail, type Mail, type Mailer } from './mail.js'
+import { logMailFailure, resetEmail, setupEmail, type Mail, type Mailer } from './mail.js'
 import { configuredOrigins, isTrustedOrigin } from './origins.js'
 
 export type AuthEnv = Pick<Env, 'NODE_ENV' | 'BETTER_AUTH_URL' | 'BETTER_AUTH_SECRET' | 'TRUSTED_ORIGINS'> &
@@ -40,8 +40,7 @@ export function rateLimitIpHeaders(env: Pick<Env, 'NODE_ENV'> & Partial<Pick<Env
   return env.NODE_ENV === 'production' ? ['x-forwarded-for'] : []
 }
 
-/** Where the emailed links land (SPA routes, same origin as the API). */
-export const VERIFIED_PATH = '/verified'
+/** Where the emailed links land (SPA route, same origin as the API). Set-up links add ?setup=1. */
 export const RESET_PASSWORD_PATH = '/reset-password'
 
 export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
@@ -68,7 +67,7 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
 
   const allowlist = new Set(env.SIGNUP_ALLOWLIST ?? [])
 
-  // Set right after betterAuth() returns; the sign-up hook uses it to mail a reset link.
+  // Set right after betterAuth() returns; the sign-up hooks use it to mail the set-up link.
   let requestPasswordReset: ((email: string) => Promise<unknown>) | undefined
 
   const auth = betterAuth({
@@ -109,9 +108,11 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
       revokeSessionsOnPasswordReset: true,
       // Every mailed link stays valid (1 hour) until one is used; onPasswordReset then removes the
       // rest. Nothing here touches the database, so a known address costs no extra awaited work.
+      // An unverified account gets the set-up link ("choose your password"); only the SPA reads
+      // `setup`, to word the page. The token handling is identical.
       sendResetPassword: async ({ user: u, token }) => {
-        const url = link(RESET_PASSWORD_PATH, { token })
-        send(u.emailVerified ? resetEmail(u.email, url) : setupEmail(u.email, url))
+        if (u.emailVerified) send(resetEmail(u.email, link(RESET_PASSWORD_PATH, { token })))
+        else send(setupEmail(u.email, link(RESET_PASSWORD_PATH, { token, setup: '1' })))
       },
       // A used link proves control of the mailbox: verify the email and drop every other reset
       // link of this user (sessions are already revoked by revokeSessionsOnPasswordReset).
@@ -131,14 +132,20 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
         requestPasswordReset(u.email).catch(logMailFailure)
       },
     },
+    // No verification mail exists: the password is chosen only after the email is confirmed. A NEW
+    // account gets the set-up link instead (the reset flow, as for a duplicate sign-up of an
+    // unverified address); using it sets the password, verifies the email and revokes sessions, so
+    // whatever password the sign-up request carried (the web sends a random throwaway one) is
+    // replaced before anyone can sign in. Better Auth calls this hook only at sign-up (sendOnSignIn
+    // is off, /send-verification-email is disabled), after the user and its credential row are
+    // written (the Drizzle adapter runs without a transaction, so the rows are visible). Not awaited:
+    // the answer stays the same shape and timing class as a duplicate sign-up's.
     emailVerification: {
       sendOnSignUp: true,
       sendOnSignIn: false,
-      // Verifying creates no session: the link may be opened on another device.
       autoSignInAfterVerification: false,
-      expiresIn: 60 * 60 * 24,
-      sendVerificationEmail: async ({ user: u, token }) => {
-        send(verificationEmail(u.email, link('/api/auth/verify-email', { token, callbackURL: VERIFIED_PATH })))
+      sendVerificationEmail: async ({ user: u }) => {
+        requestPasswordReset?.(u.email).catch(logMailFailure)
       },
     },
     session: {
@@ -164,7 +171,6 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
         '/sign-in/email': { window: 60, max: 5 },
         '/sign-up/email': { window: 60 * 60, max: 10 },
         '/request-password-reset': { window: 60 * 60, max: 5 },
-        '/send-verification-email': { window: 60 * 60, max: 5 },
       },
     },
     // Reset tokens are stored as SHA-256 hashes, so a database leak exposes no live link.
@@ -174,6 +180,9 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
     // cookie could use them as a password oracle or a takeover path. Account deletion has its own
     // route, which calls auth.api.verifyPassword directly (server calls skip this list).
     disabledPaths: [
+      // No verification mails are sent (sign-up mails the set-up link), so their endpoints are closed.
+      '/verify-email',
+      '/send-verification-email',
       '/verify-password',
       '/change-password',
       '/change-email',

@@ -227,7 +227,7 @@ export function AuthProvider({
   const flowAuth: AuthClient = {
     ...auth,
     signIn: (e, p) => learn(() => auth.signIn(e, p)),
-    signUp: (e, p) => learn(() => auth.signUp(e, p)),
+    signUp: (e) => learn(() => auth.signUp(e)),
   }
   const deps = (): FlowDeps => ({
     auth: flowAuth,
@@ -276,10 +276,10 @@ export function AuthProvider({
     verifyEmail,
     busy,
     error,
-    signUp: (email, password) =>
+    signUp: (email) =>
       run(async () => {
         // No session comes back, so the plain client is used: nothing about an account is learned or switched.
-        const o = await signUpFlow({ ...deps(), auth }, email, password)
+        const o = await signUpFlow({ ...deps(), auth }, email)
         if (o === 'verify-email') setVerifyEmail(email)
         else applyOutcome(o, email)
       }),

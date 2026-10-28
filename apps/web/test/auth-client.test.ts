@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest'
-import { AuthError, createAuthClient } from '../src/auth/client'
+import { AuthError, createAuthClient, generateSignupPassword } from '../src/auth/client'
 
 function stub(res: Response | Error) {
   return vi.fn<typeof fetch>(async () => {
@@ -10,15 +10,33 @@ function stub(res: Response | Error) {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
-test('signUp posts JSON with credentials and a name derived from the email', async () => {
+test('signUp takes the email only and sends a random throwaway password the user never sees', async () => {
   const f = stub(json(200, { user: { id: 'u1', email: 'a@example.com' } }))
-  await createAuthClient({ fetch: f }).signUp('a@example.com', 'longenough1')
+  const c = createAuthClient({ fetch: f })
+  await c.signUp('a@example.com')
+  await c.signUp('a@example.com')
   const [url, init] = f.mock.calls[0]!
   expect(url).toBe('/api/auth/sign-up/email')
   expect(init?.method).toBe('POST')
   expect(init?.credentials).toBe('include')
   expect(new Headers(init?.headers).get('content-type')).toBe('application/json')
-  expect(JSON.parse(init!.body as string)).toEqual({ email: 'a@example.com', password: 'longenough1', name: 'a@example.com' })
+  const bodies = f.mock.calls.map((c) => JSON.parse(c[1]!.body as string) as { email: string; password: string; name: string })
+  expect(bodies[0]).toMatchObject({ email: 'a@example.com', name: 'a@example.com' })
+  expect(Object.keys(bodies[0]!).sort()).toEqual(['email', 'name', 'password'])
+  // 32 random bytes, base64url: 43 characters, within the server's 10-128 limit, new every call.
+  for (const b of bodies) expect(b.password).toMatch(/^[A-Za-z0-9_-]{43}$/)
+  expect(bodies[0]!.password).not.toBe(bodies[1]!.password)
+})
+
+test('the throwaway password comes from crypto.getRandomValues with at least 32 bytes', () => {
+  const spy = vi.spyOn(globalThis.crypto, 'getRandomValues')
+  const a = generateSignupPassword()
+  const b = generateSignupPassword()
+  expect(spy).toHaveBeenCalledTimes(2)
+  expect((spy.mock.calls[0]![0] as Uint8Array).byteLength).toBeGreaterThanOrEqual(32)
+  expect(a).toMatch(/^[A-Za-z0-9_-]{43,}$/)
+  expect(a).not.toBe(b)
+  spy.mockRestore()
 })
 
 test('signIn and signOut always send a JSON body', async () => {
@@ -45,7 +63,7 @@ test.each([
 })
 
 test('sign-up 422 means the email is unusable; network failure means offline', async () => {
-  const e1 = await createAuthClient({ fetch: stub(json(422, {})) }).signUp('a@example.com', 'longenough1').catch((e: unknown) => e)
+  const e1 = await createAuthClient({ fetch: stub(json(422, {})) }).signUp('a@example.com').catch((e: unknown) => e)
   expect((e1 as AuthError).kind).toBe('email_taken')
   const e2 = await createAuthClient({ fetch: stub(new TypeError('x')) }).signIn('a@example.com', 'longenough1').catch((e: unknown) => e)
   expect((e2 as AuthError).kind).toBe('offline')
@@ -53,7 +71,7 @@ test('sign-up 422 means the email is unusable; network failure means offline', a
 
 test('sign-up 403 means sign-ups are closed; sign-in 403 stays a server error', async () => {
   const body = { code: 'SIGNUP_CLOSED', message: 'signup_closed' }
-  const e1 = await createAuthClient({ fetch: stub(json(403, body)) }).signUp('a@example.com', 'longenough1').catch((e: unknown) => e)
+  const e1 = await createAuthClient({ fetch: stub(json(403, body)) }).signUp('a@example.com').catch((e: unknown) => e)
   expect((e1 as AuthError).kind).toBe('signup_closed')
   const e2 = await createAuthClient({ fetch: stub(json(403, body)) }).signIn('a@example.com', 'longenough1').catch((e: unknown) => e)
   expect((e2 as AuthError).kind).toBe('server')
