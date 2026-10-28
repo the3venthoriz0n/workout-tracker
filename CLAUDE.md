@@ -37,7 +37,7 @@ Rejected options: Supabase, Next.js/SSR, a separate frontend container (v1), App
 
 ## CI/CD and infra
 
-- All builds and deploys run in GitHub Actions. PRs and `main` run CI. A `vX.Y.Z` tag publishes to GHCR and deploys by digest to the `production` environment.
+- All builds and deploys run in GitHub Actions. PRs and `main` run CI. A `vX.Y.Z` tag tests and publishes the versioned image to GHCR; it deploys by digest to the `production` environment only when the repository variable `PRODUCTION_DEPLOY` is `true` (unset while M3 is on hold).
 - Pin actions by commit SHA and images by digest; Dependabot updates them.
 - Workflows: default to `permissions: {}` or `contents: read`, and pass inputs to `run:` steps only through `env:`.
 - `infra/terraform` provisions the Droplet; the DigitalOcean token comes only from the environment. Production secrets are generated on the server by `deploy/deploy.sh`.
@@ -78,4 +78,4 @@ Done: the scaffold (Docker, compose, CI, infra), M1 (local guest-mode MVP), M2 (
 
 Goals, in order: staging deployed at home behind an existing tunnel (generic self-hosted stack), then M3 production on DigitalOcean (on hold, no date). Later ideas are listed in the spec's milestones table.
 
-Production is still on hold: don't run `infra-*` or `github-setup`, and a `v*` tag builds and publishes a versioned image, but its deploy job targets the (not yet existing) production server and fails until M3 is done; tag only when the owner asks. Work through [docs/release-checklist.md](docs/release-checklist.md) before the first release. Verify features with `just dev` / `just preview`.
+Production is still on hold: don't run `infra-*` or `github-setup`, and a `v*` tag tests and publishes a versioned image and skips the production deploy job (it needs the repository variable `PRODUCTION_DEPLOY=true`, set only when M3 is done); tag only when the owner asks. Work through [docs/release-checklist.md](docs/release-checklist.md) before the first release. Verify features with `just dev` / `just preview`.
