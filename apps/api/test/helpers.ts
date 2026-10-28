@@ -105,13 +105,17 @@ export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mai
     return request('/api/auth/sign-in/email', { method: 'POST', body: { email, password }, ...o })
   }
 
-  /** The newest captured mail to `email` whose link goes to `path`. */
-  async function lastMail(email: string, path: '/reset-password'): Promise<Mail> {
-    // Sending is never awaited by the request (and may follow database work), so poll briefly.
-    const deadline = Date.now() + 2000
+  /**
+   * The newest captured mail to `email` whose link goes to `path`. `since` is a `mail.sent` index:
+   * only mails captured at or after it count, so a caller that signs the same address up again
+   * waits for the NEW mail instead of getting the old (already used) one.
+   */
+  async function lastMail(email: string, path: '/reset-password', since = 0): Promise<Mail> {
+    // Sending is never awaited by the request (and may follow database work), so poll.
+    const deadline = Date.now() + 10_000
     for (;;) {
       await new Promise((r) => setTimeout(r, 5))
-      const found = mail.sent.filter((m) => m.to === email.toLowerCase() && new URL(linkIn(m)).pathname === path).at(-1)
+      const found = mail.sent.slice(since).filter((m) => m.to === email.toLowerCase() && new URL(linkIn(m)).pathname === path).at(-1)
       if (found) return found
       if (Date.now() > deadline) throw new Error(`no ${path} mail to ${email}`)
     }
@@ -121,8 +125,8 @@ export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mai
    * Opens the newest set-up link mailed to `email` (as a mail client would: no cookie, no Origin)
    * and chooses `password`, which also confirms the address.
    */
-  async function setUp(email: string, password = GOOD_PASSWORD) {
-    const link = new URL(linkIn(await lastMail(email, '/reset-password')))
+  async function setUp(email: string, password = GOOD_PASSWORD, since = 0) {
+    const link = new URL(linkIn(await lastMail(email, '/reset-password', since)))
     const res = await request('/api/auth/reset-password', {
       method: 'POST',
       body: { token: link.searchParams.get('token'), newPassword: password },
@@ -138,9 +142,10 @@ export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mai
    * sign-in come from fresh addresses so they never count against the test's own per-IP limits.
    */
   async function signUpVerified(email: string, password = GOOD_PASSWORD, o: ReqOpts = {}) {
+    const before = mail.sent.length
     const up = await signUp(email, password, o)
     if (up.status !== 200) return up
-    await setUp(email, password)
+    await setUp(email, password, before)
     return signIn(email, password, { ...o, ip: freshIp() })
   }
 
