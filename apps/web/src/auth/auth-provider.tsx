@@ -383,6 +383,10 @@ export function AuthProvider({
       busyRef.current = true
       setBusy(true)
       const off = onAccount ? offlineApi() : null
+      // The outbox reports its own pause as "the session ended" (that is how a 401 reaches the provider).
+      // This pause is ours: while it lasts, neither it nor a 401 may end the session behind the restore,
+      // which handles a 401 from its own request itself (below).
+      if (onAccount) leavingRef.current = true
       try {
         if (onAccount) {
           off?.pause() // no queued set edit may replay into (or after) the replaced data
@@ -410,6 +414,7 @@ export function AuthProvider({
         toast.success('Your data was restored from the file.')
         return null
       } finally {
+        if (onAccount) leavingRef.current = false
         busyRef.current = false
         setBusy(false)
       }
