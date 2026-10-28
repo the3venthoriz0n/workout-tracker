@@ -34,7 +34,7 @@ A free, very simple lifting tracker. You build your own exercise library, pick t
 | **M2: Accounts and sync** ✅ done | Postgres schema (Drizzle), Better Auth email + password, the REST API in §9, `ApiRepo`, guest-data import on first sign-in, offline set-log queue. Plan: `docs/superpowers/plans/2026-10-22-m2-accounts-and-sync.md`. | `just dev`, `just preview` |
 | **Restyle and feature batch** ✅ done | Warm minimal visual direction (§8) and day colours, exercise angle, AMRAP last set, supersets, layered progression rules with the Progress tab. No separate plan file. | `just dev`, `just preview` |
 | **M2b: Email verification and password reset** ✅ done | Resend in production and staging, console mailer in development (links printed to the API log with a `[mail]` prefix); verify before first sign-in; forgot-password and set-up flows; per-recipient mail throttle. Plan: `docs/superpowers/plans/2026-10-25-m2b-email-auth.md`. | `just dev` |
-| **Staging stack (self-hosted)** ✅ built, deployment pending | Generic compose stack (app + Postgres, no published ports, joins an existing tunnel network), `update.sh` pull-based updater, `staging.yml` publishing `:staging`, public-safety check. Deploying it at home is the current goal. | self-hosted Docker host |
+| **Staging stack (self-hosted)** ✅ built, deployment pending | Generic compose stack (app + Postgres, app port on `127.0.0.1` only, joins an existing tunnel network), `update.sh` pull-based updater, `staging.yml` publishing `:staging`, public-safety check. Deploying it at home is the current goal. | self-hosted Docker host |
 | **Community plans** ✅ done (v0.0.4) | Publish a plan as a versioned snapshot, public browse/search/filter, upvotes, "Use this plan". Plan: `docs/superpowers/plans/2026-10-26-community-plans.md`. | `just dev`, `just preview` |
 | **M2c: Account deletion and export** ✅ done | `DELETE /api/v1/account` with the password, in one transaction; published listings stay as "Deleted user"; the export covers the whole account. Plan: `docs/superpowers/plans/2026-10-27-account-deletion.md`. | `just dev` |
 | M3: Production (on hold, no date) | Droplet via Terraform behind Cloudflare (proxy, Full (strict), origin firewall limited to Cloudflare), scripted secret seeding, GitHub production environment, first `v*` release, nightly `pg_dump` backups. Plan: `docs/superpowers/plans/2026-10-25-m3-production-cloudflare.md`. | DigitalOcean + Cloudflare |
@@ -257,7 +257,7 @@ REST under `/api/v1`, JSON bodies validated by the shared zod schemas. Changes a
 
 Everything is free at launch. Gating later is a config change, not a refactor.
 
-- `packages/shared/entitlements.ts` maps each plan to limits and flags, e.g. `free: { maxPlans: Infinity, aiPlansPerDay: 0, charts: true }`.
+- `packages/shared/src/entitlements.ts` maps each plan to limits and flags, e.g. `free: { maxPlans: Infinity, aiPlansPerDay: 0, charts: true }`.
 - `can(profile, feature)` and `limit(profile, key)` are the only places features are checked: on the client to hide or disable UI, and on the server to enforce.
 - `profile.plan` defaults to `free`. A future billing webhook only updates that column.
 - Unverified: Apple's rules for selling subscriptions inside iOS apps changed recently. Check them before selling Pro on iOS.
@@ -307,7 +307,7 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | No ad-hoc exercises or per-set schemes in v1 | Keeps logging and progression simple |
 | IDs via `newId()` | `crypto.randomUUID` needs a secure context; LAN phone testing over http would otherwise fail at startup |
 | REST resources for the M2 API (owner's choice) | Conventional and easy to inspect; costs about 30 routes, so a shared contract test suite guards against drift between `LocalRepo`, the server and `ApiRepo` |
-| Email + password only in M2, no email sending (owner's choice) | Verification and password reset need an email provider; deferred to M2b |
+| Email + password only in M2, no email sending (owner's choice; superseded by M2b below) | Verification and password reset need an email provider; deferred to M2b |
 | Verify the email before the first sign-in (owner's choice, M2b) | Stops typo'd and fake addresses, and makes password reset safe because every address was proven. Guest data stays on the device until the first successful sign-in, which already uploads it for a new account |
 | Resend for email, console mailer in development (owner's choice) | No domain or account needed to build and test; production refuses to start without `RESEND_API_KEY` and `MAIL_FROM` |
 | Cloudflare proxy in front of the Droplet, Full (strict), origin firewall limited to Cloudflare's ranges (owner's choice) | Hides the origin and absorbs abuse. Caddy keeps its own Let's Encrypt certificate (HTTP-01 works through the proxy), so no origin certificate secret is needed |
@@ -319,7 +319,7 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | Three environments: local dev, self-hosted staging behind an existing Cloudflare Tunnel, production on DigitalOcean (on hold) (owner's choice) | Staging costs nothing and exercises the real image and deploy script before any production spend |
 | Staging updates by pull: CI only publishes `:staging`; the host's `update.sh` polls the digest and deploys | CI holds no credentials for the home network and nothing inbound is opened; a lock and digest compare make repeated runs harmless |
 | `SIGNUP_ALLOWLIST` (comma separated emails, exact match after lowercasing, enforced in a Better Auth before-hook): blocked sign-up is `403 {"code":"SIGNUP_CLOSED","message":"signup_closed"}` and writes nothing; empty means open sign-up; sign-in is unaffected | Staging can be invite-only without an invite system; the web client shows "Sign-up is invite-only". Sign-up is open by default (empty list) and the allowlist code stays |
-| `CLIENT_IP_HEADER` replaces the client-IP header used for auth rate limits (`cf-connecting-ip` behind the tunnel) | The tunnel sets it and the app has no published ports, so it is trustworthy; set it only when the app is reachable solely through such a proxy, otherwise clients can pick their own IP |
+| `CLIENT_IP_HEADER` replaces the client-IP header used for auth rate limits (`cf-connecting-ip` behind the tunnel) | The tunnel sets it and the app port is published on loopback only, so it is trustworthy; set it only when the app is reachable solely through such a proxy, otherwise clients can pick their own IP |
 | Composite primary keys `(user_id, id)` | Client-generated ids can't collide across accounts or reveal another user's rows |
 | 404 (not 403) for ids owned by someone else | Doesn't leak which ids exist |
 | Guest import only into an account with no profile; logging into an existing account discards local guest data after confirmation | Seed data would duplicate on merge; a JSON export is offered first |
