@@ -35,6 +35,9 @@ function makeAuth(signedIn: boolean): AuthClient {
 
 /** A signed-in API stub: the account's profile, an export, a restore and the outbox controls. */
 function makeApi(file: ExportData) {
+  // Like the real outbox: pause() and resume() tell the subscriber (the provider treats a pause on a
+  // signed-in account as "the session ended", which a restore's own pause must not be).
+  let listener: ((s: { pending: number; paused: boolean; version: number }) => void) | undefined
   const controls = {
     getProfile: vi.fn(async () => ({ ...file.profile, user_id: 'acc-1' })),
     exportAll: vi.fn(async () => file),
@@ -44,13 +47,18 @@ function makeApi(file: ExportData) {
     pending: () => 0,
     paused: () => false,
     flush: vi.fn(async () => {}),
-    resume: vi.fn(),
-    pause: vi.fn(),
+    resume: vi.fn(() => listener?.({ pending: 0, paused: false, version: 0 })),
+    pause: vi.fn(() => listener?.({ pending: 0, paused: true, version: 0 })),
     idle: vi.fn(async () => {}),
     clear: vi.fn(async () => {}),
     dispose: vi.fn(),
     hasOfflineData: vi.fn(async () => false),
-    subscribe: () => () => undefined,
+    subscribe: (cb: (s: { pending: number; paused: boolean; version: number }) => void) => {
+      listener = cb
+      return () => {
+        listener = undefined
+      }
+    },
   }
   // Every other Repo read answers empty.
   return new Proxy(controls, {
@@ -252,6 +260,10 @@ describe('restore while signed in (this account)', () => {
     await waitFor(() => expect(api.clear).toHaveBeenCalled())
     await waitFor(() => expect(invalidate).toHaveBeenCalled())
     expect(ok).toHaveBeenCalled()
+    // The restore's own pause of the outbox is not an expired session: still signed in afterwards.
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByText(/signed out/i)).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Delete account' })).toBeTruthy()
   })
 
   test.each([
