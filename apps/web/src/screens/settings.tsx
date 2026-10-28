@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useProfile, useUpdateProfile } from '@/repo/hooks'
 import { useRepo } from '@/repo/provider'
+import { AboutFooter } from '@/components/about-footer'
 import { AccountCard } from '@/components/account-card'
 import { DeleteAccountCard } from '@/components/delete-account-card'
 import { PublicNameCard } from '@/components/public-name-card'
@@ -118,6 +119,7 @@ export function SettingsScreen() {
         <AccountCard />
         {signedIn && <PublicNameCard />}
         {signedIn && <DeleteAccountCard />}
+        <AboutFooter />
       </div>
     </div>
   )

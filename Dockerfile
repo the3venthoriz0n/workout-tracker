@@ -18,6 +18,11 @@ COPY packages/shared/package.json packages/shared/
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir /pnpm/store
 COPY . .
+# Version info for Settings → About, baked into the web bundle. Declared after the install
+# layer so changing them never invalidates the dependency cache.
+ARG APP_VERSION=dev
+ARG APP_COMMIT=
+ARG APP_REPO=
 RUN pnpm build
 
 # Runtime: bundled API + static SPA only. No node_modules, no package managers, no source.
