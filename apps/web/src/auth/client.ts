@@ -32,7 +32,7 @@ export interface AuthClient {
   signOut(): Promise<void>
   session(): Promise<SessionUser | null>
   /** Same answer for known and unknown addresses; the server never says which. */
-  resendVerification(email: string): Promise<void>
+  resendSetupLink(email: string): Promise<void>
   requestPasswordReset(email: string): Promise<void>
   resetPassword(token: string, newPassword: string): Promise<void>
   /** Deletes the signed-in account (DELETE /api/v1/account); the password is checked by the server. */
@@ -121,7 +121,7 @@ export function createAuthClient(opts: Opts = {}): AuthClient {
       await post('/sign-out', {})
     },
     // For an unverified account the reset mail is the set-up link: choosing a password verifies the email.
-    async resendVerification(email) {
+    async resendSetupLink(email) {
       await post('/request-password-reset', { email })
     },
     async requestPasswordReset(email) {

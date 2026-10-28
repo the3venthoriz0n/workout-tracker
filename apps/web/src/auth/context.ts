@@ -44,7 +44,7 @@ export type AuthState = {
    */
   restoreData(data: ExportData, opts: { signedIn: boolean; password?: string }): Promise<RestoreErrorKind | null>
   /** Plain pass-throughs: they do not touch the session state. */
-  resendVerification(email: string): Promise<void>
+  resendSetupLink(email: string): Promise<void>
   requestPasswordReset(email: string): Promise<void>
   resetPassword(token: string, newPassword: string): Promise<void>
 }

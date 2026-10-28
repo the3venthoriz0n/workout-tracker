@@ -102,7 +102,7 @@ function authState(signedIn: boolean): AuthState {
     retrySession: () => undefined,
     dismissError: () => undefined,
     clearVerifyEmail: () => undefined,
-    resendVerification: noop,
+    resendSetupLink: noop,
     requestPasswordReset: noop,
     resetPassword: noop,
     deleteAccount: async () => null,

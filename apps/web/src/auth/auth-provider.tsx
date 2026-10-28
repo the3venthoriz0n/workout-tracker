@@ -420,7 +420,7 @@ export function AuthProvider({
     },
     dismissError: () => setError(null),
     clearVerifyEmail: () => setVerifyEmail(null),
-    resendVerification: (email) => auth.resendVerification(email),
+    resendSetupLink: (email) => auth.resendSetupLink(email),
     requestPasswordReset: (email) => auth.requestPasswordReset(email),
     resetPassword: (token, pw) => auth.resetPassword(token, pw),
   }

@@ -45,7 +45,7 @@ function makeAuth(over: Partial<AuthClient> = {}): AuthClient {
     signUp: vi.fn(),
     signIn: vi.fn(),
     signOut: vi.fn(async () => {}),
-    resendVerification: vi.fn(),
+    resendSetupLink: vi.fn(),
     requestPasswordReset: vi.fn(),
     resetPassword: vi.fn(),
     deleteAccount: vi.fn(async () => {

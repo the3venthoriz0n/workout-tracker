@@ -55,7 +55,6 @@ export function assertUuid(value: string, what: string): string {
 const iso = (d: Date): string => d.toISOString()
 const isoOrNull = (d: Date | null): string | null => (d === null ? null : d.toISOString())
 export const num = (n: string): number => Number(n)
-export const numOrNull = (n: string | null): number | null => (n === null ? null : Number(n))
 // Rows saved before the bounds existed (or by a conversion) may sit outside the valid range.
 // Clamp on read so the account stays usable and the next edit can fix the value.
 const clampWeight = (n: number): number => Math.min(LIMITS.weight, Math.max(0, n))

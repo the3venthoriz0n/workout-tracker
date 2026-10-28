@@ -15,7 +15,7 @@ function setup(url: string, over: Partial<AuthClient> = {}, session = false) {
     signIn: vi.fn(async () => ({ userId: 'u', email: 'a@example.com' })),
     signOut: vi.fn(async () => {}),
     session: async () => (session ? { userId: 'u', email: 'me@example.test' } : null),
-    resendVerification: vi.fn(async () => {}),
+    resendSetupLink: vi.fn(async () => {}),
     requestPasswordReset: vi.fn(async () => {}),
     resetPassword: vi.fn(async () => {}),
     deleteAccount: vi.fn(async () => {}),
@@ -72,7 +72,7 @@ test('an expired set-up link offers a new set-up link (through request-password-
   await user.type(screen.getByLabelText('Email'), 'a@example.com')
   await user.click(screen.getByRole('button', { name: 'Send a new link' }))
   expect((await screen.findByRole('status')).textContent).toMatch(/new link/i)
-  expect(auth.resendVerification).toHaveBeenCalledWith('a@example.com')
+  expect(auth.resendSetupLink).toHaveBeenCalledWith('a@example.com')
 })
 
 test('reset screen removes the token from the address bar and submits it once', async () => {

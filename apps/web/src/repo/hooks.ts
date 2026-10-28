@@ -13,7 +13,6 @@ export const keys = {
   activeSession: ['session', 'active'] as const,
   sessions: ['sessions'] as const,
   session: (id: string) => ['session', id] as const,
-  progression: ['progression'] as const,
   progressionByExercise: ['progression', 'by-exercise'] as const,
   exerciseUsage: (id: string) => ['exercise-usage', id] as const,
   communityList: (q: Omit<PublicListQuery, 'cursor'>) => ['community', 'list', q] as const,
@@ -68,10 +67,6 @@ export const useSession = (id: string) => {
   return useQuery({ queryKey: keys.session(id), queryFn: async () => (await repo.getSession(id)) ?? null })
 }
 
-export const useProgression = () => {
-  const repo = useRepo()
-  return useQuery({ queryKey: keys.progression, queryFn: () => repo.listProgression() })
-}
 /** Every live exercise once, with its effective default rule, overriding items and inheriting items. */
 export const useProgressionByExercise = () => {
   const repo = useRepo()

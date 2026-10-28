@@ -1,18 +1,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ProfileNotFoundError, OfflineError } from '@workout/shared'
+import { ProfileNotFoundError } from '@workout/shared'
 import { expect, test, vi } from 'vitest'
 import { AuthError, type AuthClient } from '../src/auth/client'
 import { AuthProvider } from '../src/auth/auth-provider'
 import { AccountCard } from '../src/components/account-card'
 
-function setup(opts: { session?: boolean; signIn?: AuthClient['signIn']; signUp?: AuthClient['signUp']; profile?: () => Promise<unknown>; importAll?: () => Promise<void>; signOut?: AuthClient['signOut']; resend?: AuthClient['resendVerification']; forgot?: AuthClient['requestPasswordReset'] } = {}) {
+function setup(opts: { session?: boolean; signIn?: AuthClient['signIn']; signUp?: AuthClient['signUp']; profile?: () => Promise<unknown>; importAll?: () => Promise<void>; signOut?: AuthClient['signOut']; resend?: AuthClient['resendSetupLink']; forgot?: AuthClient['requestPasswordReset'] } = {}) {
   const auth: AuthClient = {
     signUp: opts.signUp ?? vi.fn(async () => ({ userId: 'u', email: 'a@example.com' })),
     signIn: opts.signIn ?? vi.fn(async () => ({ userId: 'u', email: 'a@example.com' })),
     signOut: opts.signOut ?? vi.fn(async () => {}),
-    resendVerification: opts.resend ?? vi.fn(async () => {}),
+    resendSetupLink: opts.resend ?? vi.fn(async () => {}),
     requestPasswordReset: opts.forgot ?? vi.fn(async () => {}),
     resetPassword: vi.fn(async () => {}),
     deleteAccount: vi.fn(async () => {}),

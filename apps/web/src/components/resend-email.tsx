@@ -26,7 +26,7 @@ export function ResendEmail({ email }: { email: string }) {
     setState('sending')
     setMessage(null)
     try {
-      await a.resendVerification(email)
+      await a.resendSetupLink(email)
       setState('sent')
       setMessage(RESEND_SENT_TEXT)
     } catch (e) {

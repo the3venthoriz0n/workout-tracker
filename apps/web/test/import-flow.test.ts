@@ -18,7 +18,7 @@ function deps(over: { getProfile?: () => Promise<unknown>; importAll?: () => Pro
       signIn: vi.fn(log('signIn', over.signIn ?? (async () => ({ userId: 'u', email: 'a@example.com' })))),
       signOut: vi.fn(log('signOut', over.signOut ?? (async () => {}))),
       session: vi.fn(async () => null),
-      resendVerification: vi.fn(async () => {}),
+      resendSetupLink: vi.fn(async () => {}),
       requestPasswordReset: vi.fn(async () => {}),
       resetPassword: vi.fn(async () => {}),
       deleteAccount: vi.fn(async () => {}),

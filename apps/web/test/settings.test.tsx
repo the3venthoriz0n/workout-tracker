@@ -19,7 +19,7 @@ function renderSettings() {
   const router = createMemoryRouter(routes, { initialEntries: ['/settings'] })
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <AuthProvider auth={{ signUp: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), resendVerification: vi.fn(), requestPasswordReset: vi.fn(), resetPassword: vi.fn(), deleteAccount: vi.fn(), session: async () => null }} local={repo} createApi={() => ({}) as never}>
+      <AuthProvider auth={{ signUp: vi.fn(), signIn: vi.fn(), signOut: vi.fn(), resendSetupLink: vi.fn(), requestPasswordReset: vi.fn(), resetPassword: vi.fn(), deleteAccount: vi.fn(), session: async () => null }} local={repo} createApi={() => ({}) as never}>
         <RouterProvider router={router} />
       </AuthProvider>
     </QueryClientProvider>,

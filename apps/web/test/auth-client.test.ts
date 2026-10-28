@@ -96,10 +96,10 @@ test('sign-in 403 EMAIL_NOT_VERIFIED maps to email_not_verified', async () => {
   expect(String((err as AuthError).message)).not.toContain('SECRET')
 })
 
-test('resendVerification, requestPasswordReset and resetPassword post JSON bodies', async () => {
+test('resendSetupLink, requestPasswordReset and resetPassword post JSON bodies', async () => {
   const f = stub(json(200, { status: true }))
   const c = createAuthClient({ fetch: f })
-  await c.resendVerification('a@example.com')
+  await c.resendSetupLink('a@example.com')
   await c.requestPasswordReset('a@example.com')
   await c.resetPassword('tok', 'newlongpass1')
   expect(f.mock.calls.map((x) => x[0])).toEqual([
@@ -131,7 +131,7 @@ test.each([
 test('email requests map 429 and network failure', async () => {
   const e1 = await createAuthClient({ fetch: stub(json(429, {})) }).requestPasswordReset('a@example.com').catch((e: unknown) => e)
   expect((e1 as AuthError).kind).toBe('rate_limited')
-  const e2 = await createAuthClient({ fetch: stub(new TypeError('x')) }).resendVerification('a@example.com').catch((e: unknown) => e)
+  const e2 = await createAuthClient({ fetch: stub(new TypeError('x')) }).resendSetupLink('a@example.com').catch((e: unknown) => e)
   expect((e2 as AuthError).kind).toBe('offline')
 })
 
