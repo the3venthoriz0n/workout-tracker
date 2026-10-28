@@ -1,7 +1,7 @@
-import { ChevronDown, ChevronLeft, ChevronUp, Link2, Plus, Share, Unlink } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronUp, Link2, Plus, Share, Trash2, Unlink } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Link, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 import { SettingsLink, StickyBar, headerIconButton } from '@/app/screen'
 import {
   DayColorButton,
@@ -12,15 +12,15 @@ import {
 } from '@/components/day-parts'
 import { ExercisePicker } from '@/components/exercise-picker'
 import { ExerciseSheet } from '@/components/exercise-sheet'
-import { DayDot, Rail } from '@/components/plan-bits'
+import { Rail } from '@/components/plan-bits'
 import { PlanItemRow } from '@/components/plan-item-row'
 import { ShareSheet } from '@/components/share-sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { dayColorOf } from '@/lib/day-colors'
 import { notifyError } from '@/lib/notify'
 import {
   useAddPlanItem,
+  useDeletePlan,
   useDeletePlanDay,
   useMove,
   usePlan,
@@ -79,6 +79,9 @@ export function PlanDetailScreen() {
   const savePlan = useSavePlan()
   const saveDay = useSavePlanDay()
   const removeDay = useDeletePlanDay()
+  const removePlan = useDeletePlan()
+  const navigate = useNavigate()
+  const [confirmPlan, setConfirmPlan] = useState(false)
   const moveDay = useMove()
   const addItem = useAddPlanItem()
   const [pickerDay, setPickerDay] = useState<string | null>(null)
@@ -148,7 +151,11 @@ export function PlanDetailScreen() {
           className="surface flex flex-col gap-3 rounded-card p-4"
         >
           <div className="flex items-center gap-1.5">
-            <DayDot color={dayColorOf(day)} className="mr-1 size-3" />
+            <DayColorButton
+              day={day}
+              open={colorDay === day.id}
+              onToggle={() => setColorDay(colorDay === day.id ? null : day.id)}
+            />
             <InlineName
               label="Day name"
               className="h-12 flex-1 text-lg font-semibold"
@@ -156,11 +163,6 @@ export function PlanDetailScreen() {
               onCommit={(name) =>
                 saveDay.mutate({ id: day.id, plan_id: tree.id, name }, { onError: (e) => notifyError(e) })
               }
-            />
-            <DayColorButton
-              day={day}
-              open={colorDay === day.id}
-              onToggle={() => setColorDay(colorDay === day.id ? null : day.id)}
             />
             <Button
               variant="ghost"
@@ -186,9 +188,43 @@ export function PlanDetailScreen() {
             >
               <ChevronDown aria-hidden />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-destructive focus-visible:text-destructive min-h-11 min-w-11"
+              aria-label={`Delete day ${day.name}`}
+              aria-expanded={confirmDay === day.id}
+              onClick={() => setConfirmDay(day.id)}
+            >
+              <Trash2 className="size-5" aria-hidden />
+            </Button>
           </div>
 
-          {colorDay === day.id && <DayColorPicker day={day} planId={tree.id} />}
+          {confirmDay === day.id && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="destructive"
+                className="min-h-11"
+                aria-label={`Confirm delete ${day.name}`}
+                disabled={removeDay.isPending}
+                onClick={() =>
+                  removeDay.mutate(day.id, {
+                    onSuccess: () => setConfirmDay(null),
+                    onError: (e) => notifyError(e),
+                  })
+                }
+              >
+                Confirm delete
+              </Button>
+              <Button variant="ghost" className="min-h-11" onClick={() => setConfirmDay(null)}>
+                Cancel
+              </Button>
+            </div>
+          )}
+
+          {colorDay === day.id && (
+            <DayColorPicker day={day} planId={tree.id} onPicked={() => setColorDay(null)} />
+          )}
 
           {day.items.length === 0 && (
             <p className="text-muted-foreground text-sm">No exercises on this day yet.</p>
@@ -267,35 +303,6 @@ export function PlanDetailScreen() {
                 <Link2 aria-hidden /> Link superset
               </Button>
             )}
-            {confirmDay === day.id ? (
-              <>
-                <Button
-                  variant="destructive"
-                  className="min-h-11"
-                  aria-label={`Confirm delete ${day.name}`}
-                  onClick={() =>
-                    removeDay.mutate(day.id, {
-                      onSuccess: () => setConfirmDay(null),
-                      onError: (e) => notifyError(e),
-                    })
-                  }
-                >
-                  Confirm delete
-                </Button>
-                <Button variant="ghost" className="min-h-11" onClick={() => setConfirmDay(null)}>
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="ghost"
-                className="text-destructive hover:text-destructive min-h-11"
-                aria-label={`Delete ${day.name}`}
-                onClick={() => setConfirmDay(day.id)}
-              >
-                Delete day
-              </Button>
-            )}
           </div>
         </section>
       ))}
@@ -312,6 +319,41 @@ export function PlanDetailScreen() {
       >
         <Plus aria-hidden /> Add day
       </Button>
+
+      <div className="flex flex-wrap items-center gap-2 pt-2">
+        {confirmPlan ? (
+          <>
+            <Button
+              variant="destructive"
+              className="min-h-11"
+              aria-label="Confirm delete plan"
+              disabled={removePlan.isPending}
+              onClick={() =>
+                removePlan.mutate(tree.id, {
+                  onSuccess: () => navigate('/plans', { replace: true }),
+                  onError: (e) => notifyError(e),
+                })
+              }
+            >
+              Confirm delete
+            </Button>
+            <Button variant="ghost" className="min-h-11" onClick={() => setConfirmPlan(false)}>
+              Cancel
+            </Button>
+            <p className="text-muted-foreground w-full text-sm">
+              Deletes {tree.name} with its days and exercises. Past workouts keep their records.
+            </p>
+          </>
+        ) : (
+          <Button
+            variant="ghost"
+            className="text-muted-foreground hover:text-destructive focus-visible:text-destructive min-h-11"
+            onClick={() => setConfirmPlan(true)}
+          >
+            <Trash2 aria-hidden /> Delete plan
+          </Button>
+        )}
+      </div>
 
       <ShareSheet tree={tree} open={sharing} onOpenChange={setSharing} />
       <ExercisePicker

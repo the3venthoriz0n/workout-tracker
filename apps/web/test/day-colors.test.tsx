@@ -29,7 +29,12 @@ test('plan detail: the swatch picker saves a named colour and Automatic goes bac
   const { repo, plan, push } = await twoDays()
   renderAt(repo, `/plans/${plan.id}`)
   const region = await screen.findByRole('region', { name: 'Day Push' })
-  await user.click(within(region).getByRole('button', { name: 'Colour for Push: Blue' }))
+  const dot = within(region).getByRole('button', { name: 'Day colour' })
+  expect(dot.getAttribute('aria-expanded')).toBe('false')
+  expect(region.querySelectorAll('[data-day-color]').length).toBe(1)
+  expect(within(region).queryByRole('radiogroup')).toBeNull()
+  await user.click(dot)
+  expect(dot.getAttribute('aria-expanded')).toBe('true')
   const group = within(region).getByRole('radiogroup', { name: 'Colour for Push' })
   const radios = within(group).getAllByRole('radio')
   expect(radios.map((r) => r.getAttribute('aria-label'))).toEqual([
@@ -51,8 +56,25 @@ test('plan detail: the swatch picker saves a named colour and Automatic goes bac
   // The day name is still shown: colour is never the only signal
   expect((within(region).getByLabelText('Day name') as HTMLInputElement).value).toBe('Push')
 
+  // Picking collapsed the palette; reopen it to go back to Automatic
+  expect(within(region).queryByRole('radiogroup')).toBeNull()
+  await user.click(within(region).getByRole('button', { name: 'Day colour' }))
   await user.click(within(region).getByRole('radio', { name: 'Automatic (Blue)' }))
   await waitFor(async () => expect((await repo.getPlan(plan.id))!.days.find((d) => d.id === push.id)!.color).toBeNull())
+})
+
+test('plan detail: picking a colour collapses the palette; tapping the dot again also closes it', async () => {
+  const user = userEvent.setup()
+  const { repo, plan } = await twoDays()
+  renderAt(repo, `/plans/${plan.id}`)
+  const region = await screen.findByRole('region', { name: 'Day Pull' })
+  await user.click(within(region).getByRole('button', { name: 'Day colour' }))
+  await user.click(within(region).getByRole('radio', { name: 'Teal' }))
+  await waitFor(() => expect(within(region).queryByRole('radiogroup')).toBeNull())
+  await user.click(within(region).getByRole('button', { name: 'Day colour' }))
+  expect(within(region).getByRole('radiogroup')).toBeTruthy()
+  await user.click(within(region).getByRole('button', { name: 'Day colour' }))
+  expect(within(region).queryByRole('radiogroup')).toBeNull()
 })
 
 test('Today: the day chooser shows each day with its colour, and the active header carries it', async () => {

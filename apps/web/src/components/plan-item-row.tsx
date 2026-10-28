@@ -102,7 +102,34 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
         >
           <ChevronDown aria-hidden />
         </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-destructive focus-visible:text-destructive min-h-11 min-w-11"
+          aria-label={`Delete ${name}`}
+          aria-expanded={confirmDelete}
+          onClick={() => setConfirmDelete(true)}
+        >
+          <Trash2 className="size-5" aria-hidden />
+        </Button>
       </div>
+
+      {confirmDelete && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="destructive"
+            className="min-h-11"
+            aria-label={`Confirm delete ${name}`}
+            disabled={remove.isPending}
+            onClick={() => remove.mutate(item.id, { onError: (e) => fail(e) })}
+          >
+            Confirm delete
+          </Button>
+          <Button variant="ghost" className="min-h-11" onClick={() => setConfirmDelete(false)}>
+            Cancel
+          </Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-3">
         <NumberField
@@ -183,31 +210,6 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
         >
           Progression
         </Button>
-        {confirmDelete ? (
-          <>
-            <Button
-              variant="destructive"
-              className="min-h-11"
-              aria-label={`Confirm delete ${name}`}
-              disabled={remove.isPending}
-              onClick={() => remove.mutate(item.id, { onError: (e) => fail(e) })}
-            >
-              Confirm delete
-            </Button>
-            <Button variant="ghost" className="min-h-11" onClick={() => setConfirmDelete(false)}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <Button
-            variant="ghost"
-            className="text-destructive hover:text-destructive min-h-11"
-            aria-label={`Delete ${name}`}
-            onClick={() => setConfirmDelete(true)}
-          >
-            <Trash2 aria-hidden /> Delete
-          </Button>
-        )}
       </div>
 
       {expanded && (
