@@ -13,7 +13,7 @@ runRepoContract(
     const repo = createService(db, userId)
     // An empty account is the import target: it must have no profile yet.
     if (!opts?.empty) await repo.init()
-    return { repo, cleanup, importAll: (data) => repo.importAll(data) }
+    return { repo, cleanup, importAll: (data) => repo.importAll(data), replaceAll: (data) => repo.replaceAll(data) }
   },
-  { groups: ['profile', 'gear', 'exercises', 'plans', 'progression', 'sessions', 'transfer', 'community'] },
+  { groups: ['profile', 'gear', 'exercises', 'plans', 'progression', 'sessions', 'transfer', 'restore', 'community'] },
 )

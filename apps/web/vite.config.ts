@@ -13,7 +13,15 @@ const extraHosts = (process.env.DEV_ALLOWED_HOSTS ?? '')
   .map((h) => h.trim())
   .filter(Boolean)
 
+// Version info shown in Settings → About; build-time only (see src/lib/about.ts).
+const appInfo = {
+  __APP_VERSION__: JSON.stringify(process.env.APP_VERSION || 'dev'),
+  __APP_COMMIT__: JSON.stringify(process.env.APP_COMMIT || ''),
+  __APP_REPO__: JSON.stringify(process.env.APP_REPO || ''),
+}
+
 export default defineConfig({
+  define: appInfo,
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
   test: { environment: 'happy-dom', setupFiles: ['test/setup.ts'] },

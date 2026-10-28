@@ -34,7 +34,7 @@ test('Settings no longer shows gear, but keeps units, export and account', async
   expect(screen.queryByRole('button', { name: 'Add custom gear' })).toBeNull()
   expect(screen.queryByLabelText('Custom gear name')).toBeNull()
   expect(screen.getByRole('radio', { name: 'kg' })).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Export data' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Export my data' })).toBeTruthy()
   // Guests have no account to delete.
   expect(screen.queryByRole('heading', { name: 'Delete account' })).toBeNull()
 })
@@ -75,7 +75,7 @@ test('export calls exportAll and downloads a dated file', async () => {
     .mockImplementation(function (this: HTMLAnchorElement) {
       name = this.download
     })
-  await user.click(await screen.findByRole('button', { name: 'Export data' }))
+  await user.click(await screen.findByRole('button', { name: 'Export my data' }))
   await waitFor(() => expect(revoke).toHaveBeenCalledWith('blob:x'))
   expect(spy).toHaveBeenCalled()
   expect(name).toMatch(/^workout-tracker-export-\d{4}-\d{2}-\d{2}\.json$/)

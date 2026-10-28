@@ -23,7 +23,7 @@ Nothing here is automated: do it in the GitHub and DigitalOcean UIs. Deploy acce
 
 ### Data protection basics
 
-- [ ] **Export and deletion exist** (M2c): a signed-in user can download everything the account holds (Settings, "Export my data": library, plans, history, profile and public name, email, listings, votes, downloads) and delete the account (password + DELETE). Deletion is immediate and leaves no personal data in the database; published listings stay as "Deleted user". Mention both in the privacy notice before opening sign-up.
+- [ ] **Export and deletion exist** (M2c): a signed-in user can download everything the account holds (Settings, "Export my data": library, plans, history, profile and public name, email, listings, votes, downloads) and delete the account (password + DELETE). Deletion is immediate and leaves no personal data in the database; published listings stay as "Deleted user". Mention both in the privacy notice before opening sign-up. Restore from a file (`POST /api/v1/import/replace`) replaces the account's library and history; it needs the password (same per-account limit as deletion) and is refused while a listing is published.
 - [ ] **Backups still hold deleted accounts** until they rotate out (pre-deploy dumps keep the newest 5; set the off-box retention to match and say so in the privacy notice).
 
 ### Resend (production and staging)

@@ -1,4 +1,4 @@
-import { ChevronRight, Plus } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import type { Plan } from '@workout/shared'
 import { Link } from 'react-router'
@@ -10,7 +10,7 @@ import { SkeletonRows } from '@/components/ui/skeleton'
 import { notifyError } from '@/lib/notify'
 import { listGroup } from '@/lib/styles'
 import { cn } from '@/lib/utils'
-import { useCommunityPlan, useDeletePlan, usePlans, useSavePlan } from '@/repo/hooks'
+import { useCommunityPlan, usePlans, useSavePlan } from '@/repo/hooks'
 
 /**
  * "Based on X by Y · v1" for copies of community plans, plus "Update available" when the public
@@ -37,10 +37,9 @@ function SourceLine({ source }: { source: NonNullable<Plan['source']> }) {
 export function PlansScreen() {
   const plans = usePlans()
   const save = useSavePlan()
-  const remove = useDeletePlan()
   const [name, setName] = useState('')
-  const [confirmId, setConfirmId] = useState<string | null>(null)
   const list = plans.data ?? []
+  const ready = name.trim().length > 0
 
   function add(e: React.FormEvent) {
     e.preventDefault()
@@ -67,8 +66,16 @@ export function PlansScreen() {
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <Button type="submit" className="h-12 px-5" disabled={save.isPending}>
-            <Plus aria-hidden /> Add plan
+          <Button
+            type="submit"
+            aria-disabled={!ready || save.isPending}
+            className={cn(
+              'h-12 px-5',
+              (!ready || save.isPending) &&
+                'bg-secondary text-muted-foreground hover:bg-secondary cursor-default',
+            )}
+          >
+            Add plan
           </Button>
         </form>
 
@@ -79,7 +86,7 @@ export function PlansScreen() {
 
         <ul className={cn(listGroup, list.length === 0 && 'hidden')}>
           {list.map((plan) => (
-            <li key={plan.id} className="flex items-center gap-1 py-1.5 pr-2 pl-4">
+            <li key={plan.id} className="flex items-center gap-1 py-1.5 pr-3 pl-4">
               <Link
                 to={`/plans/${plan.id}`}
                 className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-2 py-2 text-[17px] font-semibold"
@@ -90,35 +97,6 @@ export function PlansScreen() {
                 </span>
                 <ChevronRight className="text-muted-foreground size-5 shrink-0" aria-hidden />
               </Link>
-              {confirmId === plan.id ? (
-                <>
-                  <Button
-                    variant="destructive"
-                    className="min-h-11"
-                    aria-label={`Confirm delete ${plan.name}`}
-                    onClick={() =>
-                      remove.mutate(plan.id, {
-                        onSuccess: () => setConfirmId(null),
-                        onError: (e) => notifyError(e),
-                      })
-                    }
-                  >
-                    Confirm delete
-                  </Button>
-                  <Button variant="ghost" className="min-h-11" onClick={() => setConfirmId(null)}>
-                    Cancel
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive min-h-11"
-                  aria-label={`Delete ${plan.name}`}
-                  onClick={() => setConfirmId(plan.id)}
-                >
-                  Delete
-                </Button>
-              )}
             </li>
           ))}
         </ul>

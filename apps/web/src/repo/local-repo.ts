@@ -33,6 +33,7 @@ import {
   UnauthenticatedError,
   displayNameSchema,
   planFromSnapshot,
+  parseImport,
 } from '@workout/shared'
 import type {
   AdoptInput,
@@ -881,6 +882,39 @@ export class LocalRepo implements Repo {
       workout_sessions: await d.sessions.toArray(),
       set_logs: await d.setLogs.toArray(),
     }))
+  }
+
+  /**
+   * Restore from a file: REPLACES everything on the device with it (spec §7). Validated first with
+   * the server's own rules (`parseImport`: schema, public text, references, angles), so a bad file
+   * throws ImportInvalidError and changes nothing; then every store is cleared and refilled in ONE
+   * Dexie transaction. Ids and timestamps are kept; every row gets this device's guest id. The tier
+   * is always free and a plan is never published here; an existing public name wins over the file's.
+   */
+  async importAll(raw: unknown): Promise<void> {
+    const data = parseImport(raw)
+    const d = this.db
+    await d.transaction('rw', d.tables, async () => {
+      const current = await d.profile.toCollection().first()
+      const user_id = current?.user_id ?? newId()
+      const own = <T extends object>(rows: T[]): (T & { user_id: string })[] => rows.map((r) => ({ ...r, user_id }))
+      await Promise.all(d.tables.map((t) => t.clear()))
+      await d.profile.add({
+        ...data.profile,
+        user_id,
+        plan: 'free',
+        display_name: current?.display_name ?? data.profile.display_name,
+      })
+      await d.gear.bulkAdd(own(data.gear))
+      await d.exercises.bulkAdd(own(data.exercises))
+      await d.plans.bulkAdd(own(data.plans).map((p) => ({ ...p, published: null })))
+      await d.planDays.bulkAdd(own(data.plan_days))
+      await d.planItems.bulkAdd(own(data.plan_items))
+      await d.rules.bulkAdd(own(data.progression_rules))
+      await d.itemStates.bulkAdd(own(data.item_states))
+      await d.sessions.bulkAdd(own(data.workout_sessions))
+      await d.setLogs.bulkAdd(own(data.set_logs))
+    })
   }
 
   async listProgression(): Promise<ProgressionRow[]> {

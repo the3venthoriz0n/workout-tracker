@@ -25,7 +25,16 @@ export type ApiRepoOptions = {
   fetch?: typeof fetch
 }
 
-export type ApiRepo = Repo & { importAll(data: ExportData): Promise<void> }
+export type ApiRepo = Repo & {
+  /** First-time guest upload into an account without a profile. */
+  importAll(data: ExportData): Promise<void>
+  /**
+   * Restore: replaces the account's library and history with the file (POST /import/replace). A bad
+   * file is ImportInvalidError; a wrong password ApiError(403, 'invalid_password'); a published
+   * listing ApiError(409, 'has_published'); the limit ApiError(429, 'rate_limited').
+   */
+  replaceAll(password: string, data: ExportData): Promise<void>
+}
 
 type Result = { status: number; data: unknown }
 
@@ -82,7 +91,7 @@ export function createApiRepo(opts: ApiRepoOptions = {}): ApiRepo {
     }
     const data = await readJson(res)
     if (res.ok) return { status: res.status, data }
-    if (res.status === 400 && path === '/import') throw new ImportInvalidError()
+    if (res.status === 400 && (path === '/import' || path === '/import/replace')) throw new ImportInvalidError()
     throw responseError(res.status, data, notFound)
   }
 
@@ -182,6 +191,9 @@ export function createApiRepo(opts: ApiRepoOptions = {}): ApiRepo {
     listProgressionByExercise: () => get<ExerciseProgression[]>('/progression/exercises'),
     async importAll(data) {
       await post('/import', data)
+    },
+    async replaceAll(password, data) {
+      await post('/import/replace', { password, data })
     },
     publishPlan: (planId, meta) => post(`/plans/${seg(planId)}/publish`, meta),
     unpublishPlan: (planId) => del(`/plans/${seg(planId)}/publish`),

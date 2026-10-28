@@ -19,6 +19,12 @@ export type RepoHarness = {
    * Leave undefined when the implementation has no import; the transfer case is then skipped.
    */
   importAll?: (data: ExportData) => Promise<void>
+  /**
+   * Restore: REPLACES everything of this harness's (initialised) account with the file, as Settings
+   * "Restore from a file" does (LocalRepo.importAll, the service's replaceAll). Leave undefined when
+   * the implementation has no restore; the restore cases are then skipped.
+   */
+  replaceAll?: (data: ExportData) => Promise<void>
 }
 
 export type ContractGroup =
@@ -29,6 +35,7 @@ export type ContractGroup =
   | 'progression'
   | 'sessions'
   | 'transfer'
+  | 'restore'
   | 'community'
 
 /** `empty`: the account must NOT be initialised (no profile, no seeds); used for the import target. */
@@ -128,7 +135,7 @@ export function runRepoContract(
 ): void {
   const pending = new Set(opts?.pending ?? [])
   const enabled = new Set<ContractGroup>(
-    opts?.groups ?? ['profile', 'gear', 'exercises', 'plans', 'progression', 'sessions', 'transfer', 'community'],
+    opts?.groups ?? ['profile', 'gear', 'exercises', 'plans', 'progression', 'sessions', 'transfer', 'restore', 'community'],
   )
 
   describe(label, () => {
@@ -1224,6 +1231,116 @@ expect((await exercise(repo, 'Bench Press')).default_rule?.success_amount).toBe(
         const exported = await repo.exportAll()
         expect(exported.profile.display_name).toBe('Jo Lifts')
         expect(exported.plans.find((p) => p.id === plan_id)?.source).toEqual(copy.source)
+      },
+    )
+
+    // ---------------------------------------------------------------- restore
+    /** A source account with a bit of everything: rules, angles, a superset, history, an active session. */
+    async function richExport(repo: Repo): Promise<ExportData> {
+      const bench = await exercise(repo, 'Bench Press')
+      const squat = await exercise(repo, 'Back Squat')
+      await repo.updateProfile({ units: 'kg' })
+      await repo.updateProfile({ default_rule: rule({ success_amount: 2.5 }) })
+      await repo.saveGear({ name: 'Sandbag', owned: false })
+      const { plan, day } = await planWithDay(repo, 'Restored plan', 'Day 1')
+      await repo.saveExercise({ ...bench, supports_angle: true })
+      const i1 = await repo.addPlanItem(day.id, bench.id)
+      const i2 = await repo.addPlanItem(day.id, squat.id)
+      const i3 = await repo.addPlanItem(day.id, (await exercise(repo, 'Deadlift')).id)
+      await repo.updatePlanItem(i1.id, { angle: 'incline', amrap_last: true })
+      await repo.setRule(i2.id, null)
+      await repo.setSuperset(day.id, newId(), [i2.id, i3.id])
+      const s1 = await repo.startSession(day.id)
+      await markDone(repo, s1, i1.id)
+      await repo.finishSession(s1.id)
+      await repo.startSession(day.id)
+      expect(plan.id).toBeTruthy()
+      return repo.exportAll()
+    }
+    /** The target's own data before a restore: a plan and a finished workout the file does not have. */
+    async function ownData(repo: Repo) {
+      const { plan, day } = await planWithDay(repo, 'Mine only', 'Mine day')
+      const item = await repo.addPlanItem(day.id, (await exercise(repo, 'Overhead Press')).id)
+      const s = await repo.startSession(day.id)
+      await markDone(repo, s, item.id)
+      await repo.finishSession(s.id)
+      return { plan, session: s }
+    }
+
+    contract('restore', 'restore replaces the whole library and history with the file', async ({ repo, make: makeAnother, skip }) => {
+      const target = await makeAnother()
+      if (!target.replaceAll) return skip()
+      const data = await richExport(repo)
+      const mine = await ownData(target.repo)
+
+      await target.replaceAll(data)
+
+      const after = await target.repo.exportAll()
+      expect(normalise(after)).toEqual(normalise(data))
+      expect(after.profile.user_id).toBe((await target.repo.getProfile()).user_id)
+      expect(after.profile.user_id).not.toBe(data.profile.user_id)
+      expect(await target.repo.getPlan(mine.plan.id)).toBeUndefined()
+      expect(await target.repo.getSession(mine.session.id)).toBeUndefined()
+      expect((await target.repo.listPlans()).map((p) => p.name)).toEqual(['Restored plan'])
+      expect((await target.repo.getActiveSession())?.id).toBe((await repo.getActiveSession())?.id)
+      expect((await target.repo.getProfile()).units).toBe('kg')
+      // Restoring the same file again is harmless (no duplicates).
+      await target.replaceAll(data)
+      expect(normalise(await target.repo.exportAll())).toEqual(normalise(data))
+    })
+
+    contract('restore', 'restore rejects an invalid file with ImportInvalidError and changes nothing', async ({ repo, make: makeAnother, skip }) => {
+      const target = await makeAnother()
+      if (!target.replaceAll) return skip()
+      const data = await richExport(repo)
+      await ownData(target.repo)
+      const before = normalise(await target.repo.exportAll())
+      const mutate = (fn: (d: ExportData) => void): ExportData => {
+        const d = structuredClone(data)
+        fn(d)
+        return d
+      }
+      const plain = data.plan_items.find((i) => i.angle === null)!
+      const cases: [string, unknown][] = [
+        ['dangling day', mutate((d) => (d.plan_days[0]!.plan_id = newId()))],
+        ['dangling item exercise', mutate((d) => (d.plan_items[0]!.exercise_id = newId()))],
+        ['dangling set log', mutate((d) => (d.set_logs[0]!.session_id = newId()))],
+        ['duplicate plan', mutate((d) => d.plans.push({ ...d.plans[0]! }))],
+        [
+          'angle on an exercise without angles',
+          mutate((d) => (d.plan_items.find((i) => i.id === plain.id)!.angle = 'decline')),
+        ],
+        [
+          'a link in a plan source',
+          mutate((d) => (d.plans[0]!.source = { shared_plan_id: newId(), version: 1, title: 'Visit spam.com', author: 'Someone' })),
+        ],
+        ['a link in the public name', mutate((d) => (d.profile.display_name = 'www.example.com'))],
+        ['wrong version', { ...data, version: 2 }],
+        ['not an export', { hello: 'world' }],
+      ]
+      for (const [what, bad] of cases) {
+        await expect(target.replaceAll(bad as ExportData), what).rejects.toBeInstanceOf(ImportInvalidError)
+        expect(normalise(await target.repo.exportAll()), what).toEqual(before)
+      }
+    })
+
+    contract(
+      'restore',
+      "restore keeps the account's public name (the file's only fills a gap) and never sets the tier",
+      async ({ repo, make: makeAnother, skip }) => {
+        const named = await makeAnother()
+        if (!named.replaceAll) return skip()
+        const data = structuredClone(await repo.exportAll())
+        data.profile.display_name = 'From File'
+        data.profile.plan = 'pro'
+        await named.repo.updateProfile({ display_name: 'Keep Me' })
+        await named.replaceAll(data)
+        expect(await named.repo.getProfile()).toMatchObject({ display_name: 'Keep Me', plan: 'free' })
+
+        const unnamed = must((await makeAnother()).replaceAll, 'replaceAll')
+        const last = live[live.length - 1]!
+        await unnamed(data)
+        expect(await last.repo.getProfile()).toMatchObject({ display_name: 'From File', plan: 'free' })
       },
     )
 

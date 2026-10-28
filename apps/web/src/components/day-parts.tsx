@@ -21,25 +21,30 @@ import type { PlanTree } from '@/repo/types'
 type Day = PlanTree['days'][number]
 type Item = Day['items'][number]
 
-/** Toggle button showing the day's colour; opens the swatch picker. */
+/** The day's colour dot: the only dot on the header; tapping it opens or closes the swatch picker. */
 export function DayColorButton({ day, open, onToggle }: { day: Day; open: boolean; onToggle: () => void }) {
   const color = dayColorOf(day)
   return (
     <Button
       variant="ghost"
       size="icon"
-      className="min-h-11 min-w-11"
+      className="-mr-1 min-h-11 min-w-11 rounded-full"
       aria-expanded={open}
-      aria-label={`Colour for ${day.name}: ${DAY_COLOR_NAMES[color]}`}
+      aria-label="Day colour"
       onClick={onToggle}
     >
-      <span aria-hidden className="ring-foreground/15 size-6 rounded-full ring-2" style={{ background: dayColorVar(color) }} />
+      <span
+        aria-hidden
+        data-day-color={color}
+        className="ring-foreground/15 size-4 rounded-full ring-2"
+        style={{ background: dayColorVar(color) }}
+      />
     </Button>
   )
 }
 
 /** Radio swatches: Automatic (derived from the position) plus the eight named colours. */
-export function DayColorPicker({ day, planId }: { day: Day; planId: string }) {
+export function DayColorPicker({ day, planId, onPicked }: { day: Day; planId: string; onPicked?: () => void }) {
   const save = useSavePlanDay()
   const derived = dayColorOf({ color: null, position: day.position })
   const choices: { value: DayColor | null; label: string; swatch: DayColor }[] = [
@@ -62,7 +67,7 @@ export function DayColorPicker({ day, planId }: { day: Day; planId: string }) {
               onChange={() =>
                 save.mutate(
                   { id: day.id, plan_id: planId, name: day.name, color: c.value },
-                  { onError: (e) => notifyError(e) },
+                  { onSuccess: onPicked, onError: (e) => notifyError(e) },
                 )
               }
             />

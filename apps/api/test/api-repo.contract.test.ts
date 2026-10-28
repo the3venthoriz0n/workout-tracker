@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { createApiRepo } from '@workout/shared'
 import { runRepoContract } from '@workout/shared/testing'
-import { cookieJar, setupApp } from './helpers.js'
+import { GOOD_PASSWORD, cookieJar, setupApp } from './helpers.js'
 
 // ApiRepo over the real Hono app and Postgres: the injected fetch is app.request with a cookie jar.
 runRepoContract(
@@ -22,6 +22,11 @@ runRepoContract(
     }) as unknown as typeof fetch
     const repo = createApiRepo({ fetch: fetchImpl })
     if (!opts?.empty) await repo.init()
-    return { repo, cleanup: h.cleanup, importAll: (data) => repo.importAll(data) }
+    return {
+      repo,
+      cleanup: h.cleanup,
+      importAll: (data) => repo.importAll(data),
+      replaceAll: (data) => repo.replaceAll(GOOD_PASSWORD, data),
+    }
   },
 )

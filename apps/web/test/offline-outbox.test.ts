@@ -29,6 +29,8 @@ function makeServer() {
     patches: [] as { id: string; body: Record<string, unknown> }[],
     statusFor: (_id: string): number | null => null,
     applyThenDrop: false,
+    /** When set, a PATCH waits for it (a replay held in flight). */
+    hold: null as Promise<void> | null,
     activeSession: true,
     sets,
     fetch: (async (url: string, init: RequestInit = {}) => {
@@ -41,6 +43,7 @@ function makeServer() {
       let m
       if ((m = /^\/sets\/(.+)$/.exec(path)) && method === 'PATCH') {
         const id = m[1]!
+        if (s.hold) await s.hold
         s.patches.push({ id, body: body! })
         const forced = s.statusFor(id)
         if (forced) return json(forced, { error: forced === 401 ? 'unauthorized' : 'invalid' })
@@ -478,4 +481,30 @@ test('a 502/503/504 on a direct edit is queued like being offline; 403 on replay
   await repo.flush()
   expect(repo.pending()).toBe(1)
   expect(onDropped).not.toHaveBeenCalled()
+})
+
+test('idle() waits for a replay that is already in flight (restore pauses, then awaits it)', async () => {
+  const server = makeServer()
+  const { repo } = make(server)
+  await seedMirror(server, repo)
+  server.online = false
+  await repo.updateSet('a', { done: true, updated_at: t(1) })
+  server.online = true
+  let release!: () => void
+  server.hold = new Promise<void>((r) => (release = r))
+  server.calls.length = 0 // the offline attempt above is not the replay
+  const flushing = repo.flush()
+  await vi.waitFor(() => expect(server.calls.some((c) => c.method === 'PATCH')).toBe(true))
+  repo.pause()
+  let idle = false
+  const waiting = repo.idle().then(() => (idle = true))
+  await new Promise((r) => setTimeout(r, 20))
+  expect(idle).toBe(false)
+  release()
+  await waiting
+  await flushing
+  expect(idle).toBe(true)
+  expect(server.patches).toHaveLength(1)
+  // Nothing in flight: idle() resolves at once.
+  await repo.idle()
 })

@@ -1,4 +1,4 @@
-import { registerAccount } from './account.js'
+import { createPasswordGate, registerAccount } from './account.js'
 import { registerCommunity } from './community.js'
 import { registerExercises } from './exercises.js'
 import { registerGear } from './gear.js'
@@ -12,7 +12,8 @@ import type { RouteDeps, V1 } from './types.js'
 export type { RouteDeps } from './types.js'
 
 /** Mounts every /api/v1 resource on `v1` (already behind requireUser). */
-export function registerRoutes(v1: V1, deps: RouteDeps) {
+export function registerRoutes(v1: V1, base: Omit<RouteDeps, 'passwordGate'>) {
+  const deps: RouteDeps = { ...base, passwordGate: createPasswordGate(base.auth) }
   registerMe(v1, deps)
   registerGear(v1, deps)
   registerExercises(v1, deps)

@@ -39,6 +39,8 @@ export type OfflineControls = {
   resume(): void
   /** Stop replaying (a sign-in for another account is about to change the cookie). */
   pause(): void
+  /** Resolves once no replay is in flight (pause() first, so none starts after). Never throws. */
+  idle(): Promise<void>
   subscribe(cb: (s: OfflineState) => void): () => void
   hasOfflineData(): Promise<boolean>
   /** Forget this account's queue and mirror (only after the user confirmed). */
@@ -232,6 +234,9 @@ export function withOffline(api: ApiRepo, store: OutboxStore, opts: OfflineOptio
       paused = true
       cancelTimer()
       emit()
+    },
+    async idle() {
+      await running
     },
     resume() {
       paused = false
