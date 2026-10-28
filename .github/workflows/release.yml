@@ -89,6 +89,10 @@ jobs:
 
   deploy:
     needs: image
+    # Production (M3) is on hold: this job only runs once the repository variable
+    # PRODUCTION_DEPLOY is set to 'true' (see docs/release-checklist.md). Until then a tag builds,
+    # tests and publishes the versioned image and the run ends green.
+    if: ${{ vars.PRODUCTION_DEPLOY == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Secrets and variables live in this environment, which only v* tags may deploy to.

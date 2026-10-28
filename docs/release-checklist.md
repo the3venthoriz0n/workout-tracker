@@ -6,6 +6,7 @@ Nothing here is automated: do it in the GitHub and DigitalOcean UIs. Deploy acce
 
 ### GitHub repository
 
+- [ ] **Enable the deploy job**: the release workflow skips its production deploy until the repository variable `PRODUCTION_DEPLOY` is `true` (Settings, Secrets and variables, Variables). Set it only when the Droplet, DNS and the `production` environment below are ready; until then a tag publishes the versioned image and the run ends green.
 - [ ] **Tag ruleset** for `refs/tags/v*`: restrict creation, update and deletion to repository admins, with no bypass list. Anyone who can push a `v*` tag can ship code to the Droplet.
 - [ ] **`production` environment** (created by `just github-setup`): add a required reviewer and confirm the deployment policy allows only `v*` tags. Re-running `just github-setup` can reset UI-configured settings, so verify both again afterwards.
 - [ ] **Branch protection on `main`**: require a pull request; require the checks `check`, `docker`, `prod-config`, `self-hosted-config`, `deploy-script`, `public-safe` and `analyze`; block force pushes and deletion.
