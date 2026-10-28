@@ -2,7 +2,7 @@
 
 A free, simple lifting tracker: build an exercise library, make plans, log sets, and let progression rules set the next session's targets. It works without an account and runs on web, iOS and Android from one codebase.
 
-See [docs/spec.md](docs/spec.md) for the full design.
+See [docs/spec.md](docs/spec.md) for the full design and [docs/design-guide.md](docs/design-guide.md) for the UI rules.
 
 ## Local development
 

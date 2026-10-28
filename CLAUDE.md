@@ -5,6 +5,7 @@ A free, very simple lifting tracker: exercise library, gear, plans with per-plan
 ## Source of truth
 
 [docs/spec.md](docs/spec.md) covers the data model, core logic, API, screens and deploy, plus a decisions log, open questions and unverified facts. Read it before making design decisions.
+UI changes follow [docs/design-guide.md](docs/design-guide.md): one primary action, quiet icon-only delete (never beside the chevron), no swipe-only gestures, 44 px targets, check 375 px light and dark.
 
 Diagrams of the system, repo layout, Repo contract and sign-in flow: [docs/architecture.md](docs/architecture.md).
 
