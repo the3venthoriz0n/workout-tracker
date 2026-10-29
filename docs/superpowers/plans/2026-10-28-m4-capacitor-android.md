@@ -1,6 +1,6 @@
 # Mobile (M4) Plan: Capacitor Android, tested in an emulator
 
-> **Status: Planned (2026-10-28). Nothing built yet. Android first; iOS waits for a Mac and an Apple Developer account.**
+> **Status: Planned and approved by the owner (2026-10-28). Nothing built yet; the owner asked for the plan and spec only, so implementation starts when they say so. Android first; iOS waits for a Mac and an Apple Developer account.** Design reference: spec §7 ("Mobile auth (M4)").
 
 **Goal:** The same web app runs as an Android app (bundled `dist/`, offline-first like the web version), signs in against the self-hosted API, and can be run and screenshotted in an emulator on the dev machine.
 
@@ -87,9 +87,9 @@ Spec §3/§5/§9/§13/§14 (mobile status, bearer, CORS, origins now verified), 
 
 0 (owner approval on SDK install) -> 1 -> 2 -> 3 -> 4 (owner tries it on the emulator; staging config) -> 6; 5 is optional. One implementer per task, independent review for tasks 1 and 2.
 
-## Open questions for the owner
+## Owner answers (2026-10-28: "it's all fine for now")
 
-1. App id `app.workouttracker`, or something else?
-2. OK to install about 5-8 GB of Android tooling into `~/android` in WSL (nothing on Windows)?
-3. Is Task 5 (email links open the app) wanted for the first version, or is "opens in the browser" fine to start?
-4. Real device later: a USB cable or Wi-Fi debugging from the phone, or emulator only for now?
+1. App id `app.workouttracker`: accepted.
+2. Installing about 5-8 GB of Android tooling into `~/android` in WSL (nothing on Windows): accepted, at the start of Task 0.
+3. Email links open the browser in the first version; Task 5 stays optional and later.
+4. Emulator only for now; a real phone over USB or Wi-Fi debugging is a later follow-up.
