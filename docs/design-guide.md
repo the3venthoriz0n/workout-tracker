@@ -32,7 +32,7 @@ Warm, minimal and quick to use in a gym with one thumb. Soft surfaces instead of
 
 ## 5. Layout and touch
 
-- Mobile first, one column, 375 px wide is the design target. The floating tab bar stays clear of content (`--nav-space`).
+- Mobile first, one column, 375 px wide is the design target. The tab bar is docked to the bottom edge; content stays clear of content (`--nav-space`).
 - Tap targets at least **44 px** (the drawn shape may be smaller than its hit area).
 - Inputs at least 16 px text (no iOS zoom). `inputmode="decimal"` for weight, `numeric` for reps.
 - Never more than one sheet or modal open. Edit in place when a sheet is not needed.

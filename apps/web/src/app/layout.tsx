@@ -12,18 +12,16 @@ const tabs = [
   { to: '/history', label: 'History', icon: History, end: false },
 ]
 
-// One nav element: a floating pill island above the safe area below md, a left sidebar from md up.
-// The island is solid; where backdrop-filter works it turns translucent with a blur.
+// One nav element: a tab bar docked to the bottom edge below md (padded for the home indicator),
+// a left sidebar from md up.
 export function Layout() {
   return (
     <div className="bg-background text-foreground min-h-dvh md:flex">
       <nav
         aria-label="Main"
         className={cn(
-          'fixed z-40 mx-auto flex max-w-md gap-0.5 rounded-full p-1.5',
-          'right-[calc(12px+env(safe-area-inset-right))] bottom-[calc(12px+env(safe-area-inset-bottom))] left-[calc(12px+env(safe-area-inset-left))]',
-          'bg-popover shadow-(--shadow-float) supports-[backdrop-filter]:bg-popover/80 supports-[backdrop-filter]:backdrop-blur-xl',
-          'md:sticky md:top-0 md:right-auto md:bottom-auto md:left-auto md:mx-0 md:h-dvh md:w-60 md:max-w-none md:shrink-0 md:flex-col md:gap-1 md:rounded-none md:bg-background md:p-4 md:shadow-none md:supports-[backdrop-filter]:bg-background md:supports-[backdrop-filter]:backdrop-blur-none',
+          'fixed inset-x-0 bottom-0 z-40 flex gap-0.5 border-t border-border bg-background px-[calc(6px+env(safe-area-inset-left))] pt-1.5 pb-[calc(6px+env(safe-area-inset-bottom))]',
+          'md:sticky md:top-0 md:bottom-auto md:h-dvh md:w-60 md:shrink-0 md:flex-col md:gap-1 md:border-t-0 md:p-4',
         )}
       >
         {tabs.map(({ to, label, icon: Icon, end }) => (

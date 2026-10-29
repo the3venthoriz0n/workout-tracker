@@ -45,7 +45,7 @@ import { SessionInProgressError } from '@/repo/types'
 
 const selectClass = cn(fieldClass, 'h-12')
 
-// Primary action docked above the floating tab bar (thumb zone); at the page end on md+.
+// Primary action docked above the tab bar (thumb zone); at the page end on md+.
 // The ::after fills the gap down to the screen edge so content never shows between bar and nav.
 const actionBarClass =
   'bg-background sticky bottom-(--nav-space) z-20 -mx-4 px-4 py-3 after:absolute after:inset-x-0 after:top-full after:h-(--nav-space) after:bg-background md:bottom-0 md:after:hidden'
