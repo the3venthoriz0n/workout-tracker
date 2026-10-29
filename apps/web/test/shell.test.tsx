@@ -78,7 +78,7 @@ test('Library stays highlighted on a section deep link', async () => {
   )
 })
 
-test('the floating nav keeps five links with exactly one aria-current', async () => {
+test('the bottom nav keeps five links with exactly one aria-current', async () => {
   renderAt('/')
   const nav = within(await screen.findByRole('navigation', { name: 'Main' }))
   const links = nav.getAllByRole('link')

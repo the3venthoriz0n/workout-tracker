@@ -150,8 +150,8 @@
 
 @layer base {
   :root {
-    /* Space the floating tab bar takes at the bottom of the screen (phones). */
-    --nav-space: calc(5.75rem + env(safe-area-inset-bottom));
+    /* Space the docked tab bar takes at the bottom of the screen (phones). */
+    --nav-space: calc(4.25rem + env(safe-area-inset-bottom));
     --row: var(--card);
   }
   * {
