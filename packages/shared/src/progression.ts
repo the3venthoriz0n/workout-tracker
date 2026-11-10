@@ -20,17 +20,19 @@ function progressRaw(
   failStreak: number,
   sets: Pick<SetLog, 'done' | 'actual_reps' | 'weight'>[],
   increment: number,
-): { targetReps: number; targetWeight: number; failStreak: number; outcome: Outcome } {
+): { targetReps: number; targetWeight: number; failStreak: number; outcome: Outcome; liftedWeight: number | null } {
   const { targetReps, targetWeight, baseReps, plannedSets } = input
   const doneSets = sets.filter((s) => s.done)
-  if (!rule || doneSets.length === 0) return { targetReps, targetWeight, failStreak, outcome: 'skipped' }
+  if (!rule || doneSets.length === 0) return { targetReps, targetWeight, failStreak, outcome: 'skipped', liftedWeight: null }
 
   const success =
     doneSets.length >= plannedSets && doneSets.every((s) => s.actual_reps >= targetReps && s.weight >= targetWeight)
 
   if (success) {
+    // Progress from what was actually lifted: the lowest done weight (every set met the target, so it is >= target).
+    const lifted = Math.min(...doneSets.map((s) => s.weight))
     let reps = targetReps
-    let weight = targetWeight
+    let weight = lifted
     if (rule.success_action === 'add_weight') {
       // Snapped to the increment, but never a step smaller than one increment
       const next = roundToIncrement(weight + rule.success_amount, increment)
@@ -42,13 +44,13 @@ function progressRaw(
         weight = roundToIncrement(weight + increment, increment)
       }
     }
-    return { targetReps: reps, targetWeight: weight, failStreak: 0, outcome: 'success' }
+    return { targetReps: reps, targetWeight: weight, failStreak: 0, outcome: 'success', liftedWeight: lifted }
   }
 
   const streak = failStreak + 1
   if (streak >= rule.fail_streak_limit) {
     const weight = roundToIncrement(targetWeight * (1 - rule.deload_pct / 100), increment)
-    return { targetReps: baseReps, targetWeight: weight, failStreak: 0, outcome: 'deload' }
+    return { targetReps: baseReps, targetWeight: weight, failStreak: 0, outcome: 'deload', liftedWeight: null }
   }
-  return { targetReps, targetWeight, failStreak: streak, outcome: 'miss' }
+  return { targetReps, targetWeight, failStreak: streak, outcome: 'miss', liftedWeight: null }
 }

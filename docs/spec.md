@@ -147,13 +147,13 @@ Sessions pre-fill from `targetReps` and `targetWeight`. Overriding a plan item n
 **Progression** runs once per plan item when a session is finished: `progress({ targetReps, targetWeight, baseReps, plannedSets }, rule, failStreak, sets, increment) → { targetReps, targetWeight, failStreak, outcome }`, where `outcome` is `skipped | success | miss | deload`.
 
 1. No rule (after layering, below), or no set marked done for the item: nothing changes.
-2. **Success** = the item's planned number of sets are all `done` with `actual_reps >= targetReps` and `weight >= targetWeight`. Anything else is a **miss**.
-3. On success, reset `fail_streak` and apply the rule:
-   - `add_weight`: `targetWeight += success_amount`, rounded to the increment and never smaller than one increment.
-   - `add_reps`: `targetReps += success_amount`. If `rep_ceiling` is set and `targetReps` would exceed it, set `targetReps = baseReps` and `targetWeight += increment` instead (double progression).
+2. **Success** = the item's planned number of sets are all `done` with `actual_reps >= targetReps` and `weight >= targetWeight`. Anything else is a **miss** (so a lighter weight is a miss, not a new baseline).
+3. On success, reset `fail_streak` and start from the **lifted weight**, the lowest `weight` among the done sets (always `>= targetWeight`), not from the old target; then apply the rule:
+   - `add_weight`: `targetWeight = lifted + success_amount`, rounded to the increment and never smaller than one increment above `lifted`.
+   - `add_reps`: `targetWeight = lifted`, `targetReps += success_amount`. If `rep_ceiling` is set and `targetReps` would exceed it, set `targetReps = baseReps` and `targetWeight = lifted + increment` instead (double progression).
 4. On a miss, `fail_streak += 1`. If `fail_streak >= fail_streak_limit`, set `targetWeight = roundToIncrement(targetWeight × (1 − deload_pct/100))`, reset `targetReps` to `baseReps`, and reset the streak.
 5. Weights are rounded to the nearest `increment` and never go below 0. A successful `add_weight` step is rounded to the increment and is never smaller than one increment.
-6. Write the new `target_reps`, `target_weight` and `item_state`.
+6. Write the new `target_reps`, `target_weight` and `item_state`. On `success`, if the item has no `weight` override, also set `exercise.default_weight = lifted` (so every other item that inherits it follows). The library is never changed on a miss, a deload or when the item overrides the weight.
 
 **Rule layering**: an item's effective rule = its `progression_rule` row (override) ?? `exercise.default_rule` ?? `profile.default_rule` ?? the built-in default (`add_weight` by the progression step, `fail_streak_limit = 3`, `deload_pct = 10`, no rep ceiling). It is resolved when read and when a session finishes, so changing a default changes every inheriting item. `plan_item.inherit_rule` says what a missing row means: `true` (new items) inherits; `false` is an explicit "no progression" override (and the value for rows from before layering, where a missing row meant exactly that). `setRule(item, rule)` stores an override, `setRule(item, null)` overrides with no progression, `clearRule(item)` goes back to inheriting. Views carry `ruleSource` (`item`\|`exercise`\|`profile`\|`builtin`). Existing rule rows stay overrides even when equal to the old default (no guessing).
 
@@ -327,6 +327,7 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | Sign out returns to a fresh guest database | Server data stays safe on the server; nothing sensitive lingers on a shared device |
 | Offline queue limited to set edits (+ a local mirror of the active session) | Matches the gym use case; starting or finishing a workout needs a connection |
 | `Repo` interface and view types move to `packages/shared` | Web (`LocalRepo`, `ApiRepo`) and API (server service) implement and test against one contract |
+| Progression starts from the lowest weight lifted on a successful finish; a lighter weight stays a miss; the same success also saves it as the exercise's library default when the item has no weight override, no setting (owner's choice) | Editing the weights in the workout is how people really adjust; targets and the library follow it. An item with its own weight override is plan-specific, so it never rewrites the shared default |
 | Today preselects the next day after the last completed workout (owner's choice) | Programs run A, B, C in turn; one tap to start. Derived from history on the client, nothing stored, and any pick overrides it |
 | Layered progression rules (item ?? exercise ?? profile ?? built-in), resolved at read/finish time (owner's choice) | One edit to a default reaches every inheriting item; overrides stay explicit. Old rule rows stay overrides; nothing is guessed |
 | Angle per plan item, gated by `exercise.supports_angle` (owner's choice) | One exercise can be incline in one plan and flat in another, each with its own targets and progression |

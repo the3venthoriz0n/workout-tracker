@@ -718,6 +718,53 @@ export function runRepoContract(
       },
     )
 
+    contract(
+      'sessions',
+      'finishSession progresses from the lowest weight lifted; a success also saves it as the library default, but not for items with a weight override, and never on a miss',
+      async ({ repo }) => {
+        const bench = await exercise(repo, 'Bench Press')
+        const squat = await exercise(repo, 'Back Squat')
+        await repo.saveExercise({ ...bench, default_weight: 100 })
+        await repo.saveExercise({ ...squat, default_weight: 100 })
+        const { plan, day } = await planWithDay(repo)
+        const inheriting = await repo.addPlanItem(day.id, bench.id) // no weight override
+        const overriding = await repo.addPlanItem(day.id, squat.id)
+        await repo.updatePlanItem(inheriting.id, { sets: 2, reps: 5 })
+        await repo.updatePlanItem(overriding.id, { sets: 2, reps: 5, weight: 100 })
+
+        const lift = async (itemId: string, weights: number[]) => {
+          const session = await repo.startSession(day.id)
+          for (const [n, s] of setsOf(session, itemId).entries()) {
+            await repo.updateSet(s.id, { done: true, weight: weights[n] })
+          }
+          return must((await repo.finishSession(session.id)).find((r) => r.exercise_name === (itemId === inheriting.id ? 'Bench Press' : 'Back Squat')), 'summary row')
+        }
+        const target = async (id: string) => (await planItem(repo, plan.id, id)).target_weight
+        const library = async (name: string) => (await exercise(repo, name)).default_weight
+
+        // Success: the item's target follows the lowest weight lifted, and so does the library default.
+        const first = await lift(inheriting.id, [120, 110])
+        expect(first).toMatchObject({ outcome: 'success', before: { weight: 100 }, after: { weight: 115 } })
+        expect(await target(inheriting.id)).toBe(115)
+        expect(await library('Bench Press')).toBe(110)
+
+        await lift(inheriting.id, [130, 130])
+        expect(await target(inheriting.id)).toBe(135)
+        expect(await library('Bench Press')).toBe(130)
+
+        // The item has its own weight override: the library is left alone.
+        await lift(overriding.id, [120, 120])
+        expect(await target(overriding.id)).toBe(125)
+        expect(await library('Back Squat')).toBe(100)
+
+        // A lighter weight is a miss: no target change and no library change.
+        const miss = await lift(inheriting.id, [90, 90])
+        expect(miss.outcome).toBe('miss')
+        expect(await target(inheriting.id)).toBe(135)
+        expect(await library('Bench Press')).toBe(130)
+      },
+    )
+
     contract('sessions', 'discardSession removes an unfinished session and rejects a finished one', async ({ repo }) => {
       const { day } = await planWithDay(repo)
       await repo.addPlanItem(day.id, (await exercise(repo, 'Bench Press')).id)
