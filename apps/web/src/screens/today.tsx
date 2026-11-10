@@ -27,6 +27,7 @@ import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import { isHttpUrl } from '@/lib/links'
 import { useWakeLock } from '@/lib/wake-lock'
+import { nextDay } from '@/lib/next-day'
 import { cn } from '@/lib/utils'
 import {
   planQueryOptions,
@@ -35,6 +36,7 @@ import {
   useFinishSession,
   usePlans,
   useProfile,
+  useSessions,
   useStartSession,
   useUpdateSessionNote,
   useUpdateSet,
@@ -76,6 +78,7 @@ function summaryLine(row: FinishSummary[number], unit: string): string {
 function Picker() {
   const repo = useRepo()
   const plans = usePlans().data
+  const history = useSessions()
   const start = useStartSession()
   const queryClient = useQueryClient()
   const trees = useQueries({
@@ -84,7 +87,7 @@ function Picker() {
   const [planId, setPlanId] = useState('')
   const [dayId, setDayId] = useState('')
 
-  if (!plans || trees.some((t) => t.isPending)) {
+  if (!plans || history.isPending || trees.some((t) => t.isPending)) {
     return <SkeletonRows className="px-4" rows={2} />
   }
   const eligible = trees.flatMap((t) => {
@@ -103,8 +106,10 @@ function Picker() {
       </div>
     )
   }
-  const plan = eligible.find((p) => p.id === planId) ?? eligible[0]!
-  const day = plan.days.find((d) => d.id === dayId) ?? plan.days[0]!
+  // Until the user picks, default to the day after the last completed workout.
+  const auto = nextDay(eligible, history.data ?? [])
+  const plan = eligible.find((p) => p.id === (planId || auto.planId))!
+  const day = plan.days.find((d) => d.id === (dayId || (planId ? '' : auto.dayId))) ?? plan.days[0]!
 
   function onStart() {
     start.mutate(day.id, {

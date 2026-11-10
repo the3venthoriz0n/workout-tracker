@@ -360,3 +360,27 @@ test('finishing while offline says to reconnect and keeps the workout', async ()
   await waitFor(() => expect(err).toHaveBeenCalledWith(expect.stringMatching(/^Reconnect to finish/)))
   expect(screen.getByRole('button', { name: 'Finish workout' })).toBeTruthy()
 })
+
+test('the picker preselects the day after the last completed one, and a manual pick still wins', async () => {
+  const user = userEvent.setup()
+  const { repo, plan, ex } = await seed()
+  const dayB = await repo.savePlanDay({ plan_id: plan.id, name: 'Day B' })
+  await repo.addPlanItem(dayB.id, ex.id)
+
+  // Fresh account: Day A is preselected.
+  const first = renderApp(repo)
+  expect((await screen.findByRole('radio', { name: /Day A/ }) as HTMLInputElement).checked).toBe(true)
+  first.unmount()
+
+  // Finish Day A: Day B is next.
+  const days = (await repo.getPlan(plan.id))!.days
+  const session = await repo.startSession(days[0]!.id)
+  await repo.updateSet(session.exercises[0]!.sets[0]!.id, { done: true })
+  await repo.finishSession(session.id)
+
+  renderApp(repo)
+  const b = (await screen.findByRole('radio', { name: /Day B/ })) as HTMLInputElement
+  expect(b.checked).toBe(true)
+  await user.click(screen.getByRole('radio', { name: /Day A/ }))
+  expect((screen.getByRole('radio', { name: /Day A/ }) as HTMLInputElement).checked).toBe(true)
+})
