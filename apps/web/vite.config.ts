@@ -16,6 +16,7 @@ const extraHosts = (process.env.DEV_ALLOWED_HOSTS ?? '')
 // Version info shown in Settings → About; build-time only (see src/lib/about.ts).
 const appInfo = {
   __APP_VERSION__: JSON.stringify(process.env.APP_VERSION || 'dev'),
+  __APP_RELEASE__: JSON.stringify(process.env.APP_RELEASE || ''),
   __APP_COMMIT__: JSON.stringify(process.env.APP_COMMIT || ''),
   __APP_REPO__: JSON.stringify(process.env.APP_REPO || ''),
 }

@@ -1,8 +1,9 @@
 // Build-time version info for the Settings "About" footer. The values are injected by Vite
-// `define` (see vite.config.ts) from APP_VERSION / APP_COMMIT / APP_REPO; nothing is fetched
+// `define` (see vite.config.ts) from APP_VERSION / APP_RELEASE / APP_COMMIT / APP_REPO; nothing is fetched
 // at runtime. They are build inputs, but are validated anyway before they become links.
 
-export type BuildInfo = { version: string; commit: string; repo: string }
+// `release`: the latest release tag a staging build sits on (empty when unknown).
+export type BuildInfo = { version: string; release?: string; commit: string; repo: string }
 
 export type AboutLinks = {
   label: string
@@ -16,6 +17,7 @@ const SHA_RE = /^[0-9a-f]{7,40}$/
 
 export const buildInfo: BuildInfo = {
   version: __APP_VERSION__,
+  release: __APP_RELEASE__,
   commit: __APP_COMMIT__,
   repo: __APP_REPO__,
 }
@@ -34,8 +36,9 @@ export function aboutLinks(info: BuildInfo): AboutLinks {
     }
   }
   if (info.version === 'staging') {
+    const tag = info.release && TAG_RE.test(info.release) ? `${info.release} · ` : ''
     return {
-      label: sha ? `staging · ${sha.slice(0, 7)}` : 'staging',
+      label: `${tag}${sha ? `staging · ${sha.slice(0, 7)}` : 'staging'}`,
       versionHref: base && sha ? `${base}/commit/${sha}` : null,
       repoHref: base,
     }
