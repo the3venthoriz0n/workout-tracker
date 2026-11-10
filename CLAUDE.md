@@ -37,7 +37,7 @@ Rejected options: Supabase, Next.js/SSR, a separate frontend container (v1), App
 
 ## CI/CD and infra
 
-- All builds and deploys run in GitHub Actions. PRs and `main` run CI. A `vX.Y.Z` tag tests and publishes the versioned image to GHCR; it deploys by digest to the `production` environment only when the repository variable `PRODUCTION_DEPLOY` is `true` (unset while M3 is on hold).
+- All builds and deploys run in GitHub Actions. PRs and `main` run CI. A `vX.Y.Z` tag tests, publishes the versioned image to GHCR and creates the GitHub Release with generated notes; it deploys by digest to the `production` environment only when the repository variable `PRODUCTION_DEPLOY` is `true` (unset while M3 is on hold).
 - Pin actions by commit SHA and images by digest; Dependabot updates them.
 - Workflows: default to `permissions: {}` or `contents: read`, and pass inputs to `run:` steps only through `env:`.
 - `infra/terraform` provisions the Droplet; the DigitalOcean token comes only from the environment. Production secrets are generated on the server by `deploy/deploy.sh`.
