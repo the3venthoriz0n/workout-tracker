@@ -17,6 +17,24 @@ describe('aboutLinks', () => {
       versionHref: `https://github.com/o/r/commit/${sha}`,
     })
   })
+  test('staging build also shows the latest release tag', () => {
+    expect(aboutLinks({ version: 'staging', release: 'v0.1.2', commit: sha, repo: 'o/r' })).toMatchObject({
+      label: 'v0.1.2 · staging · 52cf637',
+      versionHref: `https://github.com/o/r/commit/${sha}`,
+    })
+    expect(aboutLinks({ version: 'staging', release: 'v0.1.2', commit: '', repo: '' })).toMatchObject({
+      label: 'v0.1.2 · staging',
+      versionHref: null,
+    })
+  })
+  test('a missing or invalid release tag is ignored', () => {
+    for (const release of ['', 'latest', 'v1.2', '<b>v1.2.3</b>']) {
+      expect(aboutLinks({ version: 'staging', release, commit: sha, repo: 'o/r' }).label).toBe('staging · 52cf637')
+    }
+  })
+  test('a release build ignores the extra release value', () => {
+    expect(aboutLinks({ version: 'v1.2.3', release: 'v0.0.1', commit: sha, repo: 'o/r' }).label).toBe('v1.2.3')
+  })
   test('local dev has no version link and no repo link', () => {
     expect(aboutLinks({ version: 'dev', commit: '', repo: '' })).toEqual({ label: 'dev', versionHref: null, repoHref: null })
   })
