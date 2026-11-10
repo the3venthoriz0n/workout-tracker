@@ -21,6 +21,7 @@ COPY . .
 # Version info for Settings → About, baked into the web bundle. Declared after the install
 # layer so changing them never invalidates the dependency cache.
 ARG APP_VERSION=dev
+ARG APP_RELEASE=
 ARG APP_COMMIT=
 ARG APP_REPO=
 RUN pnpm build
