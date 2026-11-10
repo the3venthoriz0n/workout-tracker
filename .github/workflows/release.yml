@@ -1,6 +1,7 @@
 name: Release
 
-# Pushing a version tag (e.g. v1.2.0) tests, builds, publishes and deploys that commit.
+# Pushing a version tag (e.g. v1.2.0) tests, builds, publishes and deploys that commit, and
+# creates its GitHub Release with generated notes.
 on:
   push:
     tags: ['v*.*.*']
@@ -86,6 +87,29 @@ jobs:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+
+  # The GitHub Release page, with notes generated from the merged PRs since the previous tag.
+  # Runs once the image is published (a failed test or build never produces a release) and does
+  # not wait for, or depend on, the production deploy. Only this job can write repository contents.
+  release-notes:
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Create the release with generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # A re-run of this workflow must not fail because the release already exists.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it as it is."
+          else
+            gh release create "$TAG" --verify-tag --generate-notes --title "$TAG" --latest
+          fi
 
   deploy:
     needs: image
