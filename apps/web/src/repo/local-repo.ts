@@ -816,6 +816,10 @@ export class LocalRepo implements Repo {
           )
           // Spec §6 step 1: a skipped item changes nothing
           if (result.outcome !== 'skipped') {
+            // A success also saves the weight lifted as the library default (only when the item inherits it).
+            if (result.liftedWeight !== null && item.weight === null) {
+              await exercises.put({ ...exercise, default_weight: result.liftedWeight, updated_at: ts })
+            }
             await planItems.put({
               ...item,
               target_reps: result.targetReps,

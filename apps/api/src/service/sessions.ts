@@ -283,6 +283,13 @@ export async function finishSession(db: Db, userId: string, id: string): Promise
       )
       // Spec §6 step 1: a skipped item changes nothing.
       if (result.outcome !== 'skipped') {
+        // A success also saves the weight lifted as the library default (only when the item inherits it).
+        if (result.liftedWeight !== null && item.weight === null) {
+          await tx
+            .update(exercise)
+            .set({ defaultWeight: dec(result.liftedWeight), updatedAt: ts })
+            .where(and(eq(exercise.userId, userId), eq(exercise.id, exRow.id)))
+        }
         await tx
           .update(planItem)
           .set({ targetReps: result.targetReps, targetWeight: dec(result.targetWeight), updatedAt: ts })

@@ -7,11 +7,11 @@ const addW = { success_action: 'add_weight' as const, success_amount: 5, fail_st
 
 describe('progress', () => {
   it('skips without a rule', () =>
-    expect(progress(base, null, 0, [hit, hit, hit], 5)).toEqual({ targetReps: 5, targetWeight: 100, failStreak: 0, outcome: 'skipped' }))
+    expect(progress(base, null, 0, [hit, hit, hit], 5)).toEqual({ targetReps: 5, targetWeight: 100, failStreak: 0, outcome: 'skipped', liftedWeight: null }))
   it('skips when no set is done', () =>
     expect(progress(base, addW, 1, [{ ...hit, done: false }], 5).outcome).toBe('skipped'))
   it('adds weight on success and resets streak', () =>
-    expect(progress(base, addW, 2, [hit, hit, hit], 5)).toEqual({ targetReps: 5, targetWeight: 105, failStreak: 0, outcome: 'success' }))
+    expect(progress(base, addW, 2, [hit, hit, hit], 5)).toEqual({ targetReps: 5, targetWeight: 105, failStreak: 0, outcome: 'success', liftedWeight: 100 }))
   it('treats a short session as a miss', () =>
     expect(progress(base, addW, 0, [hit, hit], 5)).toMatchObject({ targetWeight: 100, failStreak: 1, outcome: 'miss' }))
   it('treats a lighter weight as a miss', () =>
@@ -19,7 +19,7 @@ describe('progress', () => {
   it('extra reps still succeed', () =>
     expect(progress(base, addW, 0, [hit, hit, { ...hit, actual_reps: 7 }], 5).outcome).toBe('success'))
   it('deloads at the streak limit, rounded', () =>
-    expect(progress({ ...base, targetReps: 6 }, addW, 2, [{ ...hit, actual_reps: 3 }], 5)).toEqual({ targetReps: 5, targetWeight: 90, failStreak: 0, outcome: 'deload' }))
+    expect(progress({ ...base, targetReps: 6 }, addW, 2, [{ ...hit, actual_reps: 3 }], 5)).toEqual({ targetReps: 5, targetWeight: 90, failStreak: 0, outcome: 'deload', liftedWeight: null }))
   it('deload rounds to the increment', () =>
     expect(progress({ ...base, targetWeight: 62.5 }, addW, 2, [{ ...hit, actual_reps: 1, weight: 62.5 }], 2.5).targetWeight).toBe(57.5))
   it('adds reps', () =>
@@ -31,6 +31,29 @@ describe('progress', () => {
   })
   it('never goes below zero', () =>
     expect(progress({ ...base, targetWeight: 0 }, { ...addW, fail_streak_limit: 1 }, 0, [{ ...hit, actual_reps: 0, weight: 0 }], 5).targetWeight).toBe(0))
+})
+
+describe('progress starts from the weight actually lifted', () => {
+  const at = (weight: number) => ({ ...hit, weight })
+  it('all sets heavier than the target: the lifted weight plus the step, not the target plus the step', () =>
+    expect(progress(base, addW, 0, [at(120), at(120), at(120)], 5)).toEqual({
+      targetReps: 5, targetWeight: 125, failStreak: 0, outcome: 'success', liftedWeight: 120,
+    }))
+  it('sets at different weights: the lowest done weight is the baseline', () =>
+    expect(progress(base, addW, 0, [at(110), at(100), at(105)], 5)).toMatchObject({ targetWeight: 105, liftedWeight: 100 }))
+  it('add_reps keeps the lifted weight as the new target weight', () =>
+    expect(progress(base, { ...addW, success_action: 'add_reps', success_amount: 1 }, 0, [at(110), at(110), at(110)], 5)).toMatchObject({
+      targetReps: 6, targetWeight: 110, liftedWeight: 110,
+    }))
+  it('double progression bumps from the lifted weight', () => {
+    const rule = { ...addW, success_action: 'add_reps' as const, success_amount: 1, rep_ceiling: 8 }
+    const s = { ...at(110), actual_reps: 8 }
+    expect(progress({ ...base, targetReps: 8 }, rule, 0, [s, s, s], 5)).toMatchObject({ targetReps: 5, targetWeight: 115, liftedWeight: 110 })
+  })
+  it('a lighter weight stays a miss and reports nothing lifted', () =>
+    expect(progress(base, addW, 0, [at(80), at(80), at(80)], 5)).toMatchObject({ outcome: 'miss', targetWeight: 100, failStreak: 1, liftedWeight: null }))
+  it('undone sets do not set the baseline', () =>
+    expect(progress(base, addW, 0, [at(120), at(120), at(120), { ...at(90), done: false }], 5)).toMatchObject({ liftedWeight: 120 }))
 })
 
 describe('defaultRule', () => {
@@ -75,7 +98,7 @@ describe('AMRAP sets (spec §6: target_reps is the minimum)', () => {
   it('extra reps on the AMRAP set count as success, exactly like hitting the minimum', () => {
     const withExtra = progress(base, addW, 1, [hit, hit, amrap(12)], 5)
     const atMinimum = progress(base, addW, 1, [hit, hit, amrap(5)], 5)
-    expect(withExtra).toEqual({ targetReps: 5, targetWeight: 105, failStreak: 0, outcome: 'success' })
+    expect(withExtra).toEqual({ targetReps: 5, targetWeight: 105, failStreak: 0, outcome: 'success', liftedWeight: 100 })
     expect(withExtra).toEqual(atMinimum)
     expect(atMinimum).toEqual(progress(base, addW, 1, [hit, hit, hit], 5))
   })
@@ -85,6 +108,7 @@ describe('AMRAP sets (spec §6: target_reps is the minimum)', () => {
       targetWeight: 100,
       failStreak: 1,
       outcome: 'miss',
+      liftedWeight: null,
     })
   })
 })
