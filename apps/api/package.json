@@ -13,9 +13,9 @@
   "dependencies": {
     "@hono/node-server": "2.1.6",
     "@workout/shared": "workspace:*",
-    "better-auth": "1.7.15",
+    "better-auth": "1.7.18",
     "drizzle-orm": "0.45.4",
-    "hono": "4.13.16",
+    "hono": "4.13.17",
     "postgres": "3.4.9",
     "zod": "4.6.7"
   },
@@ -25,6 +25,6 @@
     "esbuild": "0.28.2",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
-    "vitest": "5.0.5"
+    "vitest": "5.1.0"
   }
 }
