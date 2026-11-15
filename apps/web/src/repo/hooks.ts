@@ -62,6 +62,17 @@ export const useSessions = () => {
   const repo = useRepo()
   return useQuery({ queryKey: keys.sessions, queryFn: () => repo.listSessions() })
 }
+/** The most recent completed workout of the same plan day, for the "last time" lines. */
+export const usePreviousSession = (planDayId: string, excludeId: string) => {
+  const repo = useRepo()
+  const sessions = useSessions().data
+  const previousId = sessions?.find((s) => s.plan_day_id === planDayId && s.id !== excludeId)?.id
+  return useQuery({
+    queryKey: keys.session(previousId ?? ''),
+    queryFn: async () => (await repo.getSession(previousId!)) ?? null,
+    enabled: previousId !== undefined,
+  })
+}
 export const useSession = (id: string) => {
   const repo = useRepo()
   return useQuery({ queryKey: keys.session(id), queryFn: async () => (await repo.getSession(id)) ?? null })

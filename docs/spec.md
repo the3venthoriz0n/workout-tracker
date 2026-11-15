@@ -350,6 +350,10 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | Account deletion locks the user row first and removes votes and downloads itself, decrementing exactly those listings | A concurrent vote or adopt by the same user needs a key-share lock on the user row (foreign key), so it waits and then fails; counters always equal the real rows |
 | Deleting an account renames the author on other users' copies to "Deleted user" | Kept listings and copies carry no personal data of a deleted account (public names are personal data too) |
 | The public area is rate limited per client IP (60 requests a minute, in memory, the same client-IP headers as the auth limits, keyed on the right-most value, the one the nearest proxy appended, and only when it looks like an IP; otherwise one shared bucket). The map is bounded at 10,000 keys: expired keys are swept by an unref'd timer and, when full, on the request path; new keys that still do not fit share one overflow bucket, `429 {"error":"rate_limited"}`; `AUTH_RATE_LIMIT=off` disables it outside production | Cheap protection for the only unauthenticated data endpoints |
+| Today shows a count-up rest timer, never an alarm | Rest is where a lifter spends the workout; informational and dismissible, so it never nags and needs no setting |
+| Today shows "Last time: reps × weight" per exercise, from the most recent completed session of the same plan day | Progressive overload needs last time in view; no new repo method, it reads an existing session |
+| Set editor has − / + for reps and the progression step | Changing 135 to 140 was four taps with the keyboard open |
+| Staging moves only when a release tag `vX.Y.Z` is pushed, not on every merge to `main` | The owner wants deliberate staging releases; the host script still pulls `:staging` |
 
 ## 14. Open questions
 

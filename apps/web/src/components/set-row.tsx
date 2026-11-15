@@ -1,5 +1,5 @@
 import type { SetLog } from '@workout/shared'
-import { CheckIcon, PencilIcon } from 'lucide-react'
+import { CheckIcon, MinusIcon, PencilIcon, PlusIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NumberField } from '@/components/number-field'
 import { Input } from '@/components/ui/input'
@@ -11,6 +11,8 @@ type Patch = { done?: boolean; actual_reps?: number; weight?: number; note?: str
 type Props = {
   set: SetLog
   unit: string
+  /** The profile's progression step: how far the weight - and + buttons move. */
+  step?: number
   onToggle: () => Promise<boolean>
   onEdit: (patch: Patch) => Promise<boolean>
   /** In a superset block: the member's label (A1) and exercise name, shown on the row. */
@@ -20,7 +22,7 @@ type Props = {
 const LONG_PRESS_MS = 500
 const MOVE_TOLERANCE_PX = 10
 
-export function SetRow({ set, unit, onToggle, onEdit, member }: Props) {
+export function SetRow({ set, unit, step = 5, onToggle, onEdit, member }: Props) {
   const [editing, setEditing] = useState(false)
   const [focusReps, setFocusReps] = useState(false)
   const [note, setNote] = useState(set.note)
@@ -28,6 +30,7 @@ export function SetRow({ set, unit, onToggle, onEdit, member }: Props) {
   const longPressed = useRef(false)
   const origin = useRef({ x: 0, y: 0 })
   const pending = useRef(false)
+  const moved = useRef(false)
   const repsId = `set-reps-${set.id}`
 
   const cancelPress = () => {
@@ -70,6 +73,7 @@ export function SetRow({ set, unit, onToggle, onEdit, member }: Props) {
           onPointerDown={(e) => {
             origin.current = { x: e.clientX, y: e.clientY }
             longPressed.current = false
+            moved.current = false
             cancelPress()
             timer.current = setTimeout(() => {
               longPressed.current = true
@@ -81,8 +85,10 @@ export function SetRow({ set, unit, onToggle, onEdit, member }: Props) {
             if (
               Math.hypot(e.clientX - origin.current.x, e.clientY - origin.current.y) >
               MOVE_TOLERANCE_PX
-            )
+            ) {
+              moved.current = true
               cancelPress()
+            }
           }}
           onPointerCancel={cancelPress}
           onPointerLeave={cancelPress}
@@ -90,6 +96,11 @@ export function SetRow({ set, unit, onToggle, onEdit, member }: Props) {
           onClick={() => {
             if (longPressed.current) {
               longPressed.current = false
+              return
+            }
+            // A drag that started on the row is a scroll, not a tap
+            if (moved.current) {
+              moved.current = false
               return
             }
             if (pending.current) return
@@ -187,6 +198,18 @@ export function SetRow({ set, unit, onToggle, onEdit, member }: Props) {
               }}
             />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Stepper
+              label="reps"
+              onMinus={() => set.actual_reps > 0 && void onEdit({ actual_reps: set.actual_reps - 1 })}
+              onPlus={() => void onEdit({ actual_reps: set.actual_reps + 1 })}
+            />
+            <Stepper
+              label={`weight by ${formatWeight(step)}`}
+              onMinus={() => set.weight - step >= 0 && void onEdit({ weight: Number((set.weight - step).toFixed(2)) })}
+              onPlus={() => void onEdit({ weight: Number((set.weight + step).toFixed(2)) })}
+            />
+          </div>
           <Input
             aria-label={`Note for set ${set.set_no}`}
             placeholder="Note"
@@ -202,5 +225,20 @@ export function SetRow({ set, unit, onToggle, onEdit, member }: Props) {
         </div>
       )}
     </li>
+  )
+}
+
+// Two thumb-sized buttons for the commonest correction: one more rep, or one progression step more
+function Stepper({ label, onMinus, onPlus }: { label: string; onMinus: () => void; onPlus: () => void }) {
+  const btn = 'bg-secondary text-secondary-foreground flex h-12 flex-1 items-center justify-center rounded-full'
+  return (
+    <div className="flex gap-2">
+      <button type="button" aria-label={`Less ${label}`} className={btn} onClick={onMinus}>
+        <MinusIcon className="size-5" aria-hidden />
+      </button>
+      <button type="button" aria-label={`More ${label}`} className={btn} onClick={onPlus}>
+        <PlusIcon className="size-5" aria-hidden />
+      </button>
+    </div>
   )
 }

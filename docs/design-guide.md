@@ -58,6 +58,10 @@ Warm, minimal and quick to use in a gym with one thumb. Soft surfaces instead of
 
 Community titles, descriptions and names are untrusted: render them as plain text only, never as links or HTML, and never put them into URLs without validating them.
 
+## 8b. The live workout
+
+The active session is a one-thumb screen: the docked bar holds the rest timer (when running) above Finish; the header note shows "Started 6:42 PM · 7 of 15 sets"; each exercise shows "Last time: 5 × 130 lb" when the same day was done before; finished exercises dim and the one in progress is marked `aria-current`. Finish ends with an outcome glyph per lift (up, down, dash), never colour alone.
+
 ## 9. Checklist before a UI change is done
 
 1. Looks right at 375 px in light and dark (take a screenshot).

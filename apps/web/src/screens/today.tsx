@@ -1,11 +1,12 @@
 import { useQueries, useQueryClient } from '@tanstack/react-query'
-import { CheckIcon } from 'lucide-react'
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, CheckIcon, MinusIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { OfflineError, type SetLog } from '@workout/shared'
 import { toast } from 'sonner'
 import { Screen } from '@/app/screen'
 import { AngleChip, DayDot, Rail, SupersetLabel, nameWithAngle } from '@/components/plan-bits'
+import { RestTimer } from '@/components/rest-timer'
 import { SetRow } from '@/components/set-row'
 import { fieldClass } from '@/components/ui/input'
 import { confirmPanel, listGroup } from '@/lib/styles'
@@ -27,6 +28,7 @@ import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import { isHttpUrl } from '@/lib/links'
 import { useWakeLock } from '@/lib/wake-lock'
+import { lastTimeByExercise } from '@/lib/last-time'
 import { nextDay } from '@/lib/next-day'
 import { cn } from '@/lib/utils'
 import {
@@ -35,6 +37,7 @@ import {
   useDiscardSession,
   useFinishSession,
   usePlans,
+  usePreviousSession,
   useProfile,
   useSessions,
   useStartSession,
@@ -73,6 +76,14 @@ function summaryLine(row: FinishSummary[number], unit: string): string {
     default:
       return `${name}: skipped`
   }
+}
+
+// Outcome shown by shape as well as colour: up = progressed, down = deload, dash = held or skipped
+function OutcomeGlyph({ outcome }: { outcome: FinishSummary[number]['outcome'] }) {
+  const cls = 'mt-1 size-4 shrink-0'
+  if (outcome === 'success') return <ArrowUpIcon aria-hidden className={cls} />
+  if (outcome === 'deload') return <ArrowDownIcon aria-hidden className={cls} />
+  return <MinusIcon aria-hidden className={cls} />
 }
 
 function Picker() {
@@ -124,6 +135,7 @@ function Picker() {
 
   return (
     <div className="flex flex-col gap-4 px-4">
+      {eligible.length > 1 && (
       <label className="text-muted-foreground flex flex-col gap-2 text-sm font-medium">
         Plan
         <select
@@ -141,6 +153,7 @@ function Picker() {
           ))}
         </select>
       </label>
+      )}
       <div className="flex flex-col gap-2">
         <span id="day-chooser-label" className="text-muted-foreground text-sm font-medium">
           Day
@@ -215,6 +228,12 @@ function ExerciseHeading({ ex }: { ex: SessionExercise }) {
   )
 }
 
+// What this exercise ended on the last time this day was done; absent for a first session.
+function LastTime({ text }: { text: string | undefined }) {
+  if (!text) return null
+  return <p className="text-muted-foreground -mt-1 text-sm tabular-nums">Last time: {text}</p>
+}
+
 function ExerciseExtras({ ex }: { ex: SessionExercise }) {
   return (
     <>
@@ -259,6 +278,12 @@ function ActiveSession({
   const dayColors = useDayColors()
   useWakeLock(true)
   const [confirm, setConfirm] = useState<'finish' | 'discard' | null>(null)
+  const [restSince, setRestSince] = useState<number | null>(null)
+  const profile = useProfile().data
+  const previous = usePreviousSession(session.plan_day_id, session.id).data
+  const lastTime = lastTimeByExercise(previous, unit)
+  const allSets = session.exercises.flatMap((e) => e.sets)
+  const doneCount = allSets.filter((s) => s.done).length
   const anyDone = session.exercises.some((e) => e.sets.some((s) => s.done))
   const started = new Date(session.started_at).toLocaleTimeString([], {
     hour: 'numeric',
@@ -289,25 +314,45 @@ function ActiveSession({
       key={s.id}
       set={s}
       unit={unit}
+      step={profile?.weight_increment}
       member={member}
-      onToggle={() => save(s.id, { done: !s.done })}
+      onToggle={async () => {
+        const ok = await save(s.id, { done: !s.done })
+        // Rest runs from the set just marked done; un-marking the last one clears it
+        if (ok) setRestSince(s.done ? null : Date.now())
+        return ok
+      }}
       onEdit={(patch) => save(s.id, patch)}
     />
   )
+
+  const blocks = sessionBlocks(session.exercises)
+  const blockSets = (b: (typeof blocks)[number]) => (b.kind === 'exercise' ? b.exercise.sets : b.sets.map((x) => x.set))
+  const blockDone = (b: (typeof blocks)[number]) => blockSets(b).every((x) => x.done)
+  // The first exercise with a set still to do: the one the lifter is on
+  const currentBlock = blocks.find((b) => !blockDone(b))
 
   return (
     <>
       <Screen
         title={`${session.plan_name} · ${session.day_name}`}
-        note={`Started ${started}`}
+        note={`Started ${started} · ${doneCount} of ${allSets.length} sets`}
         accent={dayColors.get(session.plan_day_id)}
       />
       <div className="flex flex-col gap-7 px-4">
         <SessionNote key={session.id} session={session} />
-        {sessionBlocks(session.exercises).map((block) =>
+        {doneCount === 0 && (
+          <p className="text-muted-foreground -mt-4 text-sm">Tap a set when it's done. Hold a set to change its reps or weight.</p>
+        )}
+        {blocks.map((block) =>
           block.kind === 'exercise' ? (
-            <section key={block.exercise.plan_item_id} className="flex flex-col gap-2.5">
+            <section
+              key={block.exercise.plan_item_id}
+              aria-current={block === currentBlock ? 'step' : undefined}
+              className={cn('flex flex-col gap-2.5', blockDone(block) && 'opacity-60')}
+            >
               <ExerciseHeading ex={block.exercise} />
+              <LastTime text={lastTime.get(block.exercise.exercise_id)} />
               <ExerciseExtras ex={block.exercise} />
               <ul className="flex flex-col gap-2">{block.exercise.sets.map((s) => setRow(s))}</ul>
             </section>
@@ -315,7 +360,8 @@ function ActiveSession({
             <section
               key={block.group}
               aria-label={`Superset ${block.letter}`}
-              className="surface relative -mx-2 flex flex-col gap-2.5 rounded-card p-2.5 pl-3.5"
+              aria-current={block === currentBlock ? 'step' : undefined}
+              className={cn('surface relative -mx-2 flex flex-col gap-2.5 rounded-card p-2.5 pl-3.5', blockDone(block) && 'opacity-60')}
             >
               <Rail />
               <p className="text-muted-foreground text-sm font-medium">Superset</p>
@@ -325,6 +371,7 @@ function ActiveSession({
                     <SupersetLabel label={ex.sets[0]?.superset_label ?? ''} />
                     <ExerciseHeading ex={ex} />
                   </div>
+                  <LastTime text={lastTime.get(ex.exercise_id)} />
                   <ExerciseExtras ex={ex} />
                 </div>
               ))}
@@ -369,6 +416,9 @@ function ActiveSession({
 
         {confirm !== 'discard' && (
           <div className={cn(actionBarClass, 'mt-4')}>
+            {restSince !== null && confirm === null && (
+              <RestTimer since={restSince} onDismiss={() => setRestSince(null)} />
+            )}
             {confirm === 'finish' ? (
               <div className="flex flex-col gap-2">
                 <p>No sets marked done — finish anyway?</p>
@@ -430,18 +480,31 @@ export function TodayScreen() {
         <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Workout complete</SheetTitle>
-            <SheetDescription>Progression for your next session.</SheetDescription>
+            <SheetDescription>
+              {summary
+                ? `${summary.filter((r) => r.outcome === 'success').length} of ${summary.length} lifts progressed. Targets for your next session:`
+                : ''}
+            </SheetDescription>
           </SheetHeader>
           <ul className="flex flex-col gap-2 px-5">
             {summary?.map((row, i) => (
-              <li key={i} className={cn('tabular-nums', row.outcome === 'success' && 'text-success font-semibold')}>
-                {summaryLine(row, unit)}
+              <li
+                key={i}
+                className={cn('flex items-start gap-2 tabular-nums', row.outcome === 'success' && 'text-success font-semibold')}
+              >
+                <OutcomeGlyph outcome={row.outcome} />
+                <span>{summaryLine(row, unit)}</span>
               </li>
             ))}
           </ul>
           <SheetFooter>
             <Button size="big" onClick={() => setSummary(null)}>
               Done
+            </Button>
+            <Button asChild variant="outline" className="min-h-11" onClick={() => setSummary(null)}>
+              <Link to="/history">
+                View in History <ArrowRightIcon className="size-4" aria-hidden />
+              </Link>
             </Button>
           </SheetFooter>
         </SheetContent>
