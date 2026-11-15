@@ -15,7 +15,7 @@ flowchart LR
   end
   app -- "set-up and reset email (never awaited)" --> mailer["Mailer: Resend (console in dev)"]
   mailer --> resend["Resend"]
-  main["push to main"] --> gha["GitHub Actions"]
+  main["push vX.Y.Z tag"] --> gha["GitHub Actions"]
   gha -- "publishes :staging" --> ghcr["GHCR image"]
   host -- "update.sh pulls by digest" --> ghcr
   gha -. "vX.Y.Z tag: deploy by digest over SSH (M3, on hold)" .-> prod["Production Droplet: Caddy, app, Postgres (planned)"]

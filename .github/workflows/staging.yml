@@ -1,14 +1,13 @@
 name: Staging image
 
-# Every push to main (after CI passes) publishes ghcr.io/<repo>:staging and :sha-<commit>.
+# Pushing a version tag (vX.Y.Z, on main) publishes ghcr.io/<repo>:staging and :sha-<commit>
+# after CI passes. Merging to main does not publish: staging only moves on a release.
 # There is no deploy step and no secret beyond GITHUB_TOKEN: the staging host pulls the image
-# itself (deploy/self-hosted/update.sh). Only refs/heads/main publishes, also for
-# workflow_dispatch. update.sh does not verify the build attestation yet (follow-up in
-# docs/release-checklist.md).
+# itself (deploy/self-hosted/update.sh). update.sh does not verify the build attestation yet
+# (follow-up in docs/release-checklist.md).
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    tags: ['v*.*.*']
 
 permissions: {}
 
@@ -27,7 +26,6 @@ jobs:
 
   image:
     needs: ci
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -40,8 +38,14 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0 # tags, so the About footer can show the latest release
+      - name: Tag is a plain vX.Y.Z release on main
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          printf '%s\n' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "Tag must match vX.Y.Z"; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "Tagged commit is not an ancestor of origin/main"; exit 1; }
       - id: release
-        run: echo "tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+        run: echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
