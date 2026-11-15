@@ -1,0 +1,295 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-15T23:05:01.832063Z",
+  "title": "Design System: Workout Tracker",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#090f15",
+        "tonalRamp": [
+          "#040709",
+          "#060a0e",
+          "#080d12",
+          "#090f15",
+          "#464b50",
+          "#84878a",
+          "#c2c3c4",
+          "#e6e7e8"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#fdfcfc",
+        "tonalRamp": [
+          "#727171",
+          "#a4a4a4",
+          "#d7d6d6",
+          "#fdfcfc",
+          "#fefdfd",
+          "#fefefe",
+          "#fefefe",
+          "#ffffff"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Soft Surface",
+        "canonical": "#f5f3f1",
+        "tonalRamp": [
+          "#6e6d6c",
+          "#9f9e9d",
+          "#d0cfcd",
+          "#f5f3f1",
+          "#f8f6f4",
+          "#faf9f8",
+          "#fcfcfc",
+          "#fefefe"
+        ]
+      },
+      "fill": {
+        "role": "neutral",
+        "displayName": "Fill",
+        "canonical": "#ebe8e4",
+        "tonalRamp": [
+          "#6a6867",
+          "#999794",
+          "#c8c5c2",
+          "#ebe8e4",
+          "#f0eeeb",
+          "#f5f4f2",
+          "#faf9f8",
+          "#fdfdfc"
+        ]
+      },
+      "warm-grey": {
+        "role": "neutral",
+        "displayName": "Warm Grey",
+        "canonical": "#6b655d",
+        "tonalRamp": [
+          "#302d2a",
+          "#46423c",
+          "#5b564f",
+          "#6b655d",
+          "#908c86",
+          "#b5b2ae",
+          "#dad8d6",
+          "#f0f0ef"
+        ]
+      },
+      "brand-blue": {
+        "role": "primary",
+        "displayName": "Brand Blue",
+        "canonical": "#1a66e0",
+        "tonalRamp": [
+          "#0c2e65",
+          "#114292",
+          "#1657be",
+          "#1a66e0",
+          "#538ce8",
+          "#8cb2f0",
+          "#c6d9f7",
+          "#e8f0fc"
+        ]
+      },
+      "success-green": {
+        "role": "status",
+        "displayName": "Success Green",
+        "canonical": "#1f7a4d",
+        "tonalRamp": [
+          "#0e3723",
+          "#144f32",
+          "#1a6841",
+          "#1f7a4d",
+          "#579b7a",
+          "#8fbca6",
+          "#c7ded2",
+          "#e9f2ed"
+        ]
+      },
+      "destructive-red": {
+        "role": "status",
+        "displayName": "Destructive Red",
+        "canonical": "#c2362b",
+        "tonalRamp": [
+          "#571813",
+          "#7e231c",
+          "#a52e25",
+          "#c2362b",
+          "#d16860",
+          "#e09a95",
+          "#f0cdca",
+          "#f9ebea"
+        ]
+      },
+      "night-blue": {
+        "role": "primary",
+        "displayName": "Night Blue",
+        "canonical": "#4d93ff",
+        "tonalRamp": [
+          "#234273",
+          "#3260a6",
+          "#417dd9",
+          "#4d93ff",
+          "#7aaeff",
+          "#a6c9ff",
+          "#d2e4ff",
+          "#edf4ff"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "Title",
+        "purpose": "Screen title in the sticky header."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Exercise names."
+      },
+      "numeral": {
+        "displayName": "Numeral",
+        "purpose": "Reps × weight on set rows and the rest timer."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Paragraphs and day names."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Field labels, last-time lines, captions."
+      }
+    },
+    "shadows": [
+      {
+        "name": "float",
+        "value": "0 10px 30px -8px rgb(9 15 21 / 0.18), 0 2px 6px rgb(9 15 21 / 0.06)",
+        "purpose": "Sheets and popovers only; stronger with a hairline ring in dark."
+      }
+    ],
+    "motion": [
+      {
+        "name": "press",
+        "value": "150ms ease-out",
+        "purpose": "Colour and opacity change on interactive states; pressed is opacity 0.8."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "narrow",
+        "value": "374px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one primary action per screen, docked above the tab bar.",
+      "html": "<button class=\"ds-btn-primary\">Finish workout</button>",
+      "css": ".ds-btn-primary{background:#090f15;color:#fdfcfc;min-height:56px;padding:0 24px;border:0;border-radius:9999px;font:600 16px 'Inter Variable',system-ui,sans-serif;width:100%;transition:opacity .15s}.ds-btn-primary:hover{background:rgb(9 15 21 / .85)}.ds-btn-primary:focus-visible{outline:2px solid #2b7fff;outline-offset:2px}.ds-btn-primary:active{opacity:.8}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Soft filled pill for non-primary actions.",
+      "html": "<button class=\"ds-btn-secondary\">View in History</button>",
+      "css": ".ds-btn-secondary{background:#ebe8e4;color:#090f15;min-height:44px;padding:0 16px;border:0;border-radius:9999px;font:500 14px 'Inter Variable',system-ui,sans-serif}.ds-btn-secondary:hover{background:#e1ddd8}.ds-btn-secondary:focus-visible{outline:2px solid #2b7fff;outline-offset:2px}"
+    },
+    {
+      "name": "Set Row",
+      "kind": "custom",
+      "refersTo": "set-row",
+      "description": "The signature control: tap toggles done, the number leads.",
+      "html": "<div class=\"ds-set\"><span class=\"ds-set-n\">1</span><span class=\"ds-set-num\">5 × 135 lb</span><span class=\"ds-set-check\">✓</span></div>",
+      "css": ".ds-set{display:flex;align-items:center;gap:12px;min-height:68px;padding:0 14px;border-radius:16px;background:#f5f3f1;color:#090f15;font-family:'Inter Variable',system-ui,sans-serif}.ds-set-n{width:36px;height:36px;border-radius:9999px;background:rgb(9 15 21 / .08);display:flex;align-items:center;justify-content:center;font:600 15px 'Inter Variable',system-ui,sans-serif;font-variant-numeric:tabular-nums}.ds-set-num{flex:1;font:600 26px 'Inter Variable',system-ui,sans-serif;letter-spacing:-.02em;font-variant-numeric:tabular-nums}.ds-set-check{color:rgb(9 15 21 / .2);font-weight:700}"
+    },
+    {
+      "name": "Set Row (done)",
+      "kind": "custom",
+      "refersTo": "set-row-done",
+      "description": "Done inverts to a solid blue fill plus a check, never colour alone.",
+      "html": "<div class=\"ds-set-done\"><span class=\"ds-set-n\">1</span><span class=\"ds-set-num\">5 × 135 lb</span><span class=\"ds-set-check\">✓</span></div>",
+      "css": ".ds-set-done{display:flex;align-items:center;gap:12px;min-height:68px;padding:0 14px;border-radius:16px;background:#1a66e0;color:#fff;font-family:'Inter Variable',system-ui,sans-serif}.ds-set-done .ds-set-n{width:36px;height:36px;border-radius:9999px;background:#fff;color:#1a66e0;display:flex;align-items:center;justify-content:center;font:600 15px 'Inter Variable',system-ui,sans-serif}.ds-set-done .ds-set-num{flex:1;font:600 26px 'Inter Variable',system-ui,sans-serif;letter-spacing:-.02em;font-variant-numeric:tabular-nums}.ds-set-done .ds-set-check{color:#fff;font-weight:700}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "A soft surface; no border, no shadow.",
+      "html": "<div class=\"ds-card\"><strong>Day A</strong><span>3 exercises</span></div>",
+      "css": ".ds-card{background:#f5f3f1;color:#090f15;border-radius:22px;padding:16px;display:flex;flex-direction:column;gap:4px;font-family:'Inter Variable',system-ui,sans-serif}.ds-card span{color:#6b655d;font-size:14px}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Soft filled field with a visible blue focus ring.",
+      "html": "<input class=\"ds-input\" placeholder=\"Session note\" />",
+      "css": ".ds-input{background:#f5f3f1;color:#090f15;min-height:48px;border-radius:14px;border:0;padding:0 14px;font:400 16px 'Inter Variable',system-ui,sans-serif;width:100%;box-sizing:border-box}.ds-input:focus-visible{outline:2px solid #2b7fff;outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Training Log",
+    "overview": "A clean, honest logbook that happens to fit in a thumb. Warm off-white paper or deep near-black, ink, one blue for done, active and focus, everything else soft grey fill. Weights and reps are the largest thing on every screen, in tabular numerals. Calm, warm and utilitarian; clean, simple, clear and modern, one-handed on a phone, equally good in dark.",
+    "keyCharacteristics": [
+      "Numbers first: 26px tabular numerals carry the app.",
+      "One accent (blue) for done, active, focus and links.",
+      "Soft filled surfaces and generous radii instead of lines and shadows.",
+      "44px minimum targets, 68px set rows, a 56px primary pill docked in the thumb zone.",
+      "Meaning is never carried by colour alone."
+    ],
+    "rules": [
+      {
+        "name": "The One Blue Rule",
+        "body": "Blue means done, active or focused. If a screen has blue that is not one of those, remove it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Never-Colour-Alone Rule",
+        "body": "Every state pairs colour with a shape or word: check with fill, arrow with outcome text, dot with day name.",
+        "section": "colors"
+      },
+      {
+        "name": "The Both-Themes Rule",
+        "body": "Every colour pair is AA-checked in light and dark; a new colour ships with both values.",
+        "section": "colors"
+      },
+      {
+        "name": "The Number Is Loud Rule",
+        "body": "The set's reps × weight is always the largest type on its row; labels around it are small and muted.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Any figure that changes or aligns uses tabular numerals.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Surfaces are flat at rest; the only shadow is on things that float above the page.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do make the reps × weight the largest thing on a row, in tabular numerals.",
+      "Do keep one primary action per screen, docked in the thumb zone with a 44px minimum for every target.",
+      "Do pair every colour state with a shape or word, and check every pair in light and dark.",
+      "Do use soft fills and generous radii for depth instead of borders and shadows."
+    ],
+    "donts": [
+      "Don't use a second accent colour or put blue on anything that is not done, active or focused.",
+      "Don't add swipe-only gestures, or put delete beside the chevron; delete is quiet and icon-only.",
+      "Don't add decoration that does not help log a set, plan a day or understand progress.",
+      "Don't introduce motion beyond the 150ms colour change and sheet transitions."
+    ]
+  }
+}
