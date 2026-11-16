@@ -63,6 +63,8 @@ export async function saveNutritionEntry(db: Db, userId: string, input: Nutritio
     source: parsed.source,
   }
   return db.transaction(async (tx) => {
+    // One writer per user at a time, so two saves cannot both count 299 entries and both insert.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`nutrition:${userId}`}))`)
     // A day holds at most 300 entries; replacing an entry that already sits on that day is always allowed.
     const [existing] = await tx
       .select({ date: nutritionEntry.date })
@@ -109,6 +111,8 @@ export async function deleteNutritionEntry(db: Db, userId: string, id: string): 
  */
 export async function takeAiMeal(db: Db, userId: string, dailyLimit: number, today: string): Promise<number | null> {
   if (!nutritionDateSchema.safeParse(today).success) throw new NotFoundError('Usage day')
+  // Fail closed: a limit that is not a positive whole number allows nothing (and counts nothing).
+  if (!Number.isInteger(dailyLimit) || dailyLimit < 1) return null
   const rows = await db
     .insert(aiUsage)
     .values({ userId, usageDate: today, count: 1 })
@@ -119,5 +123,5 @@ export async function takeAiMeal(db: Db, userId: string, dailyLimit: number, tod
     })
     .returning({ count: aiUsage.count })
   const used = rows[0]?.count
-  return used === undefined ? null : Math.max(0, dailyLimit - used)
+  return used === undefined || used > dailyLimit ? null : dailyLimit - used
 }

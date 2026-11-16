@@ -127,6 +127,24 @@ describe('service nutrition', () => {
     expect(await s.takeAiMeal(3, day(1))).toBe(2)
   })
 
+  it('takeAiMeal fails closed on a limit that is not a positive whole number', async () => {
+    const { s } = await makeService()
+    for (const limit of [0, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(await s.takeAiMeal(limit, today), String(limit)).toBeNull()
+    }
+    // Nothing was counted by the refused calls
+    expect(await s.takeAiMeal(1, today)).toBe(0)
+  })
+
+  it('parallel saves cannot push a day past 300 entries', async () => {
+    const { s } = await makeService()
+    for (let i = 0; i < 299; i++) await s.saveNutritionEntry(entry({ name: `Food ${i}` }))
+    const results = await Promise.allSettled(Array.from({ length: 6 }, (_, i) => s.saveNutritionEntry(entry({ name: `Race ${i}` }))))
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter((r) => r.status === 'rejected' && r.reason instanceof ValidationError)).toHaveLength(5)
+    expect(await s.listNutrition(today, today)).toHaveLength(300)
+  })
+
   it('two parallel takeAiMeal calls at limit minus one allow exactly one', async () => {
     const { s } = await makeService()
     expect(await s.takeAiMeal(3, today)).toBe(2)
