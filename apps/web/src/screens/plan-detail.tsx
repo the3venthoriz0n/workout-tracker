@@ -14,6 +14,8 @@ import { ExercisePicker } from '@/components/exercise-picker'
 import { ExerciseSheet } from '@/components/exercise-sheet'
 import { Rail } from '@/components/plan-bits'
 import { PlanItemRow } from '@/components/plan-item-row'
+import { useDragReorder } from '@/lib/use-drag-reorder'
+import { cn } from '@/lib/utils'
 import { ShareSheet } from '@/components/share-sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -78,6 +80,124 @@ function InlineName({
   )
 }
 
+type DayModel = NonNullable<ReturnType<typeof usePlan>['data']>['days'][number]
+
+/**
+ * A day's exercises and supersets. Any block (a plain exercise or a whole superset) can be picked up
+ * with a long press and dropped between the others. A drop works out the new order of every exercise
+ * and applies it with the same one-step moves as the arrow buttons, one after another, so it needs no
+ * new repo call. A dragged superset ends up with its members side by side.
+ */
+function DayBlockList({ day }: { day: DayModel }) {
+  const setSuperset = useSetSuperset()
+  const move = useMove()
+  const blocks = dayBlocks(day.items)
+
+  const { drag, rowRef, handle } = useDragReorder((from, to) => {
+    const next = [...blocks]
+    const [picked] = next.splice(from, 1)
+    if (!picked) return
+    next.splice(to, 0, picked)
+    const wanted = next.flatMap((b) => (b.kind === 'item' ? [b.item.id] : b.members.map((m) => m.item.id)))
+    const order = day.items.map((i) => i.id)
+    void (async () => {
+      try {
+        // Insertion order: bring each wanted exercise up to its slot, one step at a time
+        for (let slot = 0; slot < wanted.length; slot++) {
+          const id = wanted[slot]!
+          let at = order.indexOf(id)
+          while (at > slot) {
+            await move.mutateAsync({ kind: 'item', id, direction: -1 })
+            order.splice(at - 1, 0, order.splice(at, 1)[0]!)
+            at--
+          }
+        }
+      } catch (e) {
+        notifyError(e)
+      }
+    })()
+  })
+
+  // Where the drop would land: a line on the near edge of the row being hovered
+  const dropLine = (i: number) =>
+    drag && drag.to === i && drag.to !== drag.from
+      ? drag.to > drag.from
+        ? 'shadow-[inset_0_-2px_0_0_var(--color-brand)]'
+        : 'shadow-[inset_0_2px_0_0_var(--color-brand)]'
+      : undefined
+  const lifted = 'bg-background rounded-row relative z-10 shadow-(--shadow-float)'
+
+  return (
+    <ul className="divide-border-strong/70 divide-y">
+      {blocks.map((block, bi) =>
+        block.kind === 'item' ? (
+          <PlanItemRow
+            key={block.item.id}
+            item={block.item}
+            isFirst={block.index === 0}
+            isLast={block.index === day.items.length - 1}
+            drag={
+              blocks.length > 1
+                ? {
+                    rowRef: rowRef(bi),
+                    handle: handle(bi),
+                    style: drag?.from === bi ? { transform: `translateY(${drag.dy}px)` } : undefined,
+                    className: cn(drag?.from === bi ? lifted : dropLine(bi), drag && 'touch-none'),
+                  }
+                : undefined
+            }
+          />
+        ) : (
+          <li
+            key={block.groupId}
+            ref={rowRef(bi)}
+            style={drag?.from === bi ? { transform: `translateY(${drag.dy}px)` } : undefined}
+            className={cn('py-3', drag?.from === bi ? lifted : dropLine(bi), drag && 'touch-none')}
+          >
+            <div
+              role="group"
+              aria-label={`Superset ${block.letter}`}
+              className="bg-background relative flex flex-col rounded-row py-1 pr-1 pl-3 [--field:var(--card)]"
+            >
+              <Rail />
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-h-11 flex-1 items-center select-none" {...handle(bi)}>
+                <h2 className="text-base leading-none font-semibold">Superset {block.letter}</h2>
+              </div>
+                <Button
+                  variant="ghost"
+                  className="min-h-11"
+                  aria-label={`Unlink superset ${block.letter}`}
+                  disabled={setSuperset.isPending}
+                  onClick={() =>
+                    setSuperset.mutate(
+                      { planDayId: day.id, groupId: block.groupId, itemIds: null },
+                      { onError: supersetError },
+                    )
+                  }
+                >
+                  <Unlink aria-hidden /> Unlink
+                </Button>
+              </div>
+              <ul className="divide-border-strong/70 divide-y">
+                {block.members.map((m) => (
+                  <PlanItemRow
+                    key={m.item.id}
+                    item={m.item}
+                    supersetLabel={m.label}
+                    isFirst={m.index === 0}
+                    isLast={m.index === day.items.length - 1}
+                  />
+                ))}
+              </ul>
+            </div>
+          </li>
+        ),
+      )}
+    </ul>
+  )
+}
+
 export function PlanDetailScreen() {
   const { id = '' } = useParams()
   const plan = usePlan(id)
@@ -96,7 +216,6 @@ export function PlanDetailScreen() {
   const [confirmDay, setConfirmDay] = useState<string | null>(null)
   const [colorDay, setColorDay] = useState<string | null>(null)
   const [linkDay, setLinkDay] = useState<string | null>(null)
-  const setSuperset = useSetSuperset()
   const [sharing, setSharing] = useState(false)
 
   if (plan.isPending) return <div className="p-4" aria-busy="true" />
@@ -197,6 +316,16 @@ export function PlanDetailScreen() {
             >
               <ChevronDown aria-hidden />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-destructive focus-visible:text-destructive min-h-11 min-w-11"
+              aria-label={`Delete day ${day.name}`}
+              aria-expanded={confirmDay === day.id}
+              onClick={() => setConfirmDay(day.id)}
+            >
+              <Trash2 className="size-5" aria-hidden />
+            </Button>
           </div>
 
           {confirmDay === day.id && (
@@ -234,81 +363,22 @@ export function PlanDetailScreen() {
           {linkDay === day.id ? (
             <SupersetPicker day={day} onDone={() => setLinkDay(null)} />
           ) : (
-            <ul className="divide-border-strong/70 divide-y">
-              {dayBlocks(day.items).map((block) =>
-                block.kind === 'item' ? (
-                  <PlanItemRow
-                    key={block.item.id}
-                    item={block.item}
-                    isFirst={block.index === 0}
-                    isLast={block.index === day.items.length - 1}
-                  />
-                ) : (
-                  <li key={block.groupId} className="py-3">
-                    <div
-                      role="group"
-                      aria-label={`Superset ${block.letter}`}
-                      className="bg-background relative flex flex-col rounded-row py-1 pr-1 pl-3 [--field:var(--card)]"
-                    >
-                      <Rail />
-                      <div className="flex items-center justify-between gap-2">
-                        <h2 className="text-base leading-none font-semibold">Superset {block.letter}</h2>
-                        <Button
-                          variant="ghost"
-                          className="min-h-11"
-                          aria-label={`Unlink superset ${block.letter}`}
-                          disabled={setSuperset.isPending}
-                          onClick={() =>
-                            setSuperset.mutate(
-                              { planDayId: day.id, groupId: block.groupId, itemIds: null },
-                              { onError: supersetError },
-                            )
-                          }
-                        >
-                          <Unlink aria-hidden /> Unlink
-                        </Button>
-                      </div>
-                      <ul className="divide-border-strong/70 divide-y">
-                        {block.members.map((m) => (
-                          <PlanItemRow
-                            key={m.item.id}
-                            item={m.item}
-                            supersetLabel={m.label}
-                            isFirst={m.index === 0}
-                            isLast={m.index === day.items.length - 1}
-                          />
-                        ))}
-                      </ul>
-                    </div>
-                  </li>
-                ),
-              )}
-            </ul>
+            <DayBlockList day={day} />
           )}
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2">
             <Button
               variant="outline"
-              className="min-h-11"
+              className="min-h-11 flex-1"
               aria-label={`Add exercise to ${day.name}`}
               onClick={() => setPickerDay(day.id)}
             >
               <Plus aria-hidden /> Add exercise
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-destructive focus-visible:text-destructive ml-auto min-h-11 min-w-11"
-              aria-label={`Delete day ${day.name}`}
-              aria-expanded={confirmDay === day.id}
-              onClick={() => setConfirmDay(day.id)}
-            >
-              <Trash2 className="size-5" aria-hidden />
-            </Button>
             {day.items.length >= 2 && linkDay !== day.id && (
               <Button
                 variant="outline"
-                className="min-h-11"
+                className="min-h-11 flex-1"
                 aria-label={`Link superset in ${day.name}`}
                 onClick={() => setLinkDay(day.id)}
               >

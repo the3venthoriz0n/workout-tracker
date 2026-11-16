@@ -1,6 +1,6 @@
 import { ANGLES, type Angle } from '@workout/shared'
 import { ChevronDown, ChevronRight, ChevronUp, Trash2 } from 'lucide-react'
-import { useId, useState } from 'react'
+import { useId, useState, type CSSProperties } from 'react'
 import { NumberField } from '@/components/number-field'
 import { ANGLE_NAMES, AngleChip, SupersetLabel } from '@/components/plan-bits'
 import { RuleEditor } from '@/components/rule-editor'
@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch'
 import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import { summarizeRule } from '@/lib/rule-summary'
+import type { useDragReorder } from '@/lib/use-drag-reorder'
 import { segmentedItem, segmentedTrack } from '@/lib/styles'
 import { cn } from '@/lib/utils'
 import {
@@ -24,9 +25,16 @@ import type { PlanTree } from '@/repo/types'
 type Item = PlanTree['days'][number]['items'][number]
 
 // supersetLabel: "A1", "A2", ... when the item is in a superset
-type Props = { item: Item; isFirst?: boolean; isLast?: boolean; supersetLabel?: string }
+/** Wiring for long-press drag reordering (see useDragReorder); absent for rows that cannot be dragged. */
+export type RowDrag = {
+  rowRef: (el: HTMLElement | null) => void
+  style?: CSSProperties
+  className?: string
+  handle: ReturnType<ReturnType<typeof useDragReorder>['handle']>
+}
+type Props = { item: Item; isFirst?: boolean; isLast?: boolean; supersetLabel?: string; drag?: RowDrag }
 
-export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLabel }: Props) {
+export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLabel, drag }: Props) {
   const profile = useProfile().data
   const units = profile?.units ?? 'lb'
   const update = useUpdatePlanItem()
@@ -72,7 +80,7 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
   const ruleId = `item-rule-${item.id}`
 
   return (
-    <li aria-label={name} className="flex flex-col gap-3 py-3">
+    <li ref={drag?.rowRef} style={drag?.style} aria-label={name} className={cn('flex flex-col gap-3 py-3', drag?.className)}>
       {/* Collapsed: the name and its next target. Everything else opens from here. */}
       <div className="flex items-center gap-1">
         <button
@@ -80,7 +88,8 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
           aria-expanded={open}
           aria-controls={bodyId}
           aria-label={`${name} details`}
-          className="rounded-row flex min-h-14 min-w-0 flex-1 items-center gap-2 text-left"
+          className={cn('rounded-row flex min-h-14 min-w-0 flex-1 items-center gap-2 text-left', drag && 'select-none')}
+          {...drag?.handle}
           onClick={() => setOpen((o) => !o)}
         >
           <ChevronRight

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -12,6 +12,7 @@ import { RepoProvider } from '../src/repo/provider'
 import { openItem } from './plan-helpers'
 
 afterEach(() => {
+  cleanup()
   vi.restoreAllMocks()
 })
 
@@ -478,4 +479,94 @@ test('picker rows show a muted defaults line; search autofocuses only on desktop
   } finally {
     window.matchMedia = original
   }
+})
+
+test('holding an exercise and dragging it past another reorders the day; a quick tap still just opens it', async () => {
+  const user = userEvent.setup()
+  const { repo, plan, byName, view } = await setup()
+  const day = await repo.savePlanDay({ plan_id: plan.id, name: 'Day A' })
+  await repo.addPlanItem(day.id, byName('Back Squat').id)
+  await repo.addPlanItem(day.id, byName('Bench Press').id)
+  await repo.addPlanItem(day.id, byName('Deadlift').id)
+  view()
+  await screen.findByRole('listitem', { name: 'Back Squat' })
+  const order = () => screen.getAllByRole('listitem').map((li) => li.getAttribute('aria-label')).filter(Boolean)
+  expect(order()).toEqual(['Back Squat', 'Bench Press', 'Deadlift'])
+
+  // jsdom has no layout: give each row a 100px slot so the pointer position means something
+  ;['Back Squat', 'Bench Press', 'Deadlift'].map((n) => screen.getByRole('listitem', { name: n })).forEach((li, i) => {
+    li.getBoundingClientRect = () => ({ top: i * 100, height: 100, bottom: i * 100 + 100, left: 0, right: 300, width: 300, x: 0, y: i * 100, toJSON: () => ({}) })
+  })
+
+  // A tap opens the exercise as before
+  const handle = screen.getByRole('button', { name: 'Back Squat details' })
+  await user.click(handle)
+  expect(handle.getAttribute('aria-expanded')).toBe('true')
+  await user.click(handle)
+
+  // Hold Back Squat, drag below Bench Press (row 1 spans 100-200), release
+  vi.useFakeTimers()
+  fireEvent.pointerDown(handle, { clientX: 10, clientY: 50, pointerId: 1, button: 0 })
+  act(() => {
+    vi.advanceTimersByTime(500)
+  })
+  fireEvent.pointerMove(handle, { clientX: 10, clientY: 160, pointerId: 1 })
+  vi.useRealTimers()
+  fireEvent.pointerUp(handle, { clientX: 10, clientY: 160, pointerId: 1 })
+  fireEvent.click(handle)
+
+  await waitFor(() => expect(order()).toEqual(['Bench Press', 'Back Squat', 'Deadlift']))
+  // The release did not toggle the row open
+  expect(screen.getByRole('button', { name: 'Back Squat details' }).getAttribute('aria-expanded')).toBe('false')
+})
+
+test('moving the pointer before the hold finishes is a scroll, not a drag', async () => {
+  const { repo, plan, byName, view } = await setup()
+  const day = await repo.savePlanDay({ plan_id: plan.id, name: 'Day A' })
+  await repo.addPlanItem(day.id, byName('Back Squat').id)
+  await repo.addPlanItem(day.id, byName('Bench Press').id)
+  view()
+  await screen.findByRole('listitem', { name: 'Back Squat' })
+  const handle = screen.getByRole('button', { name: 'Back Squat details' })
+  vi.useFakeTimers()
+  fireEvent.pointerDown(handle, { clientX: 10, clientY: 50, pointerId: 1, button: 0 })
+  fireEvent.pointerMove(handle, { clientX: 10, clientY: 90, pointerId: 1 })
+  act(() => {
+    vi.advanceTimersByTime(600)
+  })
+  vi.useRealTimers()
+  fireEvent.pointerUp(handle, { clientX: 10, clientY: 160, pointerId: 1 })
+  const order = screen.getAllByRole('listitem').map((li) => li.getAttribute('aria-label')).filter(Boolean)
+  expect(order).toEqual(['Back Squat', 'Bench Press'])
+})
+
+test('a whole superset can be dragged below the exercise after it', async () => {
+  const { repo, plan, byName, view } = await setup()
+  const day = await repo.savePlanDay({ plan_id: plan.id, name: 'Day A' })
+  const squat = await repo.addPlanItem(day.id, byName('Back Squat').id)
+  const bench = await repo.addPlanItem(day.id, byName('Bench Press').id)
+  await repo.addPlanItem(day.id, byName('Deadlift').id)
+  await repo.setSuperset(day.id, 'group-1', [squat.id, bench.id])
+  view()
+  await screen.findByRole('group', { name: 'Superset A' })
+  const names = () => screen.getAllByRole('listitem').map((li) => li.getAttribute('aria-label')).filter(Boolean)
+  expect(names()).toEqual(['Back Squat', 'Bench Press', 'Deadlift'])
+
+  // Two blocks: the superset (row 0) and Deadlift (row 1). jsdom has no layout, so give them slots.
+  const blockRows = [screen.getByRole('group', { name: 'Superset A' }).closest('li')!, screen.getByRole('listitem', { name: 'Deadlift' })]
+  blockRows.forEach((li, i) => {
+    li.getBoundingClientRect = () => ({ top: i * 200, height: 200, bottom: i * 200 + 200, left: 0, right: 300, width: 300, x: 0, y: i * 200, toJSON: () => ({}) })
+  })
+  const title = within(screen.getByRole('group', { name: 'Superset A' })).getByRole('heading', { name: 'Superset A' }).parentElement!
+  vi.useFakeTimers()
+  fireEvent.pointerDown(title, { clientX: 10, clientY: 40, pointerId: 1, button: 0 })
+  act(() => {
+    vi.advanceTimersByTime(500)
+  })
+  fireEvent.pointerMove(title, { clientX: 10, clientY: 300, pointerId: 1 })
+  vi.useRealTimers()
+  fireEvent.pointerUp(title, { clientX: 10, clientY: 300, pointerId: 1 })
+
+  await waitFor(() => expect(names()).toEqual(['Deadlift', 'Back Squat', 'Bench Press']))
+  expect(screen.getByRole('group', { name: 'Superset A' })).toBeTruthy()
 })
