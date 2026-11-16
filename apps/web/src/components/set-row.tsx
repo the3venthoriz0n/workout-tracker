@@ -169,11 +169,7 @@ export function SetRow({ set, unit, step = 5, onToggle, onEdit, member, restCoun
             )}
             <span className="truncate text-[26px] leading-none max-[374px]:text-[22px] font-semibold tracking-[-0.02em] tabular-nums">{numbers}</span>
           </span>
-          <CheckIcon
-            aria-hidden
-            strokeWidth={3}
-            className={cn('size-6 shrink-0', set.done ? 'text-brand-foreground' : 'text-foreground/20')}
-          />
+          {set.done && <CheckIcon aria-hidden strokeWidth={3} className="text-brand-foreground size-6 shrink-0" />}
         </button>
         <button
           type="button"

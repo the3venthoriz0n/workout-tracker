@@ -198,8 +198,17 @@ function Picker() {
 function SessionNote({ session }: { session: SessionDetail }) {
   const [note, setNote] = useState(session.note)
   const update = useUpdateSessionNote()
+  // Closed to a single quiet line until there is a note or the lifter asks for one
+  const [open, setOpen] = useState(session.note !== '')
+  if (!open)
+    return (
+      <Button variant="ghost" className="text-muted-foreground -ml-4 min-h-11 self-start" onClick={() => setOpen(true)}>
+        Add a note
+      </Button>
+    )
   return (
     <Textarea
+      autoFocus={session.note === ''}
       aria-label="Session note"
       placeholder="Session note"
       value={note}
@@ -393,10 +402,12 @@ function ActiveSession({
         accent={dayColors.get(session.plan_day_id)}
       />
       <div className="flex flex-col gap-7 px-4">
-        <SessionNote key={session.id} session={session} />
-        {(!hintSeen || doneCount === 0) && (
-          <p className="text-muted-foreground -mt-4 text-sm">Tap a set when it's done. Hold a set to change its reps or weight.</p>
-        )}
+        <div className="-mb-3 flex flex-col gap-1">
+          {(!hintSeen || doneCount === 0) && (
+            <p className="text-muted-foreground text-sm">Tap a set when it's done. Hold a set to change its reps or weight.</p>
+          )}
+          <SessionNote key={session.id} session={session} />
+        </div>
         {blocks.map((block) =>
           block.kind === 'exercise' ? (
             <section
@@ -419,7 +430,7 @@ function ActiveSession({
               aria-current={block === currentBlock ? 'step' : undefined}
               className={cn('surface relative -mx-2 flex scroll-mt-28 flex-col gap-2.5 rounded-card p-2.5 pl-3.5', blockDone(block) && 'opacity-60')}
             >
-              <NowRail active={block === currentBlock} />
+              {block === currentBlock && <NowRail active />}
               <p className="text-muted-foreground text-sm font-medium">Superset</p>
               {block.members.map((ex) => (
                 <div key={ex.plan_item_id} className="flex flex-col gap-1">
