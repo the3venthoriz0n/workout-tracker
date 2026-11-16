@@ -75,7 +75,7 @@ export function DeleteConfirm({
   const cancelRef = useRef<HTMLButtonElement>(null)
   useEffect(() => cancelRef.current?.focus(), [])
   return (
-    <div role="group" aria-label={`Confirm delete ${name}`} className="bg-background mt-1 mb-2 mr-2.5 flex flex-col gap-2 rounded-row p-3">
+    <div role="group" aria-label={`Confirm delete ${name}`} className="bg-background mt-1 mb-2 mr-2.5 flex flex-col gap-2 rounded-row p-3 text-center">
       <p className="text-sm font-medium">Delete {name}?</p>
       {status === 'checking' && (
         <p className="text-muted-foreground text-sm">{COPY[subject].checking}</p>
@@ -86,7 +86,7 @@ export function DeleteConfirm({
         </p>
       )}
       {status === 'ready' && <p className="text-muted-foreground text-sm">{impact}</p>}
-      <div className="flex gap-2">
+      <div className="flex justify-center gap-2">
         <Button
           type="button"
           variant="destructive"

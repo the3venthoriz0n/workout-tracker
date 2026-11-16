@@ -56,7 +56,7 @@ export function DeleteAccountCard() {
           you want a copy.
         </p>
         {open ? (
-          <form role="alertdialog" aria-label="Confirm account deletion" className={confirmBox} noValidate onSubmit={submit}>
+          <form role="alertdialog" aria-label="Confirm account deletion" className={`${confirmBox} text-center`} noValidate onSubmit={submit}>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={`${id}-pw`}>Password</Label>
               <Input
@@ -90,7 +90,7 @@ export function DeleteAccountCard() {
                 {AUTH_ERROR_TEXT[error]}
               </p>
             )}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap justify-center gap-2">
               <Button type="submit" variant="destructive" className="min-h-11" disabled={!ready}>
                 {a.busy ? 'Deleting...' : 'Delete my account'}
               </Button>

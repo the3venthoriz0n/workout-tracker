@@ -142,7 +142,7 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
       </div>
 
       {confirmDelete && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2 text-center">
           <p className="text-muted-foreground w-full text-sm">Removes {name} from this day. Past workouts keep their records.</p>
           <Button
             variant="destructive"

@@ -13,4 +13,4 @@ export const segmentedItem = (on: boolean) =>
 
 // Inline confirmation inside a surface (card) or on the page.
 export const confirmBox = 'bg-background flex flex-col gap-3 rounded-row p-4'
-export const confirmPanel = 'surface flex flex-col gap-3 rounded-card p-4'
+export const confirmPanel = 'surface flex flex-col gap-3 rounded-card p-4 text-center'

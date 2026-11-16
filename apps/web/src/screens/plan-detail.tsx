@@ -281,7 +281,7 @@ export function PlanDetailScreen() {
       </div>
 
       {confirmPlan && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2 text-center">
           <p className="text-muted-foreground w-full text-sm">
             Deletes {tree.name} with its days and exercises. Past workouts keep their records.
           </p>
@@ -366,7 +366,7 @@ export function PlanDetailScreen() {
           </div>
 
           {confirmDay === day.id && (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 text-center">
               <p className="text-muted-foreground w-full text-sm">
                 Removes {day.name} and its {day.items.length} {day.items.length === 1 ? 'exercise' : 'exercises'} from this plan. Past workouts keep their records.
               </p>
