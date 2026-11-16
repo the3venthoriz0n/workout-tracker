@@ -1,10 +1,10 @@
 import { useQueries, useQueryClient } from '@tanstack/react-query'
-import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, CheckIcon, MinusIcon } from 'lucide-react'
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, CheckIcon, MinusIcon, Trash2Icon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { OfflineError, type SetLog } from '@workout/shared'
 import { toast } from 'sonner'
-import { Screen } from '@/app/screen'
+import { Screen, headerIconButton } from '@/app/screen'
 import { AngleChip, DayDot, SupersetLabel, nameWithAngle } from '@/components/plan-bits'
 import { RestTimer } from '@/components/rest-timer'
 import { SetRow } from '@/components/set-row'
@@ -402,8 +402,40 @@ function ActiveSession({
         title={`${session.plan_name} · ${session.day_name}`}
         note={`Started ${started} · ${doneCount} of ${allSets.length} sets`}
         accent={dayColors.get(session.plan_day_id)}
+        action={
+          <button
+            type="button"
+            className={cn(headerIconButton, 'text-muted-foreground hover:text-destructive')}
+            aria-label="Discard workout"
+            aria-expanded={confirm === 'discard'}
+            onClick={() => setConfirm('discard')}
+          >
+            <Trash2Icon className="size-5" aria-hidden />
+          </button>
+        }
       />
       <div className="flex flex-col gap-7 px-4">
+        {confirm === 'discard' && (
+          <div className={confirmPanel}>
+            <p role="alert">Discard this workout? All logged sets are deleted.</p>
+            <div className="flex gap-2">
+              <Button
+                variant="destructive"
+                className="min-h-11 flex-1"
+                disabled={discard.isPending}
+                onClick={() =>
+                  discard.mutate(session.id, { onError: (err) => notifyError(err, "Couldn't discard the workout") })
+                }
+              >
+                Yes, discard
+              </Button>
+              <Button variant="outline" className="min-h-11 flex-1" autoFocus onClick={() => setConfirm(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="-mb-3 flex flex-col gap-1">
           {(!hintSeen || doneCount === 0) && (
             <p className="text-muted-foreground text-sm">Tap a set when it's done. Hold a set to change its reps or weight.</p>
@@ -456,36 +488,6 @@ function ActiveSession({
             </section>
           ),
         )}
-
-        {confirm === 'discard' ? (
-          <div className={confirmPanel}>
-            <p role="alert">Discard this workout? All logged sets are deleted.</p>
-            <div className="flex gap-2">
-              <Button
-                variant="destructive"
-                className="min-h-11 flex-1"
-                disabled={discard.isPending}
-                onClick={() =>
-                  discard.mutate(session.id, { onError: (err) => notifyError(err, "Couldn't discard the workout") })
-                }
-              >
-                Yes, discard
-              </Button>
-              <Button variant="outline" className="min-h-11 flex-1" autoFocus onClick={() => setConfirm(null)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : confirm === null ? (
-          // Kept away from Finish so the destructive action is never next to the primary one
-          <Button
-            variant="ghost"
-            className="text-destructive hover:text-destructive min-h-11 self-start"
-            onClick={() => setConfirm('discard')}
-          >
-            Discard
-          </Button>
-        ) : null}
 
         {confirm !== 'discard' && (
           <div className={cn(actionBarClass, 'mt-4')}>

@@ -126,15 +126,15 @@ test('finishing with nothing done asks first', async () => {
   expect(await screen.findByText(/skipped/)).toBeTruthy()
 })
 
-test('discard asks for confirmation and returns to the picker', async () => {
+test('discard is a header icon that asks for confirmation and returns to the picker', async () => {
   const user = userEvent.setup()
   const { repo } = await seed()
   renderApp(repo)
   await start(user)
-  await user.click(screen.getByRole('button', { name: 'Discard' }))
+  await user.click(screen.getByRole('button', { name: 'Discard workout' }))
   await user.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(setButtons()).toHaveLength(3)
-  await user.click(screen.getByRole('button', { name: 'Discard' }))
+  await user.click(screen.getByRole('button', { name: 'Discard workout' }))
   await user.click(screen.getByRole('button', { name: 'Yes, discard' }))
   expect(await screen.findByRole('button', { name: 'Start workout' })).toBeTruthy()
   expect(await repo.getActiveSession()).toBeUndefined()

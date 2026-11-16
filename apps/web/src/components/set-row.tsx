@@ -69,14 +69,14 @@ export function SetRow({ set, unit, step = 5, onToggle, onEdit, member, restCoun
 
   return (
     <li className="flex flex-col">
-      <div className="flex items-stretch gap-2">
+      <div className="relative">
         <button
           type="button"
           aria-pressed={set.done}
           aria-label={label}
           className={cn(
             // Soft block; done is a solid accent fill plus the check (never colour alone)
-            'flex min-h-[68px] w-full min-w-0 flex-1 touch-manipulation items-center gap-3 rounded-row px-3.5 text-left select-none',
+            'flex min-h-[68px] w-full min-w-0 flex-1 touch-manipulation items-center gap-3 rounded-row pr-14 pl-3.5 text-left select-none',
             set.done
               ? 'bg-brand text-brand-foreground'
               : 'bg-(--row) text-foreground hover:bg-[color-mix(in_oklch,var(--row),var(--foreground)_5%)]',
@@ -176,8 +176,13 @@ export function SetRow({ set, unit, step = 5, onToggle, onEdit, member, restCoun
           type="button"
           aria-label={`Edit set ${set.set_no}`}
           aria-expanded={editing}
-          // Touch screens edit by holding the set (the hint says so); the button stays for screen readers there and for mouse users
-          className="text-muted-foreground hover:bg-accent hover:text-foreground pointer-coarse:sr-only flex size-11 shrink-0 items-center justify-center self-center rounded-full aria-expanded:bg-accent aria-expanded:text-foreground"
+          // Inside the tile, at its right end, so it is clear a set can be edited; holding the set opens the same editor
+          className={cn(
+            'absolute top-1/2 right-1.5 flex size-11 -translate-y-1/2 items-center justify-center rounded-full',
+            set.done
+              ? 'text-brand-foreground/85 hover:bg-brand-foreground/15 aria-expanded:bg-brand-foreground/15'
+              : 'text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground',
+          )}
           onClick={() => setEditing((v) => !v)}
         >
           <PencilIcon className="size-4" />
