@@ -115,7 +115,7 @@ describe('env.ts optional settings', () => {
   })
 
   describe('AI settings', () => {
-    const SECRET = 'sk-env-secret-key-456'
+    const SECRET = 'sk-env-key-456'
     beforeEach(() => {
       for (const n of ['AI_PROVIDER', 'AI_BASE_URL', 'AI_API_KEY', 'AI_MODEL']) delete process.env[n]
     })

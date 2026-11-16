@@ -73,7 +73,13 @@ const schema = z.object({
   // the feature reports itself unavailable. The key is never echoed.
   AI_PROVIDER: z.enum(['openai', 'anthropic']).default('openai'),
   AI_BASE_URL: z.preprocess(emptyToUndefined, z.url().optional()),
-  AI_API_KEY: z.preprocess(emptyToUndefined, z.string().regex(/^\S+$/, 'must not contain whitespace').optional()),
+  AI_API_KEY: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^\S+$/, 'must not contain whitespace')
+      .optional(),
+  ),
   AI_MODEL: z.preprocess(emptyToUndefined, z.string().max(200).regex(/^\S+$/, 'must not contain whitespace').optional()),
   // Directory of the built SPA; set only in the production image.
   STATIC_DIR: z.string().optional(),

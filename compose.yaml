@@ -62,6 +62,12 @@ services:
       MAIL_FROM: ${MAIL_FROM:-}
       SIGNUP_ALLOWLIST: ${SIGNUP_ALLOWLIST:-}
       AUTH_RATE_LIMIT: ${AUTH_RATE_LIMIT:-on}
+      # Optional: the AI that estimates nutrition (Nutrition tab). Any OpenAI-compatible service or
+      # Anthropic; unset means the feature reports itself unavailable. See .env.example.
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
     ports:
       # Vite is reachable from the LAN so a phone can open it. Set DEV_BIND=127.0.0.1
       # for loopback only. The API and database stay on loopback; Vite proxies /api.
@@ -88,6 +94,12 @@ services:
       # in .env) sending fails and is logged, so new preview accounts cannot verify by email.
       RESEND_API_KEY: ${RESEND_API_KEY:-preview-no-mail}
       MAIL_FROM: ${MAIL_FROM:-no-reply@example.invalid}
+      # Optional: the AI that estimates nutrition (Nutrition tab). Any OpenAI-compatible service or
+      # Anthropic; unset means the feature reports itself unavailable. See .env.example.
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
     ports:
       - 127.0.0.1:8080:3000
     read_only: true
