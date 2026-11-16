@@ -35,7 +35,16 @@ type Props = {
 export function ExerciseSheet({ exercise, open, onOpenChange, ...flow }: Props) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className={responsiveSheet}>
+      <SheetContent
+        side="bottom"
+        className={responsiveSheet}
+        // Editing an existing exercise must not pop the keyboard or select the name; a new one still starts on Name
+        onOpenAutoFocus={(e) => {
+          if (!exercise) return
+          e.preventDefault()
+          ;(e.currentTarget as HTMLElement).focus({ preventScroll: true }) // focus the sheet itself, not a field
+        }}
+      >
         {open && <ExerciseForm exercise={exercise} onDone={() => onOpenChange(false)} {...flow} />}
       </SheetContent>
     </Sheet>

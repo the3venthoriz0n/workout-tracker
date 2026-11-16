@@ -25,7 +25,16 @@ type Props = {
 export function GearSheet({ gear, open, onOpenChange }: Props) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto">
+      <SheetContent
+        side="bottom"
+        className="max-h-[92dvh] overflow-y-auto"
+        // Editing existing gear must not pop the keyboard; new gear still starts on its name
+        onOpenAutoFocus={(e) => {
+          if (!gear) return
+          e.preventDefault()
+          ;(e.currentTarget as HTMLElement).focus({ preventScroll: true }) // focus the sheet itself, not a field
+        }}
+      >
         {open && <GearForm gear={gear} onDone={() => onOpenChange(false)} />}
       </SheetContent>
     </Sheet>

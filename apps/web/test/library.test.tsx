@@ -579,3 +579,19 @@ test('tapping anywhere on an exercise or gear tile opens its editor; the switch 
   await user.click(gearRow)
   expect(await screen.findByRole('dialog')).toBeTruthy()
 })
+
+test('editing an exercise does not focus the name field (no keyboard); adding one does', async () => {
+  const user = userEvent.setup()
+  renderLibrary()
+  await user.click(await screen.findByRole('button', { name: 'Edit Back Squat' }))
+  let dialog = await screen.findByRole('dialog')
+  const name = within(dialog).getByLabelText('Name')
+  expect(document.activeElement).not.toBe(name)
+  expect(dialog.contains(document.activeElement)).toBe(true)
+  await user.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+  await user.click(screen.getByRole('button', { name: 'Add exercise' }))
+  dialog = await screen.findByRole('dialog')
+  await waitFor(() => expect(document.activeElement).toBe(within(dialog).getByLabelText('Name')))
+})
