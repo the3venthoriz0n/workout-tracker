@@ -43,6 +43,13 @@
       "when": 1793124792307,
       "tag": "0005_black_inertia",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794855824011,
+      "tag": "0006_cuddly_cobalt_man",
+      "breakpoints": true
     }
   ]
 }

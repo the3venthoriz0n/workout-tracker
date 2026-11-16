@@ -1,11 +1,11 @@
 import { and, eq, isNull } from 'drizzle-orm'
-import { exercise, gear, plan, planDay, planItem, workoutSession } from '../db/schema.js'
+import { exercise, gear, nutritionEntry, plan, planDay, planItem, workoutSession } from '../db/schema.js'
 import type { Db } from '../db/types.js'
 import { isUuid } from './mappers.js'
 
-export type OwnedKind = 'gear' | 'exercise' | 'plan' | 'day' | 'item' | 'session'
+export type OwnedKind = 'gear' | 'exercise' | 'plan' | 'day' | 'item' | 'session' | 'nutrition_entry'
 
-const tables = { gear, exercise, plan, day: planDay, item: planItem, session: workoutSession } as const
+const tables = { gear, exercise, plan, day: planDay, item: planItem, session: workoutSession, nutrition_entry: nutritionEntry } as const
 
 /**
  * True when `id` is a live row owned by `userId`. Deletes in the Repo are silent no-ops, but the

@@ -15,7 +15,7 @@ import type {
   SetLog,
   WorkoutSession,
 } from './schemas.js'
-import type { NutritionEntry } from './nutrition.js'
+import type { NutritionEntry, NutritionSettings } from './nutrition.js'
 import type { ExerciseProgression } from './rules.js'
 import type { ListingMeta, SharedListing, SharedSnapshot } from './community.js'
 import type { Effective } from './effective.js'
@@ -202,6 +202,8 @@ export interface Repo {
     default_rule?: RuleInput
     /** Public name (2-30 letters, digits, spaces, _ - .); it can be changed but not removed. */
     display_name?: string
+    /** Which nutrients are tracked and their goals (signed-in accounts only). */
+    nutrition?: NutritionSettings
   }): Promise<Profile>
   listGear(): Promise<Gear[]>
   saveGear(input: { id?: string; name: string; owned: boolean }): Promise<Gear>

@@ -9,12 +9,13 @@ import {
   ValidationError,
   displayNameSchema,
   convertWeight,
+  nutritionSettingsSchema,
   newId,
   roundToIncrement,
   ruleInputSchema,
   seedExercises,
 } from '@workout/shared'
-import type { Profile, RuleInput, Units } from '@workout/shared'
+import type { NutritionSettings, Profile, RuleInput, Units } from '@workout/shared'
 import { exercise, gear, planItem, profile, progressionRule, setLog } from '../db/schema.js'
 import type { Db } from '../db/types.js'
 import { dec, now, num, readRule, toProfile } from './mappers.js'
@@ -79,7 +80,13 @@ function mapping(values: number[], convert: (w: number) => number): Map<number, 
   return new Map(values.map((v) => [v, convert(v)]))
 }
 
-type Patch = { units?: Units; weight_increment?: number; default_rule?: RuleInput; display_name?: string }
+type Patch = {
+  units?: Units
+  weight_increment?: number
+  default_rule?: RuleInput
+  display_name?: string
+  nutrition?: NutritionSettings
+}
 
 // Converts every stored weight (live and soft-deleted rows alike, as LocalRepo does) in the
 // caller's transaction. Rows are matched on distinct values, so cost is bounded by the number of
@@ -161,6 +168,7 @@ export async function updateProfile(db: Db, userId: string, patch: Patch): Promi
     throw new Error('weight_increment must be greater than 0')
   }
   const defaultRule = patch.default_rule === undefined ? undefined : ruleInputSchema.parse(patch.default_rule)
+  const nutrition = patch.nutrition === undefined ? undefined : nutritionSettingsSchema.parse(patch.nutrition)
   let displayName: string | undefined
   if (patch.display_name !== undefined) {
     const r = displayNameSchema.safeParse(patch.display_name)
@@ -186,7 +194,7 @@ export async function updateProfile(db: Db, userId: string, patch: Patch): Promi
     if (defaultRule !== undefined) rule = defaultRule
     const [updated] = await tx
       .update(profile)
-      .set({ units, weightIncrement: dec(step), defaultRule: rule ?? null, ...(displayName === undefined ? {} : { displayName }), updatedAt: ts })
+      .set({ units, weightIncrement: dec(step), defaultRule: rule ?? null, ...(displayName === undefined ? {} : { displayName }), ...(nutrition === undefined ? {} : { nutrition }), updatedAt: ts })
       .where(eq(profile.userId, userId))
       .returning()
     return toProfile(updated!)
