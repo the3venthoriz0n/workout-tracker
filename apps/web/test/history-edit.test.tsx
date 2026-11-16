@@ -181,11 +181,12 @@ test('an in-progress session has no edit controls', async () => {
   expect(screen.queryByRole('button', { name: /^Edit set/ })).toBeNull()
 })
 
-test('holding a set line opens its editor and holding again closes it; a quick press does nothing', async () => {
+test('holding anywhere on a set tile opens its editor and holding again closes it; a quick press does nothing', async () => {
   const { repo, ex, session } = await setup()
   renderAt(repo, `/history/${session.id}`)
   await screen.findByRole('button', { name: `Edit set 1 of ${ex.name}` })
-  const line = () => screen.getByText(/^1\. 5 × 100 lb/)
+  // The tile itself (its padding), not just the text inside it
+  const line = () => screen.getByText(/^1\. 5 × 100 lb/).closest('li')!
   const hold = (ms: number) => {
     vi.useFakeTimers()
     fireEvent.pointerDown(line(), { clientX: 10, clientY: 10, button: 0 })
@@ -198,6 +199,14 @@ test('holding a set line opens its editor and holding again closes it; a quick p
   hold(200)
   expect(screen.queryByLabelText('Reps')).toBeNull()
   hold(500)
+  expect(screen.getByLabelText('Reps')).toBeTruthy()
+  // A press held inside the open editor is not a hold on the tile
+  vi.useFakeTimers()
+  fireEvent.pointerDown(screen.getByLabelText('Reps'), { clientX: 10, clientY: 10, button: 0 })
+  act(() => {
+    vi.advanceTimersByTime(600)
+  })
+  vi.useRealTimers()
   expect(screen.getByLabelText('Reps')).toBeTruthy()
   hold(500)
   expect(screen.queryByLabelText('Reps')).toBeNull()

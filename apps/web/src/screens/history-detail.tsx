@@ -218,12 +218,21 @@ function HistorySetLine({
   onSave: (patch: SetPatch) => Promise<boolean>
 }) {
   const hold = useHold(onToggle)
+  // Holding anywhere on the tile counts, except inside the open editor or on its own buttons
+  const holdProps = editable
+    ? {
+        ...hold,
+        onPointerDown: (e: React.PointerEvent) => {
+          if ((e.target as HTMLElement).closest('button, input, textarea, select, label, [data-editor]')) return
+          hold.onPointerDown(e)
+        },
+      }
+    : {}
   return (
-    <li className="px-4 py-1">
+    <li className={cn('px-4 py-1', editable && 'select-none')} {...holdProps}>
       <div className="flex min-h-11 items-center gap-2">
         <span
-          className={cn('flex-1 tabular-nums', !s.done && 'text-muted-foreground', editable && 'select-none')}
-          {...(editable ? hold : {})}
+          className={cn('flex-1 tabular-nums', !s.done && 'text-muted-foreground')}
         >
           {label && (
             <>
@@ -255,7 +264,11 @@ function HistorySetLine({
         )}
       </div>
       {s.note && <p className="text-muted-foreground pb-1 text-sm">{s.note}</p>}
-      {editable && open && <HistorySetEditor set={s} unit={units} onSave={onSave} />}
+      {editable && open && (
+        <div data-editor className="select-text">
+          <HistorySetEditor set={s} unit={units} onSave={onSave} />
+        </div>
+      )}
     </li>
   )
 }

@@ -203,7 +203,7 @@ test('overriding items are listed in the exercise with plan · day and Use defau
   expect(within(overrides).getByText('Adds 1 rep · up to 12 reps · deload 15% after 2 misses')).toBeTruthy()
   await user.click(within(overrides).getByRole('button', { name: 'Use default for Back Squat in PPL · Legs' }))
   await waitFor(async () => expect((await progressionOf(repo, ex.id)).overrides).toHaveLength(0))
-  expect(within(dialog).queryByRole('list', { name: 'Overrides of Back Squat' })).toBeNull()
+  await waitFor(() => expect(within(dialog).queryByRole('list', { name: 'Overrides of Back Squat' })).toBeNull())
 })
 
 test('a no-progression override shows as such', async () => {
