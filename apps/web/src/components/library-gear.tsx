@@ -1,7 +1,7 @@
 import type { UseQueryResult } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { DeleteConfirm, focusLibraryPanel, RowActions, useRestoreFocus } from '@/components/row-actions'
+import { DeleteConfirm, focusLibraryPanel, RowActions, tileClick, useRestoreFocus } from '@/components/row-actions'
 import { Switch } from '@/components/ui/switch'
 import { pluralize } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
@@ -73,17 +73,23 @@ function GearRow({
       : "This can't be undone."
 
   return (
-    <li className="flex flex-col py-1.5 pr-1.5 pl-4">
+    <li className="flex cursor-pointer flex-col py-1.5 pr-1.5 pl-4" onClick={tileClick(onEdit, confirming)}>
       <div className="flex items-center gap-2">
-        <label className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-3">
-          <span className="flex min-w-0 flex-col text-[17px] font-semibold">
-            {g.name}
-            {activeCount !== null && (
-              <span className="text-muted-foreground text-sm font-normal">
-                {pluralize(activeCount, 'exercise')}
-              </span>
-            )}
-          </span>
+        {/* The name opens the editor (as does the rest of the tile); the switch is its own control */}
+        <button
+          type="button"
+          aria-label={`${g.name} details`}
+          className="flex min-h-12 min-w-0 flex-1 flex-col items-start justify-center text-left text-[17px] font-semibold"
+          onClick={onEdit}
+        >
+          {g.name}
+          {activeCount !== null && (
+            <span className="text-muted-foreground text-sm font-normal">
+              {pluralize(activeCount, 'exercise')}
+            </span>
+          )}
+        </button>
+        <label className="flex min-h-11 min-w-11 items-center justify-center">
           <Switch
             checked={g.owned}
             aria-label={g.name}

@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { DeleteConfirm, focusLibraryPanel, RowActions, useRestoreFocus } from '@/components/row-actions'
+import { DeleteConfirm, focusLibraryPanel, RowActions, tileClick, useRestoreFocus } from '@/components/row-actions'
 import { formatWeight, pluralize } from '@/lib/format'
 import { isHttpUrl } from '@/lib/links'
 import { notifyError } from '@/lib/notify'
@@ -98,9 +98,15 @@ function ExerciseRow({
       : "This can't be undone."
 
   return (
-    <li className="flex flex-col py-1.5 pr-1.5 pl-4">
+    <li className="flex cursor-pointer flex-col py-1.5 pr-1.5 pl-4" onClick={tileClick(onEdit, confirming)}>
       <div className="flex items-center gap-2">
-        <div className="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 py-2 text-left">
+        {/* The name and details open the editor (as does the rest of the tile) */}
+        <button
+          type="button"
+          aria-label={`${ex.name} details`}
+          className="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 py-2 text-left"
+          onClick={onEdit}
+        >
           <span className={ex.active ? 'text-[17px] font-semibold' : 'text-muted-foreground text-[17px] font-semibold'}>
             {ex.name}
           </span>
@@ -110,7 +116,7 @@ function ExerciseRow({
               {ex.default_sets}×{ex.default_reps} @ {formatWeight(ex.default_weight)} {units}
             </span>
           </span>
-        </div>
+        </button>
         {ex.video_url && isHttpUrl(ex.video_url) && (
           <a
             href={ex.video_url}

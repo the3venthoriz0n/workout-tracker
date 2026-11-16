@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -419,7 +419,10 @@ test('deleting gear states how many exercises need it and unlinks them', async (
   expect(after.required_gear_ids).toEqual([])
 })
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 const deleteBtn = (scope: HTMLElement) =>
   within(scope).getByRole('button', { name: 'Delete' }) as HTMLButtonElement
@@ -551,4 +554,25 @@ test('gear delete fails closed when the exercises query errors, and Retry recove
     ),
   ).toBeTruthy()
   expect(deleteBtn(confirm).disabled).toBe(false)
+})
+
+test('tapping anywhere on an exercise or gear tile opens its editor; the switch and trash do not', async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 })
+  renderLibrary()
+  const row = (await screen.findByRole('button', { name: 'Back Squat details' })).closest('li')!
+  // The tile's padding area (the row itself), not a control inside it
+  await user.click(row)
+  expect(await screen.findByRole('dialog')).toBeTruthy()
+  await user.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  await waitFor(() => expect(document.body.style.pointerEvents).not.toBe('none'))
+
+  // A control inside the tile does its own job
+  await user.click(within(row).getByRole('switch'))
+  expect(screen.queryByRole('dialog')).toBeNull()
+
+  await user.click(screen.getByRole('tab', { name: 'Gear' }))
+  const gearRow = (await screen.findAllByRole('button', { name: /details$/ }))[0]!.closest('li')!
+  await user.click(gearRow)
+  expect(await screen.findByRole('dialog')).toBeTruthy()
 })

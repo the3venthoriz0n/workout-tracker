@@ -53,6 +53,15 @@ export function RowActions({
   )
 }
 
+/** A tile opens its editor when tapped anywhere that is not itself a control (switch, link, button). */
+export function tileClick(onOpen: () => void, disabled = false) {
+  return (e: React.MouseEvent) => {
+    if (disabled) return
+    if ((e.target as HTMLElement).closest('button, a, input, label, [role="switch"]')) return
+    onOpen()
+  }
+}
+
 const COPY = {
   exercise: {
     checking: 'Checking where this is used…',
