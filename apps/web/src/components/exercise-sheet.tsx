@@ -1,10 +1,10 @@
 import { exerciseInputSchema, type Exercise } from '@workout/shared'
-import { ChevronRight } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { notifyError } from '@/lib/notify'
 import { responsiveSheet } from '@/lib/sheet-classes'
 import { cn } from '@/lib/utils'
+import { Disclosure } from '@/components/disclosure'
 import { ExerciseProgression } from '@/components/exercise-progression'
 import { NumberField } from '@/components/number-field'
 import { Button } from '@/components/ui/button'
@@ -61,7 +61,8 @@ function ExerciseForm({
   const [notes, setNotes] = useState(exercise?.notes ?? '')
   const [videoUrl, setVideoUrl] = useState(exercise?.video_url ?? '')
   const [gearIds, setGearIds] = useState<string[]>(exercise?.required_gear_ids ?? [])
-  const [active, setActive] = useState(exercise?.active ?? true)
+  // Active is switched on the Library tile; the editor just keeps whatever it is
+  const active = exercise?.active ?? true
   const [supportsAngle, setSupportsAngle] = useState(exercise?.supports_angle ?? false)
   const [sets, setSets] = useState<number | null>(exercise?.default_sets ?? 3)
   const [reps, setReps] = useState<number | null>(exercise?.default_reps ?? 5)
@@ -75,13 +76,11 @@ function ExerciseForm({
   const detailsSummary =
     [
       gearIds.length > 0 && sortedGear.filter((g) => gearIds.includes(g.id)).map((g) => g.name).join(', '),
-      supportsAngle && 'Angle',
       videoUrl.trim() !== '' && 'Video',
       notes.trim() !== '' && 'Notes',
-      !active && 'Inactive',
     ]
       .filter(Boolean)
-      .join(' · ') || 'Gear, angle, video, notes'
+      .join(' · ') || 'Gear, video, notes'
 
   function toggleGear(id: string, on: boolean) {
     setGearIds((ids) => (on ? [...ids, id] : ids.filter((g) => g !== id)))
@@ -165,86 +164,72 @@ function ExerciseForm({
               {errors.default_sets ?? errors.default_reps ?? errors.default_weight}
             </p>
           )}
+
+          <div className="flex flex-col">
+            <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
+              Has angle (flat / incline / decline)
+              <Switch
+                checked={supportsAngle}
+                onCheckedChange={setSupportsAngle}
+                aria-label="Has angle (flat / incline / decline)"
+                aria-describedby={angleWarning ? 'ex-angle-help' : undefined}
+              />
+            </label>
+            {angleWarning && (
+              <p id="ex-angle-help" className="text-muted-foreground -mt-1 text-sm">
+                Turning it off clears the angle on its plan items.
+              </p>
+            )}
+          </div>
         </div>
 
-        {/* Everything else sits behind two matching rows, each saying what is inside */}
+        {/* Everything else sits behind two matching dropdowns, each saying what is inside */}
         <div className="flex flex-col gap-3">
-          <button
-            type="button"
-            className="bg-(--field) rounded-row flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left"
-            aria-label="Optional details"
-            aria-expanded={detailsOpen}
-            aria-controls="ex-details"
-            onClick={() => setDetailsOpen((o) => !o)}
+          <Disclosure
+            id="ex-details"
+            title="Optional details"
+            label="Optional details"
+            summary={detailsSummary}
+            open={detailsOpen}
+            onToggle={() => setDetailsOpen((o) => !o)}
           >
-            <span className="min-w-0 flex-1 text-sm">
-              <span className="block font-medium">Optional details</span>
-              <span className="text-muted-foreground block truncate">{detailsSummary}</span>
-            </span>
-            <ChevronRight aria-hidden className={cn('text-muted-foreground size-5 shrink-0', detailsOpen && 'rotate-90')} />
-          </button>
-          {detailsOpen && (
-            <div id="ex-details" className="flex flex-col gap-4 px-1">
-              {sortedGear.length > 0 && (
-                <fieldset className="flex flex-col">
-                  <legend className="mb-1 text-sm font-medium">Required gear</legend>
-                  {sortedGear.map((g) => (
-                    <label key={g.id} className="flex min-h-11 items-center gap-3 text-sm">
-                      <input
-                        type="checkbox"
-                        className="accent-brand size-5"
-                        checked={gearIds.includes(g.id)}
-                        onChange={(e) => toggleGear(g.id, e.target.checked)}
-                      />
-                      {g.name}
-                    </label>
-                  ))}
-                </fieldset>
-              )}
+            {sortedGear.length > 0 && (
+              <fieldset className="flex flex-col">
+                <legend className="mb-1 text-sm font-medium">Required gear</legend>
+                {sortedGear.map((g) => (
+                  <label key={g.id} className="flex min-h-11 items-center gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      className="accent-brand size-5"
+                      checked={gearIds.includes(g.id)}
+                      onChange={(e) => toggleGear(g.id, e.target.checked)}
+                    />
+                    {g.name}
+                  </label>
+                ))}
+              </fieldset>
+            )}
 
-              <div className="flex flex-col">
-                <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
-                  Has angle (flat / incline / decline)
-                  <Switch
-                    checked={supportsAngle}
-                    onCheckedChange={setSupportsAngle}
-                    aria-label="Has angle (flat / incline / decline)"
-                    aria-describedby={angleWarning ? 'ex-angle-help' : undefined}
-                  />
-                </label>
-                {angleWarning && (
-                  <p id="ex-angle-help" className="text-muted-foreground -mt-1 text-sm">
-                    Turning it off clears the angle on its plan items.
-                  </p>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="ex-video">Video link</Label>
-                <Input
-                  id="ex-video"
-                  inputMode="url"
-                  autoComplete="off"
-                  autoCapitalize="off"
-                  placeholder="https://"
-                  value={videoUrl}
-                  onChange={(e) => setVideoUrl(e.target.value)}
-                  aria-invalid={!!errors.video_url}
-                />
-                {errors.video_url && <p className="text-destructive text-sm">{errors.video_url}</p>}
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="ex-notes">Notes</Label>
-                <Textarea id="ex-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
-              </div>
-
-              <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
-                Active
-                <Switch checked={active} onCheckedChange={setActive} aria-label="Active" />
-              </label>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ex-video">Video link</Label>
+              <Input
+                id="ex-video"
+                inputMode="url"
+                autoComplete="off"
+                autoCapitalize="off"
+                placeholder="https://"
+                value={videoUrl}
+                onChange={(e) => setVideoUrl(e.target.value)}
+                aria-invalid={!!errors.video_url}
+              />
+              {errors.video_url && <p className="text-destructive text-sm">{errors.video_url}</p>}
             </div>
-          )}
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ex-notes">Notes</Label>
+              <Textarea id="ex-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+          </Disclosure>
 
           {/* Only an existing exercise has a rule of its own to edit; it saves as you change it */}
           {exercise && <ExerciseProgression exerciseId={exercise.id} name={exercise.name} />}

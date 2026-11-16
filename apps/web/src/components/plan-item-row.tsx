@@ -1,6 +1,7 @@
 import { ANGLES, type Angle } from '@workout/shared'
 import { ChevronDown, ChevronRight, ChevronUp, Trash2 } from 'lucide-react'
 import { useId, useState, type CSSProperties } from 'react'
+import { Disclosure } from '@/components/disclosure'
 import { NumberField } from '@/components/number-field'
 import { ANGLE_NAMES, AngleChip, SupersetLabel } from '@/components/plan-bits'
 import { RuleEditor } from '@/components/rule-editor'
@@ -223,36 +224,29 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
             </p>
           </div>
 
-          {/* One row for the rule: where it comes from, what it does, and the way into its editor */}
-          <button
-            type="button"
-            aria-expanded={ruleOpen}
-            aria-controls={ruleId}
-            aria-label={`Progression for ${name}`}
-            className="bg-(--field) rounded-row flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left"
-            onClick={() => setRuleOpen((e) => !e)}
-          >
-            <span className="min-w-0 flex-1 text-sm">
-              <span className="block font-medium">Progression</span>
-              <span className="text-muted-foreground block tabular-nums">
+          {/* The rule: where it comes from and what it does; opened, its editor sits inside the same dropdown */}
+          <Disclosure
+            id={ruleId}
+            title="Progression"
+            label={`Progression for ${name}`}
+            summary={
+              <>
                 <span>{ruleSource === 'item' ? 'Override' : 'Default'}</span> · <span>{summarizeRule(rule, units)}</span>
-              </span>
-            </span>
-            <ChevronRight aria-hidden className={cn('text-muted-foreground size-5 shrink-0', ruleOpen && 'rotate-90')} />
-          </button>
-
-          {ruleOpen && (
-            <div id={ruleId}>
-              <RuleEditor
-                rule={rule}
-                source={ruleSource}
-                itemName={name}
-                idPrefix={`rule-${item.id}`}
-                onSave={(next) => setRule.mutateAsync({ planItemId: item.id, rule: next })}
-                onClear={() => clearRule.mutateAsync(item.id)}
-              />
-            </div>
-          )}
+              </>
+            }
+            open={ruleOpen}
+            onToggle={() => setRuleOpen((e) => !e)}
+            fieldBg="var(--card)"
+          >
+            <RuleEditor
+              rule={rule}
+              source={ruleSource}
+              itemName={name}
+              idPrefix={`rule-${item.id}`}
+              onSave={(next) => setRule.mutateAsync({ planItemId: item.id, rule: next })}
+              onClear={() => clearRule.mutateAsync(item.id)}
+            />
+          </Disclosure>
         </div>
       )}
     </li>

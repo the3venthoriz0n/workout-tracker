@@ -102,6 +102,9 @@ test('sheet puts name first, sets/reps/weight in one row, and hides optional det
 
   weight.focus()
   await user.tab()
+  // Has angle sits between the numbers and the dropdown
+  expect(document.activeElement).toBe(within(dialog).getByRole('switch', { name: 'Has angle (flat / incline / decline)' }))
+  await user.tab()
   expect(document.activeElement).toBe(toggle)
   await user.keyboard('{Enter}')
   expect(toggle.getAttribute('aria-expanded')).toBe('true')
