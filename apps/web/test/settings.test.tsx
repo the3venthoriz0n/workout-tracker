@@ -30,10 +30,10 @@ function renderSettings() {
 test('Settings no longer shows gear, but keeps units, export and account', async () => {
   renderSettings()
   expect(await screen.findByText('Email')).toBeTruthy()
-  // The only switch is the rest timer; gear toggles are gone and the timer defaults to off
+  // The only switches are the two display preferences, both off by default; gear toggles are gone
   const switches = screen.getAllByRole('switch')
-  expect(switches).toHaveLength(1)
-  expect(switches[0]!.getAttribute('aria-checked')).toBe('false')
+  expect(switches.map((s) => s.getAttribute('aria-label'))).toEqual(['Show both units', 'Show a rest timer after each set'])
+  for (const s of switches) expect(s.getAttribute('aria-checked')).toBe('false')
   expect(screen.queryByRole('button', { name: 'Add custom gear' })).toBeNull()
   expect(screen.queryByLabelText('Custom gear name')).toBeNull()
   expect(screen.getByRole('radio', { name: 'kg' })).toBeTruthy()
@@ -125,4 +125,16 @@ test('the rest timer switch turns the setting on and is remembered on this devic
   expect(sw.getAttribute('aria-checked')).toBe('true')
   expect(localStorage.getItem('wt.restTimer')).toBe('on')
   localStorage.removeItem('wt.restTimer')
+})
+
+test('the Show both units switch turns the setting on and is remembered on this device', async () => {
+  const user = userEvent.setup()
+  localStorage.removeItem('wt.showBothUnits')
+  renderSettings()
+  await screen.findByText('Email')
+  const sw = screen.getByRole('switch', { name: 'Show both units' })
+  await user.click(sw)
+  expect(sw.getAttribute('aria-checked')).toBe('true')
+  expect(localStorage.getItem('wt.showBothUnits')).toBe('on')
+  localStorage.removeItem('wt.showBothUnits')
 })

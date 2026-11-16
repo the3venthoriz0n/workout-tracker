@@ -5,7 +5,8 @@ import { toast } from 'sonner'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { DeleteConfirm, focusLibraryPanel, RowActions, tileClick, useRestoreFocus } from '@/components/row-actions'
-import { formatWeight, pluralize } from '@/lib/format'
+import { pluralize } from '@/lib/format'
+import { useWeightText } from '@/lib/weight-text'
 import { isHttpUrl } from '@/lib/links'
 import { notifyError } from '@/lib/notify'
 import { listGroup } from '@/lib/styles'
@@ -17,7 +18,7 @@ import {
   useProfile,
   useSaveExercise,
 } from '@/repo/hooks'
-import type { Exercise } from '@workout/shared'
+import { exerciseUnit, type Exercise, type Units } from '@workout/shared'
 
 export function LibraryExercises({
   onEdit,
@@ -67,10 +68,11 @@ function ExerciseRow({
   onEdit,
 }: {
   exercise: Exercise
-  units: string
+  units: Units
   onEdit: () => void
 }) {
   const save = useSaveExercise()
+  const weightText = useWeightText()
   const remove = useDeleteExercise()
   const [confirming, setConfirming] = useState(false)
   const usage = useExerciseUsage(ex.id, confirming)
@@ -103,7 +105,7 @@ function ExerciseRow({
           </span>
           {/* A subheading under the name, like the exercise count on a gear tile */}
           <span className="text-muted-foreground text-sm font-normal tabular-nums">
-            {ex.default_sets}×{ex.default_reps} @ {formatWeight(ex.default_weight)} {units}
+            {ex.default_sets}×{ex.default_reps} @ {weightText(ex.default_weight, exerciseUnit(ex, units))}
           </span>
         </button>
         {ex.video_url && isHttpUrl(ex.video_url) && (

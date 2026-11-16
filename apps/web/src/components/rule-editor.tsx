@@ -1,4 +1,4 @@
-import { ruleInputSchema, type RuleInput, type RuleSource } from '@workout/shared'
+import { ruleInputSchema, stepFor, type RuleInput, type RuleSource, type Units } from '@workout/shared'
 import { useState } from 'react'
 import { NumberField } from '@/components/number-field'
 import { Button } from '@/components/ui/button'
@@ -37,13 +37,15 @@ type FieldsProps = {
   idPrefix: string
   // Hint under the amount (it points at Library, Progression, so hide it there)
   showStepHint?: boolean
+  /** The unit the rule's weights are in: the exercise's own, else the app unit. */
+  unit?: Units
 }
 
 // Action, amount, fail limit, deload % and rep ceiling (no "No progression" switch)
-export function RuleFields({ rule, onSave, idPrefix, showStepHint = true }: FieldsProps) {
+export function RuleFields({ rule, onSave, idPrefix, showStepHint = true, unit }: FieldsProps) {
   const profile = useProfile().data
-  const units = profile?.units ?? 'lb'
-  const step = profile?.weight_increment ?? 5
+  const units = unit ?? profile?.units ?? 'lb'
+  const step = profile ? stepFor(units, profile) : 5
   const save = useSaveRule<RuleInput>(onSave)
   return (
     <>
@@ -118,12 +120,14 @@ type Props = {
   onClear: () => Promise<void>
   itemName: string
   idPrefix: string
+  /** The unit the rule's weights are in: the exercise's own, else the app unit. */
+  unit?: Units
 }
 
 // The expandable body of a plan item's rule. Inheriting items show the inherited rule; editing
 // any field stores an override. "Use default" and switching "No progression" off both go back
 // to inheriting (clearRule), so turning progression back on never freezes a copy of the default.
-export function RuleEditor({ rule, source, onSave, onClear, itemName, idPrefix }: Props) {
+export function RuleEditor({ rule, source, onSave, onClear, itemName, idPrefix, unit }: Props) {
   const save = useSaveRule<RuleInput | null>(onSave)
   const [clearing, setClearing] = useState(false)
   async function clear() {
@@ -167,7 +171,7 @@ export function RuleEditor({ rule, source, onSave, onClear, itemName, idPrefix }
           onCheckedChange={(off) => void (off ? save(null) : clear())}
         />
       </label>
-      {rule && <RuleFields rule={rule} onSave={onSave} idPrefix={idPrefix} />}
+      {rule && <RuleFields rule={rule} onSave={onSave} idPrefix={idPrefix} unit={unit} />}
     </div>
   )
 }

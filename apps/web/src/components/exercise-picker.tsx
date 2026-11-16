@@ -1,4 +1,4 @@
-import { isExerciseAvailable } from '@workout/shared'
+import { exerciseUnit, isExerciseAvailable } from '@workout/shared'
 import { Plus } from 'lucide-react'
 import { useId, useState } from 'react'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { formatWeight } from '@/lib/format'
+import { useWeightText } from '@/lib/weight-text'
 import { isDesktop, responsiveSheet } from '@/lib/sheet-classes'
 import { useExercises, useGear, useProfile } from '@/repo/hooks'
 
@@ -63,6 +63,7 @@ function PickerBody({
   const exercises = useExercises()
   const gear = useGear()
   const units = useProfile().data?.units ?? 'lb'
+  const weightText = useWeightText()
   const [query, setQuery] = useState('')
   const baseId = useId()
 
@@ -132,7 +133,7 @@ function PickerBody({
               .map((id) => gearNames.get(id))
               .filter(Boolean)
               .join(', ')
-            const detail = `${ex.default_sets}×${ex.default_reps} @ ${formatWeight(ex.default_weight)} ${units}${gearLabel ? ` · ${gearLabel}` : ''}`
+            const detail = `${ex.default_sets}×${ex.default_reps} @ ${weightText(ex.default_weight, exerciseUnit(ex, units))}${gearLabel ? ` · ${gearLabel}` : ''}`
             const detailId = `${baseId}-${ex.id}`
             return (
               <li key={ex.id}>

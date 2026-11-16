@@ -1,8 +1,9 @@
-import { exerciseInputSchema, type Exercise } from '@workout/shared'
+import { convertLoad, exerciseInputSchema, exerciseUnit, type Exercise, type Units } from '@workout/shared'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { notifyError } from '@/lib/notify'
 import { responsiveSheet } from '@/lib/sheet-classes'
+import { segmentedItem, segmentedTrack } from '@/lib/styles'
 import { cn } from '@/lib/utils'
 import { Disclosure } from '@/components/disclosure'
 import { ExerciseProgression } from '@/components/exercise-progression'
@@ -62,7 +63,7 @@ function ExerciseForm({
   'initialName' | 'submitLabel' | 'onSaved'
 >) {
   const gear = useGear().data ?? []
-  const units = useProfile().data?.units ?? 'lb'
+  const appUnits = useProfile().data?.units ?? 'lb'
   const save = useSaveExercise()
   const submitted = useRef(false)
 
@@ -76,6 +77,20 @@ function ExerciseForm({
   const [sets, setSets] = useState<number | null>(exercise?.default_sets ?? 3)
   const [reps, setReps] = useState<number | null>(exercise?.default_reps ?? 5)
   const [weight, setWeight] = useState<number | null>(exercise?.default_weight ?? 0)
+  // The unit this exercise's weights are in: null follows the app unit. Changing it converts the
+  // exercise's weights when saved; the weight field switches to the new unit straight away.
+  const [unitChoice, setUnitChoice] = useState<Units | null>(exercise?.unit ?? null)
+  const [weightEdited, setWeightEdited] = useState(false)
+  const unit = unitChoice ?? appUnits
+  const savedUnit = exercise ? exerciseUnit(exercise, appUnits) : unit
+  const unitChanged = !!exercise && unit !== savedUnit
+
+  function chooseUnit(next: Units | null) {
+    const to = next ?? appUnits
+    setWeight((w) => (w === null ? w : convertLoad(w, unit, to)))
+    setUnitChoice(next)
+    setWeightEdited(false)
+  }
   // Always starts closed; the row under it says what is set inside
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -107,8 +122,16 @@ function ExerciseForm({
       active,
       default_sets: sets,
       default_reps: reps,
-      default_weight: weight,
+      // An existing exercise's stored weight is converted by the save itself, so it is sent in the unit
+      // it was saved in: untouched, exactly as stored; typed after a unit change, converted back
+      default_weight:
+        exercise && unitChanged
+          ? weightEdited && weight !== null
+            ? convertLoad(weight, unit, savedUnit)
+            : exercise.default_weight
+          : weight,
       supports_angle: supportsAngle,
+      unit: unitChoice,
     })
     if (!parsed.success) {
       const next: Record<string, string> = {}
@@ -162,11 +185,46 @@ function ExerciseForm({
             <NumberField label="Sets" kind="reps" value={sets} onCommit={setSets} />
             <NumberField label="Reps" kind="reps" value={reps} onCommit={setReps} />
             <NumberField
-              label={`Weight (${units})`}
+              label={`Weight (${unit})`}
               kind="weight"
               value={weight}
-              onCommit={setWeight}
+              onCommit={(w) => {
+                setWeight(w)
+                setWeightEdited(true)
+              }}
             />
+          </div>
+
+          {/* Optional: keep this exercise in its own unit, whatever the app unit is */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex min-h-11 items-center justify-between gap-3">
+              <span id="ex-unit-label" className="text-sm font-medium">
+                Unit
+              </span>
+              <div role="radiogroup" aria-labelledby="ex-unit-label" className={cn(segmentedTrack, 'w-64 shrink-0')}>
+                {([null, 'lb', 'kg'] as const).map((u) => {
+                  const on = unitChoice === u
+                  return (
+                    <button
+                      key={u ?? 'app'}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      aria-label={u === null ? `App unit (${appUnits})` : u}
+                      className={cn(segmentedItem(on), 'px-2')}
+                      onClick={() => chooseUnit(u)}
+                    >
+                      {u === null ? `App (${appUnits})` : u}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            {unitChanged && (
+              <p role="status" className="text-muted-foreground text-sm">
+                Saving converts this exercise&apos;s weights, plans and history to {unit}.
+              </p>
+            )}
           </div>
           {(errors.default_sets || errors.default_reps || errors.default_weight) && (
             <p className="text-destructive -mt-2 text-sm">
@@ -241,7 +299,7 @@ function ExerciseForm({
           </Disclosure>
 
           {/* Only an existing exercise has a rule of its own to edit; it saves as you change it */}
-          {exercise && <ExerciseProgression exerciseId={exercise.id} name={exercise.name} />}
+          {exercise && <ExerciseProgression exerciseId={exercise.id} name={exercise.name} unit={savedUnit} />}
         </div>
       </div>
 

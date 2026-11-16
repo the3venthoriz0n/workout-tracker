@@ -120,3 +120,30 @@ test('no rest timer appears after a set while the setting is off (the default)',
   await screen.findByText(/1 of 4 sets/)
   expect(screen.queryByRole('timer')).toBeNull()
 })
+
+test('a set of an exercise kept in kg is shown in kg while the app is in lb; a plain one stays in lb', async () => {
+  const user = userEvent.setup()
+  const { repo } = await seed()
+  const ex = (await repo.listExercises())[0]!
+  await repo.saveExercise({ ...ex, unit: 'kg' })
+  renderApp(repo)
+  await user.click(await screen.findByRole('button', { name: 'Start workout' }))
+  await screen.findByText(/0 of 4 sets/)
+  // 95 lb is 43 kg
+  expect(screen.getAllByRole('button', { name: /^Set 1: 5 × 43 kg/ })).toHaveLength(1)
+  expect(screen.getAllByRole('button', { name: /^Set 1: 5 × 95 lb/ })).toHaveLength(1)
+})
+
+test('with Show both units on, a set shows the other unit too', async () => {
+  localStorage.setItem('wt.showBothUnits', 'on')
+  try {
+    const user = userEvent.setup()
+    const { repo } = await seed()
+    renderApp(repo)
+    await user.click(await screen.findByRole('button', { name: 'Start workout' }))
+    await screen.findByText(/0 of 4 sets/)
+    expect(screen.getAllByRole('button', { name: /^Set 1: 5 × 95 lb \(43 kg\)/ }).length).toBe(2)
+  } finally {
+    localStorage.removeItem('wt.showBothUnits')
+  }
+})
