@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, test } from 'vitest'
 import { freshRepo, renderAt } from './helpers'
+import { openItem } from './plan-helpers'
 
 async function squatItem() {
   const { repo, byName } = await freshRepo('layers')
@@ -15,7 +16,7 @@ async function squatItem() {
 test('an inheriting item shows its effective rule with a Default badge', async () => {
   const { repo, plan } = await squatItem()
   renderAt(repo, `/plans/${plan.id}`)
-  const row = await screen.findByRole('listitem', { name: 'Back Squat' })
+  const row = await openItem('Back Squat')
   expect(within(row).getByText('+5 lb on success · deload 10% after 3 misses')).toBeTruthy()
   expect(within(row).getByText('Default')).toBeTruthy()
   expect(within(row).queryByText('Override')).toBeNull()
@@ -25,7 +26,7 @@ test('editing a field creates an override; Use default reverts to inheriting', a
   const user = userEvent.setup()
   const { repo, plan, view } = await squatItem()
   renderAt(repo, `/plans/${plan.id}`)
-  const row = await screen.findByRole('listitem', { name: 'Back Squat' })
+  const row = await openItem('Back Squat')
   await user.click(within(row).getByRole('button', { name: 'Progression for Back Squat' }))
   expect(within(row).getByText(/Inherited from the built-in default/)).toBeTruthy()
   expect(within(row).queryByRole('button', { name: 'Use default for Back Squat' })).toBeNull()
@@ -52,7 +53,7 @@ test('No progression is an override, and turning it off goes back to inheriting 
     rep_ceiling: 8,
   })
   renderAt(repo, `/plans/${plan.id}`)
-  const row = await screen.findByRole('listitem', { name: 'Back Squat' })
+  const row = await openItem('Back Squat')
   expect(within(row).getByText('Default')).toBeTruthy()
   await user.click(within(row).getByRole('button', { name: 'Progression for Back Squat' }))
   expect(within(row).getByText(/Inherited from the exercise default/)).toBeTruthy()

@@ -1,16 +1,16 @@
 import { ANGLES, type Angle } from '@workout/shared'
-import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Trash2 } from 'lucide-react'
 import { useId, useState } from 'react'
 import { NumberField } from '@/components/number-field'
 import { ANGLE_NAMES, AngleChip, SupersetLabel } from '@/components/plan-bits'
 import { RuleEditor } from '@/components/rule-editor'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import { summarizeRule } from '@/lib/rule-summary'
 import { segmentedItem, segmentedTrack } from '@/lib/styles'
+import { cn } from '@/lib/utils'
 import {
   useClearRule,
   useDeletePlanItem,
@@ -35,7 +35,8 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
   const setRule = useSetRule()
   const clearRule = useClearRule()
   const amrapHelpId = useId()
-  const [expanded, setExpanded] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [ruleOpen, setRuleOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const { exercise, effective: eff, rule, ruleSource } = item
@@ -67,20 +68,37 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
     update.mutate({ id: item.id, patch: p }, { onError: (e) => fail(e) })
   }
 
+  const bodyId = `item-body-${item.id}`
+  const ruleId = `item-rule-${item.id}`
+
   return (
-    <li aria-label={name} className="flex flex-col gap-3 py-4">
-      <div className="flex items-start gap-2">
-        {supersetLabel && <SupersetLabel label={supersetLabel} className="mt-0.5" />}
-        <div className="min-w-0 flex-1">
-          <p className="text-[17px] font-semibold">
-            {name}
-            <AngleChip angle={item.angle} />
-          </p>
-          <p className="text-muted-foreground text-sm tabular-nums">
-            Next: {eff.sets}×{eff.targetReps}
-            {item.amrap_last && '+'} @ {formatWeight(eff.targetWeight)} {units}
-          </p>
-        </div>
+    <li aria-label={name} className="flex flex-col gap-3 py-3">
+      {/* Collapsed: the name and its next target. Everything else opens from here. */}
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={bodyId}
+          aria-label={`${name} details`}
+          className="rounded-row flex min-h-14 min-w-0 flex-1 items-center gap-3 text-left"
+          onClick={() => setOpen((o) => !o)}
+        >
+          <ChevronRight
+            aria-hidden
+            className={cn('text-muted-foreground size-5 shrink-0', open && 'rotate-90')}
+          />
+          {supersetLabel && <SupersetLabel label={supersetLabel} />}
+          <span className="min-w-0 flex-1">
+            <span className="block text-[17px] font-semibold">
+              {name}
+              <AngleChip angle={item.angle} />
+            </span>
+            <span className="text-muted-foreground block text-sm tabular-nums">
+              Next: {eff.sets}×{eff.targetReps}
+              {item.amrap_last && '+'} @ {formatWeight(eff.targetWeight)} {units}
+            </span>
+          </span>
+        </button>
         <Button
           variant="ghost"
           size="icon"
@@ -103,125 +121,129 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
         </Button>
       </div>
 
-      {confirmDelete && (
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-muted-foreground w-full text-sm">Removes {name} from this day. Past workouts keep their records.</p>
-          <Button
-            variant="destructive"
-            className="min-h-11"
-            aria-label={`Confirm delete ${name}`}
-            disabled={remove.isPending}
-            onClick={() => remove.mutate(item.id, { onError: (e) => fail(e) })}
+      {open && (
+        <div id={bodyId} className="flex flex-col gap-3">
+          <div className="grid grid-cols-3 gap-3">
+            <NumberField
+              label="Sets"
+              kind="reps"
+              allowEmpty
+              value={item.sets}
+              placeholder={String(exercise.default_sets)}
+              onCommit={(v) => (v !== null && v < 1 ? false : patch({ sets: v }))}
+            />
+            <NumberField
+              label="Reps"
+              kind="reps"
+              allowEmpty
+              value={item.reps}
+              placeholder={String(exercise.default_reps)}
+              onCommit={(v) => (v !== null && v < 1 ? false : patch({ reps: v }))}
+            />
+            <NumberField
+              label={`Weight (${units})`}
+              kind="weight"
+              allowEmpty
+              value={item.weight}
+              placeholder={formatWeight(exercise.default_weight)}
+              onCommit={(v) => patch({ weight: v })}
+            />
+          </div>
+
+          {exercise.supports_angle && (
+            <div role="group" aria-label={`Angle for ${name}`} className={segmentedTrack}>
+              {ANGLES.map((a) => {
+                const on = item.angle === a
+                return (
+                  <button
+                    key={a}
+                    type="button"
+                    aria-pressed={on}
+                    className={segmentedItem(on)}
+                    // Tapping the selected angle again unsets it (angle is optional)
+                    onClick={() => setOption({ angle: on ? null : a })}
+                  >
+                    {ANGLE_NAMES[a]}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="flex flex-col">
+            <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
+              Last set is AMRAP
+              <Switch
+                checked={item.amrap_last}
+                aria-label="Last set is AMRAP"
+                aria-describedby={amrapHelpId}
+                onCheckedChange={(on) => setOption({ amrap_last: on })}
+              />
+            </label>
+            <p id={amrapHelpId} className="text-muted-foreground -mt-1 text-sm">
+              Target reps is the minimum. Log what you actually did.
+            </p>
+          </div>
+
+          {/* One row for the rule: where it comes from, what it does, and the way into its editor */}
+          <button
+            type="button"
+            aria-expanded={ruleOpen}
+            aria-controls={ruleId}
+            aria-label={`Progression for ${name}`}
+            className="bg-(--field) rounded-row flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left"
+            onClick={() => setRuleOpen((e) => !e)}
           >
-            Confirm delete
-          </Button>
-          <Button variant="ghost" className="min-h-11" autoFocus onClick={() => setConfirmDelete(false)}>
-            Cancel
-          </Button>
-        </div>
-      )}
+            <span className="min-w-0 flex-1 text-sm">
+              <span className="block font-medium">Progression</span>
+              <span className="text-muted-foreground block tabular-nums">
+                <span>{ruleSource === 'item' ? 'Override' : 'Default'}</span> · <span>{summarizeRule(rule, units)}</span>
+              </span>
+            </span>
+            <ChevronRight aria-hidden className={cn('text-muted-foreground size-5 shrink-0', ruleOpen && 'rotate-90')} />
+          </button>
 
-      <div className="grid grid-cols-3 gap-3">
-        <NumberField
-          label="Sets"
-          kind="reps"
-          allowEmpty
-          value={item.sets}
-          placeholder={String(exercise.default_sets)}
-          onCommit={(v) => (v !== null && v < 1 ? false : patch({ sets: v }))}
-        />
-        <NumberField
-          label="Reps"
-          kind="reps"
-          allowEmpty
-          value={item.reps}
-          placeholder={String(exercise.default_reps)}
-          onCommit={(v) => (v !== null && v < 1 ? false : patch({ reps: v }))}
-        />
-        <NumberField
-          label={`Weight (${units})`}
-          kind="weight"
-          allowEmpty
-          value={item.weight}
-          placeholder={formatWeight(exercise.default_weight)}
-          onCommit={(v) => patch({ weight: v })}
-        />
-      </div>
+          {ruleOpen && (
+            <div id={ruleId}>
+              <RuleEditor
+                rule={rule}
+                source={ruleSource}
+                itemName={name}
+                idPrefix={`rule-${item.id}`}
+                onSave={(next) => setRule.mutateAsync({ planItemId: item.id, rule: next })}
+                onClear={() => clearRule.mutateAsync(item.id)}
+              />
+            </div>
+          )}
 
-      {exercise.supports_angle && (
-        <div role="group" aria-label={`Angle for ${name}`} className={segmentedTrack}>
-          {ANGLES.map((a) => {
-            const on = item.angle === a
-            return (
-              <button
-                key={a}
-                type="button"
-                aria-pressed={on}
-                className={segmentedItem(on)}
-                // Tapping the selected angle again unsets it (angle is optional)
-                onClick={() => setOption({ angle: on ? null : a })}
+          {confirmDelete ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-muted-foreground w-full text-sm">Removes {name} from this day. Past workouts keep their records.</p>
+              <Button
+                variant="destructive"
+                className="min-h-11"
+                aria-label={`Confirm delete ${name}`}
+                disabled={remove.isPending}
+                onClick={() => remove.mutate(item.id, { onError: (e) => fail(e) })}
               >
-                {ANGLE_NAMES[a]}
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      <div className="flex flex-col">
-        <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
-          Last set is AMRAP
-          <Switch
-            checked={item.amrap_last}
-            aria-label="Last set is AMRAP"
-            aria-describedby={amrapHelpId}
-            onCheckedChange={(on) => setOption({ amrap_last: on })}
-          />
-        </label>
-        <p id={amrapHelpId} className="text-muted-foreground -mt-1 text-sm">
-          Target reps is the minimum. Log what you actually did.
-        </p>
-      </div>
-
-      <div className="flex items-start gap-2 text-sm">
-        <Badge variant={ruleSource === 'item' ? 'default' : 'outline'} className="mt-0.5">
-          {ruleSource === 'item' ? 'Override' : 'Default'}
-        </Badge>
-        <span className="text-muted-foreground min-w-0 tabular-nums">{summarizeRule(rule, units)}</span>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          className="min-h-11"
-          aria-expanded={expanded}
-          aria-label={`Progression for ${name}`}
-          onClick={() => setExpanded((e) => !e)}
-        >
-          Progression
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:text-destructive focus-visible:text-destructive ml-auto min-h-11 min-w-11"
-          aria-label={`Delete ${name}`}
-          aria-expanded={confirmDelete}
-          onClick={() => setConfirmDelete(true)}
-        >
-          <Trash2 className="size-5" aria-hidden />
-        </Button>
-      </div>
-
-      {expanded && (
-        <div className="border-border-strong/70 border-t pt-3">
-          <RuleEditor
-            rule={rule}
-            source={ruleSource}
-            itemName={name}
-            idPrefix={`rule-${item.id}`}
-            onSave={(next) => setRule.mutateAsync({ planItemId: item.id, rule: next })}
-            onClear={() => clearRule.mutateAsync(item.id)}
-          />
+                Confirm delete
+              </Button>
+              <Button variant="ghost" className="min-h-11" autoFocus onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-destructive focus-visible:text-destructive min-h-11 min-w-11 self-end"
+              aria-label={`Delete ${name}`}
+              aria-expanded={confirmDelete}
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="size-5" aria-hidden />
+            </Button>
+          )}
         </div>
       )}
     </li>

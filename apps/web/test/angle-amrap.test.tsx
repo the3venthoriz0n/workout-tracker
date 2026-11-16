@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, test } from 'vitest'
 import { freshRepo, renderAt } from './helpers'
+import { openItem } from './plan-helpers'
 
 async function benchDay(opts: { angle?: boolean } = {}) {
   const { repo, byName } = await freshRepo('angle')
@@ -33,7 +34,7 @@ test('exercise sheet: the Has angle switch saves supports_angle', async () => {
 test('plan item: no angle control unless the exercise supports it', async () => {
   const { repo, plan } = await benchDay()
   renderAt(repo, `/plans/${plan.id}`)
-  const row = await screen.findByRole('listitem', { name: 'Bench Press' })
+  const row = await openItem('Bench Press')
   expect(within(row).queryByRole('group', { name: 'Angle for Bench Press' })).toBeNull()
 })
 
@@ -41,7 +42,7 @@ test('plan item: the Flat | Incline | Decline control sets, shows and clears the
   const user = userEvent.setup()
   const { repo, plan, stored } = await benchDay({ angle: true })
   renderAt(repo, `/plans/${plan.id}`)
-  const row = await screen.findByRole('listitem', { name: 'Bench Press' })
+  const row = await openItem('Bench Press')
   const group = within(row).getByRole('group', { name: 'Angle for Bench Press' })
   expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual(['Flat', 'Incline', 'Decline'])
   await user.click(within(group).getByRole('button', { name: 'Incline' }))
@@ -80,7 +81,7 @@ test('plan item: the AMRAP switch has helper text and saves amrap_last', async (
   const user = userEvent.setup()
   const { repo, plan, stored } = await benchDay()
   renderAt(repo, `/plans/${plan.id}`)
-  const row = await screen.findByRole('listitem', { name: 'Bench Press' })
+  const row = await openItem('Bench Press')
   const sw = within(row).getByRole('switch', { name: 'Last set is AMRAP' })
   expect(within(row).getByText('Target reps is the minimum. Log what you actually did.')).toBeTruthy()
   expect(sw.getAttribute('aria-describedby')).toBeTruthy()

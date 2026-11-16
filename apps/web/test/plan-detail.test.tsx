@@ -9,6 +9,7 @@ import { routes } from '../src/app/router'
 import { AppDb } from '../src/repo/db'
 import { LocalRepo } from '../src/repo/local-repo'
 import { RepoProvider } from '../src/repo/provider'
+import { openItem } from './plan-helpers'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -51,7 +52,7 @@ test('builds a plan through the UI and overrides reps with fallback to the defau
   await user.click(await within(dialog).findByRole('button', { name: 'Bench Press' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 
-  const row = await screen.findByRole('listitem', { name: 'Bench Press' })
+  const row = await openItem('Bench Press')
   expect(within(row).getByText('Next: 3×5 @ 95 lb')).toBeTruthy()
   const reps = within(row).getByLabelText('Reps') as HTMLInputElement
   expect(reps.placeholder).toBe('5')
@@ -79,7 +80,7 @@ test('picker hides exercises whose gear is not owned, but the plan keeps them', 
   await repo.saveGear({ id: gear.id, name: gear.name, owned: false })
 
   view()
-  expect(await screen.findByRole('listitem', { name: 'Bench Press' })).toBeTruthy()
+  expect(await openItem('Bench Press')).toBeTruthy()
   await user.click(screen.getByRole('button', { name: /Add exercise to Day A/ }))
   const dialog = await screen.findByRole('dialog')
   await within(dialog).findByRole('button', { name: 'Push-up' })
@@ -97,7 +98,7 @@ test('reorders items and days with the arrow buttons', async () => {
   await repo.addPlanItem(day.id, byName('Back Squat').id)
   await repo.addPlanItem(day.id, byName('Bench Press').id)
   view()
-  await screen.findByRole('listitem', { name: 'Back Squat' })
+  await openItem('Back Squat')
   const order = () => screen.getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))
   expect(order()).toEqual(['Back Squat', 'Bench Press'])
   await user.click(screen.getByRole('button', { name: 'Move Bench Press up' }))
@@ -122,7 +123,7 @@ test('rule editor: add_reps with ceiling, then no progression and back to defaul
   const inc = (await repo.getProfile()).weight_increment
 
   view()
-  await screen.findByRole('listitem', { name: 'Back Squat' })
+  await openItem('Back Squat')
   await user.click(screen.getByRole('button', { name: 'Progression for Back Squat' }))
   const row = itemRow('Back Squat')
   await user.selectOptions(within(row).getByLabelText('On success'), 'add_reps')
@@ -191,7 +192,7 @@ test('exercise and day delete are icon-only trash buttons that confirm', async (
   const day = await repo.savePlanDay({ plan_id: plan.id, name: 'Day A' })
   await repo.addPlanItem(day.id, byName('Back Squat').id)
   view()
-  const row = await screen.findByRole('listitem', { name: 'Back Squat' })
+  const row = await openItem('Back Squat')
   const trash = within(row).getByRole('button', { name: 'Delete Back Squat' })
   expect(trash.textContent).toBe('')
   expect(trash.querySelector('svg')).not.toBeNull()
@@ -220,7 +221,7 @@ test('sets and reps reject 0 without calling the repo or showing a toast', async
   const item = await repo.addPlanItem(day.id, byName('Back Squat').id)
   await repo.updatePlanItem(item.id, { sets: 4, reps: 6 })
   view()
-  await screen.findByRole('listitem', { name: 'Back Squat' })
+  await openItem('Back Squat')
   for (const [label, prev] of [['Sets', '4'], ['Reps', '6']] as const) {
     const field = within(itemRow('Back Squat')).getByLabelText(label) as HTMLInputElement
     await user.clear(field)
@@ -240,7 +241,7 @@ async function ruleSetup() {
   const rule = async () =>
     (await s.repo.getPlan(s.plan.id))!.days[0]!.items.find((i) => i.id === item.id)!.rule!
   s.view()
-  await screen.findByRole('listitem', { name: 'Back Squat' })
+  await openItem('Back Squat')
   await userEvent.click(screen.getByRole('button', { name: 'Progression for Back Squat' }))
   return { ...s, rule }
 }
@@ -296,7 +297,7 @@ test('retyping the same override value keeps progression targets', async () => {
   for (const s of session.exercises[0]!.sets) await repo.updateSet(s.id, { done: true })
   await repo.finishSession(session.id)
   view()
-  const row = await screen.findByRole('listitem', { name: 'Bench Press' })
+  const row = await openItem('Bench Press')
   expect(within(row).getByText('Next: 3×5 @ 100 lb')).toBeTruthy()
   const update = vi.spyOn(repo, 'updatePlanItem')
   const reps = within(row).getByLabelText('Reps')
@@ -314,7 +315,7 @@ test('a failed override write reverts the field and toasts a friendly error', as
   vi.spyOn(console, 'error').mockImplementation(() => {})
   const err = vi.spyOn(toast, 'error')
   view()
-  const row = await screen.findByRole('listitem', { name: 'Bench Press' })
+  const row = await openItem('Bench Press')
   vi.spyOn(repo, 'updatePlanItem').mockRejectedValue(new Error('disk exploded'))
   const reps = within(row).getByLabelText('Reps') as HTMLInputElement
   await user.clear(reps)
@@ -328,7 +329,7 @@ test('add_weight rule editor explains progression step snapping, add_reps does n
   const { repo, item, view } = await withItem()
   await repo.updateProfile({ weight_increment: 2.5 })
   view()
-  const row = await screen.findByRole('listitem', { name: 'Bench Press' })
+  const row = await openItem('Bench Press')
   await user.click(within(row).getByRole('button', { name: 'Progression for Bench Press' }))
   expect(
     await within(row).findByText('Steps snap to your 2.5 lb progression step (change it in the Progression tab).'),
@@ -350,7 +351,7 @@ test('re-enabling progression restores the profile default rule', async () => {
   }
   await repo.updateProfile({ default_rule: dflt })
   view()
-  const row = await screen.findByRole('listitem', { name: 'Bench Press' })
+  const row = await openItem('Bench Press')
   await user.click(within(row).getByRole('button', { name: 'Progression for Bench Press' }))
   const sw = within(row).getByRole('switch', { name: 'No progression for Bench Press' })
   await user.click(sw)
@@ -392,7 +393,7 @@ test('picker offers a Create row that prefills the sheet and adds the new exerci
   expect(created).toHaveLength(1)
   expect((await repo.getPlan(plan.id))!.days[0]!.items[0]!.exercise_id).toBe(created[0]!.id)
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-  expect(await screen.findByRole('listitem', { name: 'Zercher Squat' })).toBeTruthy()
+  expect(await openItem('Zercher Squat')).toBeTruthy()
   expect(ok).toHaveBeenCalledWith('Added Zercher Squat to Day A')
 })
 
