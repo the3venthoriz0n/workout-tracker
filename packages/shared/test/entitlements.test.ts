@@ -6,7 +6,7 @@ describe('entitlements', () => {
     expect(can({ plan: 'free' }, 'charts')).toBe(true)
     expect(can({ plan: 'free' }, 'ai_plan')).toBe(false)
     expect(limit({ plan: 'free' }, 'maxPlans')).toBe(Infinity)
-    expect(ENTITLEMENTS.free).toEqual({ maxPlans: Infinity, aiPlansPerDay: 0, charts: true })
+    expect(ENTITLEMENTS.free).toEqual({ maxPlans: Infinity, aiPlansPerDay: 0, aiMealsPerDay: 30, charts: true })
   })
   it('pro plan can use AI plans', () => {
     expect(can({ plan: 'pro' }, 'ai_plan')).toBe(true)
