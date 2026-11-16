@@ -337,7 +337,7 @@ describe('PUT upserts with another user\'s id create the caller\'s own row', () 
     if (row.user_id) expect(row.user_id).toBe(bobUser)
     const mine = (await b.call('GET', '/api/v1/export')).json as Record<string, { id?: string; user_id?: string }[]>
     const kind = spec.path.split('/')[3]!
-    const table = { gear: 'gear', exercises: 'exercises', plans: 'plans', days: 'plan_days' }[kind]!
+    const table = { gear: 'gear', exercises: 'exercises', plans: 'plans', days: 'plan_days', nutrition: 'nutrition_entries' }[kind]!
     expect(mine[table]!.some((r) => r.id === Object.values(spec.params!).map((k) => fa[k])[0])).toBe(true)
     expect(await snapshot(a), 'A is untouched').toBe(beforeA)
   })
@@ -411,10 +411,10 @@ describe('route table completeness', () => {
 
   it('every route that takes an id (path or body) declares how foreign ids behave', () => {
     const probe: Fixture = {
-      gear: newId(), exercise: newId(), plan: newId(), day: newId(), item: newId(), item2: newId(), group: newId(),
+      gear: newId(), exercise: newId(), plan: newId(), day: newId(), nutritionEntry: newId(), item: newId(), item2: newId(), group: newId(),
       session: newId(), set: newId(), completedSession: newId(), shared: newId(), publishedPlan: newId(), export: {} as ExportData, password: 'not-an-id',
     }
-    const ids = ['gear', 'exercise', 'plan', 'day', 'item', 'item2', 'group', 'session', 'set', 'shared', 'publishedPlan'].map(
+    const ids = ['gear', 'exercise', 'plan', 'day', 'nutritionEntry', 'item', 'item2', 'group', 'session', 'set', 'shared', 'publishedPlan'].map(
       (k) => probe[k as keyof Fixture] as string,
     )
     for (const spec of ROUTES) {

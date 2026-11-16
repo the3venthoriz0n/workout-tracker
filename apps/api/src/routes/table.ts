@@ -8,6 +8,8 @@ import {
   exerciseSchema,
   exportDataSchema,
   gearSchema,
+  mealDraftSchema,
+  nutritionEntrySchema,
   planDaySchema,
   planItemSchema,
   planSchema,
@@ -36,6 +38,7 @@ export type Kind =
   | 'set'
   | 'shared'
   | 'publishedPlan'
+  | 'nutritionEntry'
 
 /** Ids of one user's data. The tests build it by calling the API as that user. */
 export type Fixture = Record<Kind, string> & {
@@ -151,6 +154,38 @@ export const ROUTES: RouteSpec[] = [
     body: () => ({ weight_increment: 2.5, default_rule: rule }),
     status: 200,
     response: profileSchema,
+    foreign: 'none',
+  },
+
+  { method: 'GET', path: `${V1}/nutrition/entries`, status: 200, response: z.array(nutritionEntrySchema), foreign: 'none' },
+  {
+    method: 'PUT',
+    path: `${V1}/nutrition/entries/:id`,
+    params: { id: 'nutritionEntry' },
+    body: () => ({
+      date: new Date().toISOString().slice(0, 10),
+      name: 'Greek yogurt',
+      quantity: '1 cup',
+      calories: 150,
+      protein_g: 12,
+      carbs_g: null,
+      fat_g: null,
+      fiber_g: null,
+      sugar_g: null,
+      sodium_mg: null,
+      source: 'manual',
+    }),
+    status: 200,
+    response: nutritionEntrySchema,
+    foreign: 'upsert',
+  },
+  { method: 'DELETE', path: `${V1}/nutrition/entries/:id`, params: { id: 'nutritionEntry' }, status: 204, foreign: 'not_found' },
+  {
+    method: 'POST',
+    path: `${V1}/nutrition/parse`,
+    body: () => ({ text: '1 chicken burrito' }),
+    status: 200,
+    response: z.object({ items: z.array(mealDraftSchema), remaining_today: z.number() }),
     foreign: 'none',
   },
 

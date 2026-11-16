@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server'
 import { createApp } from './app.js'
+import { createMealParser } from './ai/meal-parser.js'
 import { createAuth } from './auth.js'
 import { db, sql } from './db/index.js'
 import { env } from './env.js'
@@ -22,6 +23,7 @@ const app = createApp({
   env,
   getService: (userId) => createService(db, userId),
   getPublic: () => createPublicService(db),
+  mealParser: createMealParser(env),
   sqlHealth: async () => {
     try {
       await sql`select 1`

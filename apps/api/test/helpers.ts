@@ -1,4 +1,6 @@
 import { randomBytes } from 'node:crypto'
+import type { NutrientKey } from '@workout/shared'
+import type { MealParser } from '../src/ai/meal-parser.js'
 import { createApp } from '../src/app.js'
 import { createAuth } from '../src/auth.js'
 import { createCaptureMailer, type Mail, type Mailer } from '../src/mail.js'
@@ -25,6 +27,26 @@ export function testEnv(over: Partial<TestEnv> = {}): TestEnv {
     TRUSTED_ORIGINS: [],
     ...over,
   }
+}
+
+/** Answers every meal with one food, so route tests never reach a real provider. */
+const defaultMealParser: MealParser = {
+  async parse(_text, tracked) {
+    const has = (k: NutrientKey) => tracked.includes(k)
+    return [
+      {
+        name: 'Test food',
+        quantity: '1',
+        calories: has('calories') ? 100 : null,
+        protein_g: has('protein_g') ? 5 : null,
+        carbs_g: has('carbs_g') ? 10 : null,
+        fat_g: has('fat_g') ? 2 : null,
+        fiber_g: has('fiber_g') ? 1 : null,
+        sugar_g: has('sugar_g') ? 1 : null,
+        sodium_mg: has('sodium_mg') ? 10 : null,
+      },
+    ]
+  },
 }
 
 export type Harness = Awaited<ReturnType<typeof setupApp>>
@@ -55,7 +77,7 @@ export function linkIn(mail: Mail): string {
  * App over an isolated test schema. Each harness gets its own client IP so the process-wide rate-limit store never leaks between tests.
  * Mail goes to `mail` (a capture mailer) unless `opts.mailer` replaces it.
  */
-export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mailer } = {}) {
+export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mailer; mealParser?: MealParser | null } = {}) {
   const t: TestDb = await withTestDb()
   const env = testEnv(over)
   const mail = createCaptureMailer()
@@ -67,6 +89,8 @@ export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mai
     getPublic: () => createPublicService(t.db),
     // Tests call the public area far more often than a client would; the limiter has its own test.
     publicRateLimit: { enabled: false },
+    // A canned parser unless a test passes its own (or null for "no provider configured").
+    mealParser: opts.mealParser === undefined ? defaultMealParser : opts.mealParser,
   })
   const origin = env.BETTER_AUTH_URL
   const ip = freshIp()

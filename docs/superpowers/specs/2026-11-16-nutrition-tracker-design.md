@@ -64,9 +64,9 @@ A number that looks exact when it is a guess. An AI bill nobody bounded. Meal te
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/nutrition/entries?from&to` | Entries in a date range, at most 366 days; sorted by date then created time |
-| PUT / PATCH / DELETE | `/nutrition/entries/:id` | Idempotent create or replace, partial update, soft delete |
-| POST | `/nutrition/parse` `{ text }` | The server reads the caller's tracked metrics from the profile and asks only for those. | Returns `{ items: MealDraft[], remaining_today }`. Writes nothing. Order of checks: session, entitlement, body, daily cap, parser available, parse |
+| GET | `/nutrition/entries?from&to` | Entries in a date range, at most 366 days (the last seven days when no range is given); sorted by date then created time |
+| PUT / DELETE | `/nutrition/entries/:id` | Idempotent create or replace (an edit sends the whole entry), soft delete. No PATCH: nothing needs a partial update |
+| POST | `/nutrition/parse` `{ text }` | The server reads the caller's tracked metrics from the profile and asks only for those. | Returns `{ items: MealDraft[], remaining_today }`. Writes nothing. Order of checks: session, entitlement, body, parser available, daily cap, parse (availability first, so an unconfigured server never uses up an allowance) |
 | PATCH | `/me` | Gains `nutrition` (tracked metrics and goals) |
 
 Errors added: `429 {"error":"ai_limit"}`, `503 {"error":"ai_unavailable"}` (no key configured), `502 {"error":"ai_failed"}`. Errors never include model output or the meal text.
