@@ -22,6 +22,8 @@ test('exercise sheet: the Has angle switch saves supports_angle', async () => {
   renderAt(repo, '/library')
   await user.click(await screen.findByRole('button', { name: 'Edit Bench Press' }))
   const dialog = await screen.findByRole('dialog')
+  // Optional details start closed
+  await user.click(within(dialog).getByRole('button', { name: 'Optional details' }))
   const sw = within(dialog).getByRole('switch', { name: 'Has angle (flat / incline / decline)' })
   expect(sw.getAttribute('aria-checked')).toBe('false')
   await user.click(sw)

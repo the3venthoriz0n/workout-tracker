@@ -1,5 +1,5 @@
 import { exerciseInputSchema, type Exercise } from '@workout/shared'
-import { ChevronDown } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { notifyError } from '@/lib/notify'
@@ -66,18 +66,22 @@ function ExerciseForm({
   const [sets, setSets] = useState<number | null>(exercise?.default_sets ?? 3)
   const [reps, setReps] = useState<number | null>(exercise?.default_reps ?? 5)
   const [weight, setWeight] = useState<number | null>(exercise?.default_weight ?? 0)
-  // Collapsed for a new exercise; open when editing one that already has optional values
-  const [detailsOpen, setDetailsOpen] = useState(
-    !!exercise &&
-      (!!exercise.notes ||
-        !!exercise.video_url ||
-        exercise.required_gear_ids.length > 0 ||
-        exercise.supports_angle ||
-        !exercise.active),
-  )
+  // Always starts closed; the row under it says what is set inside
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const sortedGear = [...gear].sort((a, b) => a.name.localeCompare(b.name))
+  const angleWarning = !!exercise?.supports_angle && !supportsAngle
+  const detailsSummary =
+    [
+      gearIds.length > 0 && sortedGear.filter((g) => gearIds.includes(g.id)).map((g) => g.name).join(', '),
+      supportsAngle && 'Angle',
+      videoUrl.trim() !== '' && 'Video',
+      notes.trim() !== '' && 'Notes',
+      !active && 'Inactive',
+    ]
+      .filter(Boolean)
+      .join(' · ') || 'Gear, angle, video, notes'
 
   function toggleGear(id: string, on: boolean) {
     setGearIds((ids) => (on ? [...ids, id] : ids.filter((g) => g !== id)))
@@ -127,55 +131,77 @@ function ExerciseForm({
     <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
       <SheetHeader className="shrink-0 pr-14">
         <SheetTitle>{exercise ? 'Edit exercise' : 'Add exercise'}</SheetTitle>
-        <SheetDescription>Defaults apply when you add it to a plan.</SheetDescription>
+        <SheetDescription className="sr-only">Defaults apply when you add it to a plan.</SheetDescription>
       </SheetHeader>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-5 pb-5">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="ex-name">Name</Label>
-          <Input
-            id="ex-name"
-            autoComplete="off"
-            enterKeyHint="next"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            aria-invalid={!!errors.name}
-          />
-          {errors.name && <p className="text-destructive text-sm">{errors.name}</p>}
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          <NumberField label="Sets" kind="reps" value={sets} onCommit={setSets} />
-          <NumberField label="Reps" kind="reps" value={reps} onCommit={setReps} />
-          <NumberField
-            label={`Weight (${units})`}
-            kind="weight"
-            value={weight}
-            onCommit={setWeight}
-          />
-        </div>
-        {(errors.default_sets || errors.default_reps || errors.default_weight) && (
-          <p className="text-destructive -mt-2 text-sm">
-            {errors.default_sets ?? errors.default_reps ?? errors.default_weight}
-          </p>
-        )}
-
+      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain px-5 pb-5">
+        {/* What an exercise is: its name and its working numbers */}
         <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ex-name">Name</Label>
+            <Input
+              id="ex-name"
+              autoComplete="off"
+              enterKeyHint="next"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-invalid={!!errors.name}
+            />
+            {errors.name && <p className="text-destructive text-sm">{errors.name}</p>}
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <NumberField label="Sets" kind="reps" value={sets} onCommit={setSets} />
+            <NumberField label="Reps" kind="reps" value={reps} onCommit={setReps} />
+            <NumberField
+              label={`Weight (${units})`}
+              kind="weight"
+              value={weight}
+              onCommit={setWeight}
+            />
+          </div>
+          {(errors.default_sets || errors.default_reps || errors.default_weight) && (
+            <p className="text-destructive -mt-2 text-sm">
+              {errors.default_sets ?? errors.default_reps ?? errors.default_weight}
+            </p>
+          )}
+        </div>
+
+        {/* Everything else sits behind two matching rows, each saying what is inside */}
+        <div className="flex flex-col gap-3">
           <button
             type="button"
-            className="hover:bg-accent -mx-3 flex min-h-11 items-center justify-between rounded-full px-3 text-sm font-medium"
+            className="bg-(--field) rounded-row flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left"
+            aria-label="Optional details"
             aria-expanded={detailsOpen}
             aria-controls="ex-details"
             onClick={() => setDetailsOpen((o) => !o)}
           >
-            Optional details
-            <ChevronDown
-              className={cn('size-5 transition-transform', detailsOpen && 'rotate-180')}
-              aria-hidden
-            />
+            <span className="min-w-0 flex-1 text-sm">
+              <span className="block font-medium">Optional details</span>
+              <span className="text-muted-foreground block truncate">{detailsSummary}</span>
+            </span>
+            <ChevronRight aria-hidden className={cn('text-muted-foreground size-5 shrink-0', detailsOpen && 'rotate-90')} />
           </button>
           {detailsOpen && (
-            <div id="ex-details" className="flex flex-col gap-4">
+            <div id="ex-details" className="flex flex-col gap-4 px-1">
+              {sortedGear.length > 0 && (
+                <fieldset className="flex flex-col">
+                  <legend className="mb-1 text-sm font-medium">Required gear</legend>
+                  {sortedGear.map((g) => (
+                    <label key={g.id} className="flex min-h-11 items-center gap-3 text-sm">
+                      <input
+                        type="checkbox"
+                        className="accent-brand size-5"
+                        checked={gearIds.includes(g.id)}
+                        onChange={(e) => toggleGear(g.id, e.target.checked)}
+                      />
+                      {g.name}
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+
               <div className="flex flex-col">
                 <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
                   Has angle (flat / incline / decline)
@@ -183,14 +209,14 @@ function ExerciseForm({
                     checked={supportsAngle}
                     onCheckedChange={setSupportsAngle}
                     aria-label="Has angle (flat / incline / decline)"
-                    aria-describedby="ex-angle-help"
+                    aria-describedby={angleWarning ? 'ex-angle-help' : undefined}
                   />
                 </label>
-                <p id="ex-angle-help" className="text-muted-foreground -mt-1 text-sm">
-                  {exercise?.supports_angle && !supportsAngle
-                    ? 'Turning it off clears the angle on its plan items.'
-                    : 'Pick the angle per plan item, so one exercise covers all three.'}
-                </p>
+                {angleWarning && (
+                  <p id="ex-angle-help" className="text-muted-foreground -mt-1 text-sm">
+                    Turning it off clears the angle on its plan items.
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -213,31 +239,16 @@ function ExerciseForm({
                 <Textarea id="ex-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
               </div>
 
-              <fieldset className="flex flex-col gap-1">
-                <legend className="mb-1 text-sm font-medium">Required gear</legend>
-                {sortedGear.map((g) => (
-                  <label key={g.id} className="flex min-h-11 items-center gap-3 text-sm">
-                    <input
-                      type="checkbox"
-                      className="size-5"
-                      checked={gearIds.includes(g.id)}
-                      onChange={(e) => toggleGear(g.id, e.target.checked)}
-                    />
-                    {g.name}
-                  </label>
-                ))}
-              </fieldset>
-
               <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
                 Active
                 <Switch checked={active} onCheckedChange={setActive} aria-label="Active" />
               </label>
             </div>
           )}
-        </div>
 
-        {/* Only an existing exercise has a rule of its own to edit; it saves as you change it */}
-        {exercise && <ExerciseProgression exerciseId={exercise.id} name={exercise.name} />}
+          {/* Only an existing exercise has a rule of its own to edit; it saves as you change it */}
+          {exercise && <ExerciseProgression exerciseId={exercise.id} name={exercise.name} />}
+        </div>
       </div>
 
       <div className="bg-popover shrink-0 border-t px-5 py-4">
