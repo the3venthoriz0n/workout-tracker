@@ -1,4 +1,5 @@
 import { AiFailedError, AiLimitError, AiUnavailableError, OfflineError, newId } from '@workout/shared'
+import type { NutritionEntryInput } from '@workout/shared'
 import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,7 +9,8 @@ import { useParseMeal, useSaveNutritionEntry } from '@/repo/hooks'
 type Message = { text: string; tone: 'error' | 'info' }
 
 function messageFor(err: unknown): string {
-  if (err instanceof AiLimitError) return "You've used today's AI estimates. Try again tomorrow."
+  // The daily allowance and a provider's own rate limit look the same from here, so do not promise tomorrow
+  if (err instanceof AiLimitError) return 'AI limit reached. Try again later.'
   if (err instanceof AiUnavailableError) return "AI isn't set up on this server yet."
   if (err instanceof AiFailedError) return "Couldn't read that. Try describing it differently."
   if (err instanceof OfflineError) return 'Needs a connection.'
@@ -28,6 +30,8 @@ export function NutritionAdd({ date }: { date: string }) {
   const [message, setMessage] = useState<Message | null>(null)
   const [remaining, setRemaining] = useState<number | null>(null)
   const inFlight = useRef(false)
+  // Estimates that were parsed but did not all save: a retry saves just these, under the same ids, with no new parse
+  const unsaved = useRef<{ text: string; entries: NutritionEntryInput[] } | null>(null)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -37,18 +41,27 @@ export function NutritionAdd({ date }: { date: string }) {
     setBusy(true)
     setMessage(null)
     try {
-      const { items, remaining_today } = await parse.mutateAsync(meal)
-      setRemaining(remaining_today)
-      if (items.length === 0) {
-        setMessage({ text: 'Nothing found. Try describing the food.', tone: 'info' })
-        return
+      let entries: NutritionEntryInput[]
+      if (unsaved.current?.text === meal) {
+        entries = unsaved.current.entries
+      } else {
+        unsaved.current = null
+        const { items, remaining_today } = await parse.mutateAsync(meal)
+        setRemaining(remaining_today)
+        if (items.length === 0) {
+          setMessage({ text: 'Nothing found. Try describing the food.', tone: 'info' })
+          return
+        }
+        entries = items.map((item) => ({ ...item, id: newId(), date, source: 'ai' as const }))
       }
-      try {
-        await Promise.all(items.map((item) => save.mutateAsync({ ...item, id: newId(), date, source: 'ai' })))
-      } catch {
+      const results = await Promise.allSettled(entries.map((e) => save.mutateAsync(e)))
+      const failed = entries.filter((_, i) => results[i]!.status === 'rejected')
+      if (failed.length > 0) {
+        unsaved.current = { text: meal, entries: failed }
         setMessage({ text: "Couldn't save the estimates. Try again.", tone: 'error' })
         return
       }
+      unsaved.current = null
       setText('')
     } catch (err) {
       setMessage({ text: messageFor(err), tone: 'error' })

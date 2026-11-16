@@ -84,9 +84,9 @@ export function NutritionScreen() {
 function Track() {
   const today = localDate()
   const [date, setDate] = useState(today)
-  const profile = useProfile().data
+  const profile = useProfile()
   const entries = useNutrition(date)
-  const settings = profile ? nutritionSettingsOf(profile) : null
+  const settings = profile.data ? nutritionSettingsOf(profile.data) : null
 
   return (
     <>
@@ -114,8 +114,14 @@ function Track() {
         </Button>
       </div>
 
-      {entries.isError ? (
-        <LoadError what="this day" onRetry={() => void entries.refetch()} />
+      {profile.isError || entries.isError ? (
+        <LoadError
+          what={profile.isError ? 'your nutrition settings' : 'this day'}
+          onRetry={() => {
+            void profile.refetch()
+            void entries.refetch()
+          }}
+        />
       ) : !settings || entries.isPending ? (
         <SkeletonRows rows={2} />
       ) : (

@@ -22,6 +22,8 @@ type AiEnv = {
 
 const TIMEOUT_MS = 30_000
 const MAX_ITEMS = 20
+const NAME_MAX = 120
+const QUANTITY_MAX = 60
 const ANTHROPIC_BASE = 'https://api.anthropic.com'
 const ANTHROPIC_VERSION = '2023-06-01'
 
@@ -61,7 +63,7 @@ function toDrafts(raw: unknown, tracked: NutrientKey[]): MealDraft[] | undefined
   const out: MealDraft[] = []
   for (const item of raw.items) {
     if (!isRecord(item)) return undefined
-    const candidate: Record<string, unknown> = { name: item.name, quantity: item.quantity ?? '' }
+    const candidate: Record<string, unknown> = { name: asText(item.name, NAME_MAX), quantity: asText(item.quantity ?? '', QUANTITY_MAX) }
     // Untracked nutrients are never taken from the model, even when it volunteers them.
     for (const key of NUTRIENT_KEYS) candidate[key] = tracked.includes(key) ? item[key] : null
     const parsed = mealDraftSchema.safeParse(candidate)
@@ -70,6 +72,12 @@ function toDrafts(raw: unknown, tracked: NutrientKey[]): MealDraft[] | undefined
   }
   return out
 }
+
+/** A provider that rejects the request itself (not the key, not a limit): worth one retry in plain mode. */
+class RejectedRequestError extends AiFailedError {}
+
+/** Models send numbers for text and overlong text; shorten and convert rather than fail the whole answer. */
+const asText = (v: unknown, max: number): unknown => (typeof v === 'string' ? v.slice(0, max) : typeof v === 'number' ? String(v).slice(0, max) : v)
 
 /** The reply text of one request, or '' when the provider answered without usable text. */
 type Complete = (system: string, text: string) => Promise<string>
@@ -88,6 +96,7 @@ async function send(fetchFn: typeof fetch, url: string, headers: Record<string, 
   }
   if (res.status === 429) throw new AiLimitError()
   if (res.status === 401 || res.status === 403) throw new AiUnavailableError()
+  if (res.status === 400 || res.status === 422) throw new RejectedRequestError()
   if (!res.ok) throw new AiFailedError()
   try {
     return await res.json()
@@ -99,14 +108,22 @@ async function send(fetchFn: typeof fetch, url: string, headers: Record<string, 
 function openAiCompatible(fetchFn: typeof fetch, baseUrl: string, key: string, model: string): Complete {
   const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`
   return async (system, text) => {
-    const data = await send(fetchFn, url, { Authorization: `Bearer ${key}` }, {
+    const request = {
       model,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: text },
       ],
-      response_format: { type: 'json_object' },
-    })
+    }
+    const auth = { Authorization: `Bearer ${key}` }
+    let data: unknown
+    try {
+      data = await send(fetchFn, url, auth, { ...request, response_format: { type: 'json_object' } })
+    } catch (err) {
+      // Not every service supports JSON mode: ask once more without it (the prompt still demands JSON)
+      if (!(err instanceof RejectedRequestError)) throw err
+      data = await send(fetchFn, url, auth, request)
+    }
     const choice = isRecord(data) && Array.isArray(data.choices) ? data.choices[0] : undefined
     const message = isRecord(choice) ? choice.message : undefined
     return isRecord(message) && typeof message.content === 'string' ? message.content : ''

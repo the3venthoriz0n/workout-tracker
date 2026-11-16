@@ -107,6 +107,16 @@ describe('openai-compatible adapter', () => {
     expect(d).toEqual({ name: 'A', quantity: '1', calories: 10, protein_g: 1, carbs_g: null, fat_g: null, fiber_g: null, sugar_g: null, sodium_mg: null })
   })
 
+  it('is tolerant of a numeric quantity and of an overlong name or quantity instead of failing the whole answer', async () => {
+    const loose = { items: [{ name: 'N'.repeat(300), quantity: 2, calories: 10, protein_g: 1 }, { name: 'B', quantity: 'q'.repeat(200), calories: 5, protein_g: 0 }] }
+    const { fn, calls } = stub(ok(loose))
+    const drafts = await openai(fn).parse(TEXT, TRACKED)
+    expect(calls).toHaveLength(1)
+    expect(drafts[0]!.quantity).toBe('2')
+    expect(drafts[0]!.name).toHaveLength(120)
+    expect(drafts[1]!.quantity).toHaveLength(60)
+  })
+
   it('treats a non-food input as an empty list', async () => {
     const { fn } = stub(ok({ items: [] }))
     expect(await openai(fn).parse('asdf', TRACKED)).toEqual([])
@@ -164,12 +174,23 @@ describe('provider failures', () => {
     }
   })
 
-  it('a 5xx, a 400, a timeout and a network error are AiFailedError and are not retried', async () => {
-    for (const r of [status(500), status(400), Object.assign(new Error('timed out'), { name: 'TimeoutError' }), new TypeError('fetch failed')]) {
+  it('a 5xx, a timeout and a network error are AiFailedError and are not retried', async () => {
+    for (const r of [status(500), Object.assign(new Error('timed out'), { name: 'TimeoutError' }), new TypeError('fetch failed')]) {
       const { fn, calls } = stub(r)
       await expect(openai(fn).parse(TEXT, TRACKED)).rejects.toBeInstanceOf(AiFailedError)
       expect(calls).toHaveLength(1)
     }
+  })
+
+  it('a 400 is retried once without JSON mode (a provider may not support it); two 400s fail', async () => {
+    const retried = stub(status(400), ok(answer))
+    expect(await openai(retried.fn).parse(TEXT, TRACKED)).toHaveLength(2)
+    expect(retried.calls).toHaveLength(2)
+    expect(JSON.parse(String(retried.calls[0]!.init.body)).response_format).toEqual({ type: 'json_object' })
+    expect(JSON.parse(String(retried.calls[1]!.init.body))).not.toHaveProperty('response_format')
+    const refused = stub(status(400), status(400))
+    await expect(openai(refused.fn).parse(TEXT, TRACKED)).rejects.toBeInstanceOf(AiFailedError)
+    expect(refused.calls).toHaveLength(2)
   })
 
   it('passes a timeout signal to fetch', async () => {

@@ -86,13 +86,21 @@ describe('service nutrition', () => {
 
   it('a date outside the window is a ValidationError, and one inside it is saved', async () => {
     const { s } = await makeService()
-    for (const date of [day(-366), day(3), '2093-01-01']) {
+    for (const date of [day(-367), day(4), '2093-01-01']) {
       await expect(s.saveNutritionEntry(entry({ date }))).rejects.toBeInstanceOf(ValidationError)
     }
     await s.saveNutritionEntry(entry({ date: day(-365) }))
     await s.saveNutritionEntry(entry({ date: day(2) }))
     expect(await s.listNutrition(day(-365), day(-365))).toHaveLength(1)
     expect(await s.listNutrition(day(2), day(2))).toHaveLength(1)
+  })
+
+  it('accepts one extra day on each side, so a user whose local day differs from UTC can still save', async () => {
+    const { s } = await makeService()
+    await s.saveNutritionEntry(entry({ date: day(-366) }))
+    await s.saveNutritionEntry(entry({ date: day(3) }))
+    await expect(s.saveNutritionEntry(entry({ date: day(-367) }))).rejects.toBeInstanceOf(ValidationError)
+    await expect(s.saveNutritionEntry(entry({ date: day(4) }))).rejects.toBeInstanceOf(ValidationError)
   })
 
   it('the 301st entry on a date is a ValidationError; replacing an existing one is still allowed', async () => {

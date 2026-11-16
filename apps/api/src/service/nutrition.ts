@@ -15,6 +15,7 @@ import { assertUuid, dec, isUuid, now, toNutritionEntry } from './mappers.js'
 
 const DAY_MS = 86_400_000
 const todayUtc = (): string => new Date().toISOString().slice(0, 10)
+const dayFromToday = (offset: number): string => new Date(Date.now() + offset * DAY_MS).toISOString().slice(0, 10)
 const decOrNull = (v: number | null): string | null => (v === null ? null : dec(v))
 
 /** Entries from `from` to `to` (inclusive, at most 366 days), by date then creation time. */
@@ -45,7 +46,9 @@ export async function listNutrition(db: Db, userId: string, from: string, to: st
 export async function saveNutritionEntry(db: Db, userId: string, input: NutritionEntryInput): Promise<NutritionEntry> {
   const parsed = nutritionEntryInputSchema.parse(input)
   const id = assertUuid(parsed.id ?? newId(), 'entry id')
-  if (!isNutritionDate(parsed.date, todayUtc())) {
+  // The client sends its local day, which can be a day either side of UTC: accept one extra day each
+  // way so a user near midnight (or far east or west) is never refused a day the app let them open.
+  if (![-1, 0, 1].some((o) => isNutritionDate(parsed.date, dayFromToday(o)))) {
     throw new ValidationError('date', 'Pick a date from the last year up to two days ahead')
   }
   const ts = now()

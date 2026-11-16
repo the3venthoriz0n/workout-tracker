@@ -1,6 +1,9 @@
 import { NUTRIENTS, NUTRITION_LIMITS, nutritionSettingsOf, nutritionSettingsSchema } from '@workout/shared'
 import type { NutrientKey, NutritionSettings } from '@workout/shared'
+import { useRef } from 'react'
+import { LoadError } from '@/components/load-error'
 import { NumberField } from '@/components/number-field'
+import { SkeletonRows } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { notifyError } from '@/lib/notify'
 import { listGroup } from '@/lib/styles'
@@ -12,15 +15,32 @@ import { useProfile, useUpdateProfile } from '@/repo/hooks'
  * least one nutrient stays on, so the last switch is disabled and says why.
  */
 export function NutritionGoals() {
-  const profile = useProfile().data
+  const query = useProfile()
   const update = useUpdateProfile()
-  if (!profile) return null
-  const settings = nutritionSettingsOf(profile)
+  // The latest choice while saves are in flight, so quick successive changes build on each other
+  // instead of on a cached profile that has not caught up yet (and so the screen answers at once)
+  const pending = useRef<NutritionSettings | null>(null)
+  const inFlight = useRef(0)
+  if (query.isError) return <LoadError what="your goals" onRetry={() => void query.refetch()} />
+  if (!query.data) return <SkeletonRows rows={3} />
+  const settings = pending.current ?? nutritionSettingsOf(query.data)
   const onlyOne = settings.tracked.length === 1
 
   // Always sent through the schema: canonical order, nothing unknown
-  const save = (next: NutritionSettings) =>
-    update.mutate({ nutrition: nutritionSettingsSchema.parse(next) }, { onError: (err) => notifyError(err, "Couldn't save your goals") })
+  function save(next: NutritionSettings) {
+    const parsed = nutritionSettingsSchema.parse(next)
+    pending.current = parsed
+    inFlight.current++
+    update.mutate(
+      { nutrition: parsed },
+      {
+        onError: (err) => notifyError(err, "Couldn't save your goals"),
+        onSettled: () => {
+          if (--inFlight.current === 0) pending.current = null
+        },
+      },
+    )
+  }
 
   function setTracked(key: NutrientKey, on: boolean) {
     save({ ...settings, tracked: on ? [...settings.tracked, key] : settings.tracked.filter((k) => k !== key) })

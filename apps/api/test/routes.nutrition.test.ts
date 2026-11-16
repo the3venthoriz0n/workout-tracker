@@ -164,7 +164,7 @@ describe('/nutrition/entries', () => {
 
   it('refuses a date outside the window, a bad body and a range over 366 days with 400', async () => {
     const id = newId()
-    for (const bad of [entry({ date: '2093-01-01' }), entry({ date: day(-366) }), entry({ calories: 10_001 }), entry({ source: 'robot' }), { ...entry(), name: undefined }]) {
+    for (const bad of [entry({ date: '2093-01-01' }), entry({ date: day(-367) }), entry({ calories: 10_001 }), entry({ source: 'robot' }), { ...entry(), name: undefined }]) {
       expect((await u.call('PUT', `/api/v1/nutrition/entries/${id}`, bad)).status).toBe(400)
     }
     expect((await u.call('GET', `/api/v1/nutrition/entries?from=${day(-400)}&to=${day()}`)).status).toBe(400)

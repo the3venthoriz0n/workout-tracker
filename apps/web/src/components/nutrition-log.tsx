@@ -40,11 +40,11 @@ function EntryRow({ entry, tracked }: { entry: NutritionEntry; tracked: Nutrient
   const onEdit = () => setEditing(true)
 
   return (
+    <>
     <li className="flex cursor-pointer flex-col py-1.5 pr-1.5 pl-4" onClick={tileClick(onEdit, confirming)}>
       <div className="flex items-center gap-2">
         <button
           type="button"
-          aria-label={`${entry.name} details`}
           className="flex min-h-12 min-w-0 flex-1 flex-col items-start justify-center gap-0.5 py-1 text-left"
           onClick={onEdit}
         >
@@ -70,7 +70,9 @@ function EntryRow({ entry, tracked }: { entry: NutritionEntry; tracked: Nutrient
           onConfirm={() => remove.mutate(entry.id, { onError: (err) => notifyError(err, "Couldn't delete the entry") })}
         />
       )}
-      <NutritionEntrySheet entry={entry} tracked={tracked} open={editing} onOpenChange={setEditing} />
     </li>
+    {/* Outside the <li>: a click inside the sheet would otherwise bubble up through React to the tile */}
+    <NutritionEntrySheet entry={entry} tracked={tracked} open={editing} onOpenChange={setEditing} />
+    </>
   )
 }

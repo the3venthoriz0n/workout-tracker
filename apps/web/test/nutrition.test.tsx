@@ -166,7 +166,7 @@ describe('Track', () => {
   })
 
   it.each([
-    ['the daily limit', () => new AiLimitError(), "You've used today's AI estimates. Try again tomorrow."],
+    ['the daily limit', () => new AiLimitError(), 'AI limit reached. Try again later.'],
     ['no provider', () => new AiUnavailableError(), "AI isn't set up on this server yet."],
     ['a failed read', () => new AiFailedError(), "Couldn't read that. Try describing it differently."],
     ['being offline', () => new OfflineError(), 'Needs a connection.'],
@@ -293,5 +293,75 @@ describe('Goals', () => {
     expect(screen.queryByRole('group', { name: /Protein/ })).toBeNull()
     expect(screen.queryByText(/protein/)).toBeNull()
     expect(entries[0]!.protein_g).toBe(32)
+  })
+})
+
+describe('review fixes', () => {
+  it('a failed save keeps the estimates: retrying saves only what failed, under the same id, without another parse', async () => {
+    const user = userEvent.setup()
+    const { repo, api } = await setup({ parse: async () => ({ items: [draft('Alpha', 1, 1), draft('Bravo', 2, 2), draft('Charlie', 3, 3)], remaining_today: 20 }) })
+    const real = api.saveNutritionEntry.getMockImplementation()!
+    let blip = true
+    api.saveNutritionEntry.mockImplementation(async (input) => {
+      if (input.name === 'Charlie' && blip) {
+        blip = false
+        throw new Error('blip')
+      }
+      return real(input)
+    })
+    renderApp(repo, '/nutrition', { signedIn: true })
+    await user.type(await screen.findByLabelText('What did you eat?'), 'three things')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    expect((await screen.findByRole('alert')).textContent).toBe("Couldn't save the estimates. Try again.")
+    const firstId = api.saveNutritionEntry.mock.calls.find((c) => c[0].name === 'Charlie')![0].id
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    expect(await screen.findByText('Charlie')).toBeTruthy()
+    expect(api.parseMeal).toHaveBeenCalledTimes(1)
+    expect(api.saveNutritionEntry).toHaveBeenCalledTimes(4)
+    expect(api.saveNutritionEntry.mock.calls.filter((c) => c[0].name === 'Charlie').map((c) => c[0].id)).toEqual([firstId, firstId])
+    expect(screen.getAllByText('Alpha')).toHaveLength(1)
+    expect((screen.getByLabelText('What did you eat?') as HTMLInputElement).value).toBe('')
+  })
+
+  it('clicking outside the edit sheet closes it and does not reopen it', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    const { repo } = await setup({ entries: [entryOf()] })
+    renderApp(repo, '/nutrition', { signedIn: true })
+    await user.click(await screen.findByRole('button', { name: 'Edit Chicken burrito' }))
+    await screen.findByRole('dialog')
+    await user.click(document.querySelector('[data-slot="sheet-overlay"]') as HTMLElement)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await new Promise((r) => setTimeout(r, 80))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('quick successive goal changes do not lose an update', async () => {
+    const user = userEvent.setup()
+    const { repo, api } = await setup()
+    const real = api.updateProfile.getMockImplementation()!
+    api.updateProfile.mockImplementation(async (patch) => {
+      await new Promise((r) => setTimeout(r, 60))
+      return real(patch)
+    })
+    renderApp(repo, '/nutrition?section=goals', { signedIn: true })
+    await user.click(await screen.findByRole('switch', { name: 'Track Carbs' }))
+    await user.click(screen.getByRole('switch', { name: 'Track Fat' }))
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Track Carbs' }).getAttribute('aria-checked')).toBe('true'))
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Track Fat' }).getAttribute('aria-checked')).toBe('true'))
+    expect(api.updateProfile.mock.calls.at(-1)![0]).toEqual({ nutrition: { tracked: ['calories', 'protein_g', 'carbs_g', 'fat_g'], goals: {} } })
+  })
+
+  it.each([['Track', '/nutrition'], ['Goals', '/nutrition?section=goals']])('%s shows a retry when the profile cannot be loaded', async (_n, path) => {
+    const { repo, api } = await setup()
+    api.getProfile.mockRejectedValue(new Error('down'))
+    renderApp(repo, path, { signedIn: true })
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Couldn't load/)
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+  })
+
+  it('a logged food is announced with its estimate mark and its numbers', async () => {
+    const { repo } = await setup({ entries: [entryOf()] })
+    renderApp(repo, '/nutrition', { signedIn: true })
+    expect(await screen.findByRole('button', { name: /Chicken burrito.*estimate.*680 kcal · 32 g protein/ })).toBeTruthy()
   })
 })
