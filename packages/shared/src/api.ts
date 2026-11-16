@@ -18,6 +18,7 @@ import {
   unitsSchema,
   workoutSessionSchema,
 } from './schemas.js'
+import { NUTRITION_LIMITS, nutritionEntryInputSchema, nutritionSettingsSchema } from './nutrition.js'
 
 // Request bodies for the REST API (spec section 9). Unknown keys are STRIPPED (zod default),
 // never echoed and never trusted: user_id, timestamps and the path's `:id` always win.
@@ -37,6 +38,12 @@ export const PatchProfileBody = z.object({
   weight_increment: stepAmount.optional(),
   default_rule: ruleInputSchema.optional(),
   display_name: displayNameSchema.optional(),
+  nutrition: nutritionSettingsSchema.optional(),
+})
+export const PutNutritionEntryBody = nutritionEntryInputSchema.omit({ id: true })
+/** The meal text the AI reads: trimmed, 1 to 500 characters. */
+export const ParseMealBody = z.object({
+  text: z.string().transform((t) => t.trim()).pipe(z.string().min(1).max(NUTRITION_LIMITS.text)),
 })
 export const AddItemBody = z.object({ exercise_id: idSchema, id: idSchema.optional() })
 export const PatchItemBody = planItemSchema

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { nutritionSettingsSchema } from './nutrition-settings.js'
 
 export const API_PREFIX = '/api/v1'
 
@@ -42,6 +43,8 @@ const base = {
   deleted_at: timestamp.nullable(),
 }
 const owned = { user_id: userId, ...base }
+/** Owner and sync columns, for schemas defined in other files. */
+export const ownedColumns = owned
 
 export const unitsSchema = z.enum(['lb', 'kg'])
 export const planTierSchema = z.enum(['free', 'pro'])
@@ -170,6 +173,8 @@ export const profileSchema = z.object({
   default_rule: ruleInputSchema.optional(),
   // Public name for community plans; required to publish.
   display_name: displayNameSchema.nullable().default(null),
+  // Which nutrients are tracked and their goals; absent means the defaults (calories and protein).
+  nutrition: nutritionSettingsSchema.optional(),
   ...base,
 })
 export type Profile = z.infer<typeof profileSchema>

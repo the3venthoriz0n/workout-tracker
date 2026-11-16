@@ -15,6 +15,7 @@ import type {
   SetLog,
   WorkoutSession,
 } from './schemas.js'
+import type { NutritionEntry } from './nutrition.js'
 import type { ExerciseProgression } from './rules.js'
 import type { ListingMeta, SharedListing, SharedSnapshot } from './community.js'
 import type { Effective } from './effective.js'
@@ -65,6 +66,8 @@ export type ExportData = {
   item_states: ItemState[]
   workout_sessions: WorkoutSession[]
   set_logs: SetLog[]
+  /** Absent in exports written before nutrition. */
+  nutrition_entries?: NutritionEntry[]
   /** Server exports only: the sign-in email. Never imported. */
   account?: ExportAccount
   /** Server exports only: listings, votes and downloads. Never imported. */
