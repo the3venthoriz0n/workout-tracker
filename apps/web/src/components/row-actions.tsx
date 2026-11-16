@@ -48,6 +48,7 @@ const COPY = {
     checking: 'Checking which exercises need this gear…',
     error: "Couldn't check which exercises need this gear. Some may depend on it.",
   },
+  plan: { checking: '', error: '' },
 } as const
 
 // Inline two-step confirmation shown inside the row (no second overlay). Fails closed:
@@ -63,7 +64,7 @@ export function DeleteConfirm({
   onCancel,
 }: {
   name: string
-  subject: 'exercise' | 'gear'
+  subject: 'exercise' | 'gear' | 'plan'
   status: 'checking' | 'error' | 'ready'
   impact: string
   pending: boolean

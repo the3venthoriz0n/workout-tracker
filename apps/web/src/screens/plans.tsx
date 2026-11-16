@@ -1,16 +1,19 @@
 import { LoadError } from '@/components/load-error'
-import { ChevronRight, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
+import { useState } from 'react'
 import type { Plan } from '@workout/shared'
 import { Link, useNavigate } from 'react-router'
 import { Screen } from '@/app/screen'
 import { AddButton } from '@/components/add-button'
 import { PlansToggle } from '@/components/plans-toggle'
+import { DeleteConfirm, RowActions, useRestoreFocus } from '@/components/row-actions'
+import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { notifyError } from '@/lib/notify'
 import { listGroup } from '@/lib/styles'
 import { cn } from '@/lib/utils'
-import { useCommunityPlan, usePlans, useSavePlan } from '@/repo/hooks'
+import { useCommunityPlan, useDeletePlan, usePlans, useSavePlan } from '@/repo/hooks'
 
 /**
  * "Based on X by Y · v1" for copies of community plans, plus "Update available" when the public
@@ -31,6 +34,111 @@ function SourceLine({ source }: { source: NonNullable<Plan['source']> }) {
         </span>
       )}
     </span>
+  )
+}
+
+// One plan: the name opens it; the pencil renames in place and the trash deletes after a confirm,
+// so neither needs a trip into the plan.
+function PlanRow({ plan }: { plan: Plan }) {
+  const save = useSavePlan()
+  const remove = useDeletePlan()
+  const [renaming, setRenaming] = useState(false)
+  const [name, setName] = useState(plan.name)
+  const [confirming, setConfirming] = useState(false)
+  const trashRef = useRestoreFocus(confirming)
+
+  function commit() {
+    const trimmed = name.trim()
+    if (!trimmed || trimmed === plan.name) {
+      setName(plan.name)
+      setRenaming(false)
+      return
+    }
+    save.mutate(
+      { id: plan.id, name: trimmed },
+      { onSuccess: () => setRenaming(false), onError: (e) => notifyError(e) },
+    )
+  }
+
+  return (
+    <li className="flex flex-col py-1.5 pr-1.5 pl-4">
+      <div className="flex items-center gap-1">
+        {renaming ? (
+          <form
+            className="flex min-w-0 flex-1 items-center gap-2 py-1"
+            onSubmit={(e) => {
+              e.preventDefault()
+              commit()
+            }}
+          >
+            <Input
+              aria-label={`Name for ${plan.name}`}
+              className="min-w-0 flex-1"
+              autoFocus
+              enterKeyHint="done"
+              autoComplete="off"
+              value={name}
+              onFocus={(e) => e.currentTarget.select()}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setName(plan.name)
+                  setRenaming(false)
+                }
+              }}
+            />
+            <Button type="submit" className="min-h-11" disabled={save.isPending}>
+              Save
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="min-h-11"
+              onClick={() => {
+                setName(plan.name)
+                setRenaming(false)
+              }}
+            >
+              Cancel
+            </Button>
+          </form>
+        ) : (
+          <>
+            <Link
+              to={`/plans/${plan.id}`}
+              className="flex min-h-12 min-w-0 flex-1 items-center py-2 text-[17px] font-semibold"
+            >
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="break-words">{plan.name}</span>
+                {plan.source && <SourceLine source={plan.source} />}
+              </span>
+            </Link>
+            {!confirming && (
+              <RowActions
+                trashRef={trashRef}
+                name={plan.name}
+                onEdit={() => {
+                  setName(plan.name)
+                  setRenaming(true)
+                }}
+                onDelete={() => setConfirming(true)}
+              />
+            )}
+          </>
+        )}
+      </div>
+      {confirming && (
+        <DeleteConfirm
+          name={plan.name}
+          subject="plan"
+          status="ready"
+          impact="Deletes this plan with its days and exercises. Past workouts keep their records."
+          pending={remove.isPending}
+          onConfirm={() => remove.mutate(plan.id, { onError: (e) => notifyError(e) })}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
+    </li>
   )
 }
 
@@ -71,18 +179,7 @@ export function PlansScreen() {
 
         <ul className={cn(listGroup, list.length === 0 && 'hidden')}>
           {list.map((plan) => (
-            <li key={plan.id} className="flex items-center gap-1 py-1.5 pr-3 pl-4">
-              <Link
-                to={`/plans/${plan.id}`}
-                className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-2 py-2 text-[17px] font-semibold"
-              >
-                <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="break-words">{plan.name}</span>
-                  {plan.source && <SourceLine source={plan.source} />}
-                </span>
-                <ChevronRight className="text-muted-foreground size-5 shrink-0" aria-hidden />
-              </Link>
-            </li>
+            <PlanRow key={plan.id} plan={plan} />
           ))}
         </ul>
       </div>
