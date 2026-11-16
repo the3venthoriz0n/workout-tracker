@@ -19,7 +19,11 @@ const repsRule: RuleInput = {
 }
 
 // Two items of Back Squat (Push and Legs) and one of Bench Press
-async function setup(withPlan = true, prepare?: (repo: LocalRepo, items: string[]) => Promise<void>) {
+async function setup(
+  withPlan = true,
+  prepare?: (repo: LocalRepo, items: string[]) => Promise<void>,
+  path = '/library?section=progression',
+) {
   const repo = new LocalRepo(new AppDb(`prog-${crypto.randomUUID()}`))
   await repo.init()
   const exercises = await repo.listExercises()
@@ -37,7 +41,7 @@ async function setup(withPlan = true, prepare?: (repo: LocalRepo, items: string[
     items.push((await repo.addPlanItem(legs.id, squat.id)).id)
   }
   await prepare?.(repo, items)
-  const router = createMemoryRouter(routes, { initialEntries: ['/progression'] })
+  const router = createMemoryRouter(routes, { initialEntries: [path] })
   render(
     <QueryClientProvider client={new QueryClient()}>
       <RepoProvider repo={repo}>
@@ -48,13 +52,19 @@ async function setup(withPlan = true, prepare?: (repo: LocalRepo, items: string[
   return { repo, planId, items, squat, bench }
 }
 
-const exerciseRow = (name: string) => screen.findByRole('listitem', { name })
+// An exercise's rule lives in its editor: open it from Library and expand Progression
+async function openProgression(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(await screen.findByRole('button', { name: `Edit ${name}` }))
+  const dialog = await screen.findByRole('dialog')
+  await user.click(await within(dialog).findByRole('button', { name: /^Progression/ }))
+  return dialog
+}
 const progressionOf = async (repo: LocalRepo, id: string) =>
   (await repo.listProgressionByExercise()).find((e) => e.exercise_id === id)!
 
-test('shows the title and the progression step with helper text', async () => {
+test('Library has a Progression section with the step and its helper text', async () => {
   await setup(false)
-  expect(await screen.findByRole('heading', { name: 'Progression' })).toBeTruthy()
+  expect((await screen.findByRole('tab', { name: 'Progression' })).getAttribute('aria-selected')).toBe('true')
   expect(await screen.findByLabelText('Progression step')).toBeTruthy()
   expect(
     screen.getByText(
@@ -131,34 +141,39 @@ test('defaults card rejects deload % of 0 and 101 and clears the rep ceiling to 
   await waitFor(async () => expect((await repo.getProfile()).default_rule?.rep_ceiling).toBeNull())
 })
 
-test('each exercise appears once with its effective rule, its source and how many items inherit', async () => {
-  await setup()
-  const rows = await screen.findAllByRole('listitem', { name: 'Back Squat' })
-  expect(rows).toHaveLength(1)
-  const squat = rows[0]!
-  expect(within(squat).getByText('+5 lb on success · deload 10% after 3 misses')).toBeTruthy()
-  expect(within(squat).getByText('Built-in')).toBeTruthy()
-  expect(within(squat).getByText('2 items inherit')).toBeTruthy()
-  // Exercises in no plan are listed too
-  expect(await exerciseRow('Deadlift')).toBeTruthy()
-  expect(within(await exerciseRow('Deadlift')).getByText('Not in any plan')).toBeTruthy()
+test('an exercise shows its effective rule, its source and how many items inherit', async () => {
+  const user = userEvent.setup()
+  await setup(true, undefined, '/library')
+  let dialog = await openProgression(user, 'Back Squat')
+  expect(within(dialog).getByText('+5 lb on success · deload 10% after 3 misses')).toBeTruthy()
+  expect(within(dialog).getByText('Built-in')).toBeTruthy()
+  expect(within(dialog).getByText(/2 items inherit/)).toBeTruthy()
+  await user.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  // Exercises in no plan say so too
+  dialog = await openProgression(user, 'Deadlift')
+  expect(within(dialog).getByText(/Not in any plan/)).toBeTruthy()
 })
 
 test('the app default shows as the source when set', async () => {
-  await setup(true, async (r) => {
-    await r.updateProfile({ default_rule: repsRule })
-  })
-  const squat = await exerciseRow('Back Squat')
-  expect(within(squat).getByText('App default')).toBeTruthy()
-  expect(within(squat).getByText('Adds 1 rep · up to 12 reps · deload 15% after 2 misses')).toBeTruthy()
+  const user = userEvent.setup()
+  await setup(
+    true,
+    async (r) => {
+      await r.updateProfile({ default_rule: repsRule })
+    },
+    '/library',
+  )
+  const dialog = await openProgression(user, 'Back Squat')
+  expect(within(dialog).getByText('App default')).toBeTruthy()
+  expect(within(dialog).getByText('Adds 1 rep · up to 12 reps · deload 15% after 2 misses')).toBeTruthy()
 })
 
 test('editing the exercise default sets it for inheriting items; Use app default clears it', async () => {
   const user = userEvent.setup()
-  const { repo, planId, items, squat: ex } = await setup()
-  const squat = await exerciseRow('Back Squat')
-  await user.click(within(squat).getByRole('button', { name: 'Edit default for Back Squat' }))
-  const limit = within(squat).getByLabelText('Fail streak limit')
+  const { repo, planId, items, squat: ex } = await setup(true, undefined, '/library')
+  const dialog = await openProgression(user, 'Back Squat')
+  const limit = within(dialog).getByLabelText('Fail streak limit')
   await user.clear(limit)
   await user.type(limit, '5{Enter}')
   await waitFor(async () => expect((await progressionOf(repo, ex.id)).source).toBe('exercise'))
@@ -167,36 +182,54 @@ test('editing the exercise default sets it for inheriting items; Use app default
   const item = (await repo.getPlan(planId))!.days[0]!.items.find((i) => i.id === items[0])!
   expect(item.ruleSource).toBe('exercise')
   expect(item.rule?.fail_streak_limit).toBe(5)
-  await waitFor(() => expect(within(squat).getByText('Exercise default')).toBeTruthy())
+  await waitFor(() => expect(within(dialog).getByText('Exercise default')).toBeTruthy())
 
-  await user.click(within(squat).getByRole('button', { name: 'Use app default for Back Squat' }))
+  await user.click(within(dialog).getByRole('button', { name: 'Use app default for Back Squat' }))
   await waitFor(async () => expect((await progressionOf(repo, ex.id)).source).toBe('builtin'))
-  await waitFor(() => expect(within(squat).getByText('Built-in')).toBeTruthy())
+  await waitFor(() => expect(within(dialog).getByText('Built-in')).toBeTruthy())
 })
 
-test('overriding items are listed under the exercise with plan · day and Use default', async () => {
+test('overriding items are listed in the exercise with plan · day and Use default', async () => {
   const user = userEvent.setup()
-  const { repo, items, squat: ex } = await setup(true, async (r, ids) => {
-    await r.setRule(ids[2]!, repsRule)
-  })
-  const squat = await exerciseRow('Back Squat')
-  expect(within(squat).getByText('1 item inherits')).toBeTruthy()
-  const overrides = within(squat).getByRole('list', { name: 'Overrides of Back Squat' })
+  const { repo, squat: ex } = await setup(
+    true,
+    async (r, ids) => {
+      await r.setRule(ids[2]!, repsRule)
+    },
+    '/library',
+  )
+  const dialog = await openProgression(user, 'Back Squat')
+  expect(within(dialog).getByText(/1 item inherits/)).toBeTruthy()
+  const overrides = within(dialog).getByRole('list', { name: 'Overrides of Back Squat' })
   expect(within(overrides).getByText('PPL · Legs')).toBeTruthy()
   expect(within(overrides).getByText('Adds 1 rep · up to 12 reps · deload 15% after 2 misses')).toBeTruthy()
   await user.click(within(overrides).getByRole('button', { name: 'Use default for Back Squat in PPL · Legs' }))
   await waitFor(async () => expect((await progressionOf(repo, ex.id)).overrides).toHaveLength(0))
-  void items
-  await waitFor(() => expect(within(squat).getByText('2 items inherit')).toBeTruthy())
-  expect(within(squat).queryByRole('list', { name: 'Overrides of Back Squat' })).toBeNull()
+  await waitFor(() => expect(within(dialog).getByText(/2 items inherit/)).toBeTruthy())
+  expect(within(dialog).queryByRole('list', { name: 'Overrides of Back Squat' })).toBeNull()
 })
 
 test('a no-progression override shows as such', async () => {
-  await setup(true, async (r, ids) => {
-    await r.setRule(ids[1]!, null)
-  })
-  const bench = await exerciseRow('Bench Press')
-  const overrides = within(bench).getByRole('list', { name: 'Overrides of Bench Press' })
+  const user = userEvent.setup()
+  await setup(
+    true,
+    async (r, ids) => {
+      await r.setRule(ids[1]!, null)
+    },
+    '/library',
+  )
+  const dialog = await openProgression(user, 'Bench Press')
+  const overrides = within(dialog).getByRole('list', { name: 'Overrides of Bench Press' })
   expect(within(overrides).getByText('No progression')).toBeTruthy()
-  expect(within(bench).getByText('No items inherit')).toBeTruthy()
+  expect(within(dialog).getByText(/No items inherit/)).toBeTruthy()
+})
+
+test('the Progress tab is a placeholder for nutrition tracking', async () => {
+  await setup(false, undefined, '/progress')
+  expect(await screen.findByText('Nutrition tracking is coming soon.')).toBeTruthy()
+})
+
+test('the old /progression path opens the Progression section of Library', async () => {
+  await setup(false, undefined, '/progression')
+  expect((await screen.findByRole('tab', { name: 'Progression' })).getAttribute('aria-selected')).toBe('true')
 })

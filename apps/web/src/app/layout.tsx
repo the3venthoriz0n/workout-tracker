@@ -8,7 +8,7 @@ const tabs = [
   { to: '/', label: 'Today', icon: CalendarCheck, end: true },
   { to: '/plans', label: 'Plans', icon: ClipboardList, end: false },
   { to: '/library', label: 'Library', icon: Dumbbell, end: false },
-  { to: '/progression', label: 'Progress', icon: TrendingUp, end: false },
+  { to: '/progress', label: 'Progress', icon: TrendingUp, end: false },
   { to: '/history', label: 'History', icon: History, end: false },
 ]
 

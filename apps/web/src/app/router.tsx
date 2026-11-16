@@ -1,4 +1,4 @@
-import { createBrowserRouter, type RouteObject } from 'react-router'
+import { Navigate, createBrowserRouter, type RouteObject } from 'react-router'
 import { CommunityScreen } from '@/screens/community'
 import { CommunityPlanScreen } from '@/screens/community-plan'
 import { HistoryScreen } from '@/screens/history'
@@ -6,7 +6,7 @@ import { HistoryDetailScreen } from '@/screens/history-detail'
 import { LibraryScreen } from '@/screens/library'
 import { PlanDetailScreen } from '@/screens/plan-detail'
 import { PlansScreen } from '@/screens/plans'
-import { ProgressionScreen } from '@/screens/progression'
+import { ProgressScreen } from '@/screens/progress'
 import { ResetPasswordScreen } from '@/screens/reset-password'
 import { SettingsScreen } from '@/screens/settings'
 import { TodayScreen } from '@/screens/today'
@@ -23,7 +23,9 @@ export const routes: RouteObject[] = [
       { path: '/plans/community/:id', element: <CommunityPlanScreen /> },
       { path: '/plans/:id', element: <PlanDetailScreen /> },
       { path: '/library', element: <LibraryScreen /> },
-      { path: '/progression', element: <ProgressionScreen /> },
+      { path: '/progress', element: <ProgressScreen /> },
+      // Progression settings moved into Library
+      { path: '/progression', element: <Navigate to="/library?section=progression" replace /> },
       { path: '/history', element: <HistoryScreen /> },
       { path: '/history/:id', element: <HistoryDetailScreen /> },
       { path: '/settings', element: <SettingsScreen /> },

@@ -55,8 +55,8 @@ test('shell renders the Library route with five tabs and a Settings gear in the 
   expect(screen.getByRole('heading', { name: 'Library' }).parentElement!.contains(gear)).toBe(true)
 })
 
-test('Progress sits after Library and highlights on /progression', async () => {
-  renderAt('/progression')
+test('Progress sits after Library and highlights on /progress', async () => {
+  renderAt('/progress')
   expect(
     (await screen.findByRole('link', { name: 'Progress' })).getAttribute('aria-current'),
   ).toBe('page')

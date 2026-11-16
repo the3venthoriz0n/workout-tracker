@@ -6,6 +6,7 @@ import { ExerciseSheet } from '@/components/exercise-sheet'
 import { GearSheet } from '@/components/gear-sheet'
 import { LibraryExercises } from '@/components/library-exercises'
 import { LibraryGear } from '@/components/library-gear'
+import { ProgressionSettings } from '@/screens/progression'
 import { segmentedItem, segmentedTrack } from '@/lib/styles'
 import { cn } from '@/lib/utils'
 import type { Exercise, Gear } from '@workout/shared'
@@ -15,11 +16,13 @@ type Editing = { kind: 'exercise'; item?: Exercise } | { kind: 'gear'; item?: Ge
 const SECTIONS = [
   { id: 'exercises', label: 'Exercises' },
   { id: 'gear', label: 'Gear' },
+  { id: 'progression', label: 'Progression' },
 ] as const
 
 export function LibraryScreen() {
   const [params, setParams] = useSearchParams()
-  const active = params.get('section') === 'gear' ? 'gear' : 'exercises'
+  const section = params.get('section')
+  const active = section === 'gear' ? 'gear' : section === 'progression' ? 'progression' : 'exercises'
 
   const [editing, setEditing] = useState<Editing>(null)
 
@@ -28,10 +31,12 @@ export function LibraryScreen() {
       <Screen
         title="Library"
         action={
+          active === 'progression' ? undefined : (
           <AddButton
             label={active === 'gear' ? 'Add gear' : 'Add exercise'}
             onClick={() => setEditing({ kind: active === 'gear' ? 'gear' : 'exercise' })}
           />
+          )
         }
       />
       <div role="tablist" aria-label="Library sections" className={cn(segmentedTrack, 'mx-4 mb-4')}>
@@ -46,8 +51,8 @@ export function LibraryScreen() {
             className={segmentedItem(active === id)}
             onClick={() => {
               const next = new URLSearchParams(params)
-              if (id === 'gear') next.set('section', 'gear')
-              else next.delete('section')
+              if (id === 'exercises') next.delete('section')
+              else next.set('section', id)
               setParams(next, { replace: true })
             }}
           >
@@ -58,6 +63,8 @@ export function LibraryScreen() {
       <div role="tabpanel" id="library-panel" tabIndex={-1} className="outline-none" aria-labelledby={`library-tab-${active}`}>
         {active === 'gear' ? (
           <LibraryGear onEdit={(item) => setEditing({ kind: 'gear', item })} />
+        ) : active === 'progression' ? (
+          <ProgressionSettings />
         ) : (
           <LibraryExercises
             onEdit={(item) => setEditing({ kind: 'exercise', item })}

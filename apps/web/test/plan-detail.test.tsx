@@ -333,7 +333,7 @@ test('add_weight rule editor explains progression step snapping, add_reps does n
   const row = await openItem('Bench Press')
   await user.click(within(row).getByRole('button', { name: 'Progression for Bench Press' }))
   expect(
-    await within(row).findByText('Steps snap to your 2.5 lb progression step (change it in the Progression tab).'),
+    await within(row).findByText('Steps snap to your 2.5 lb progression step (change it in Library, Progression).'),
   ).toBeTruthy()
   void item
   await user.selectOptions(within(row).getByLabelText('On success'), 'add_reps')

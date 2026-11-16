@@ -35,7 +35,7 @@ type FieldsProps = {
   rule: RuleInput
   onSave: (rule: RuleInput) => Promise<void>
   idPrefix: string
-  // Hint under the amount (it points at the Progression tab, so hide it on that tab)
+  // Hint under the amount (it points at Library, Progression, so hide it there)
   showStepHint?: boolean
 }
 
@@ -76,8 +76,8 @@ export function RuleFields({ rule, onSave, idPrefix, showStepHint = true }: Fiel
         />
         {showStepHint && rule.success_action === 'add_weight' && (
           <p className="text-muted-foreground col-span-2 -mt-1 text-sm">
-            Steps snap to your {formatWeight(step)} {units} progression step (change it in the
-            Progression tab).
+            Steps snap to your {formatWeight(step)} {units} progression step (change it in Library,
+            Progression).
           </p>
         )}
         <NumberField

@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { notifyError } from '@/lib/notify'
 import { responsiveSheet } from '@/lib/sheet-classes'
 import { cn } from '@/lib/utils'
+import { ExerciseProgression } from '@/components/exercise-progression'
 import { NumberField } from '@/components/number-field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -234,6 +235,9 @@ function ExerciseForm({
             </div>
           )}
         </div>
+
+        {/* Only an existing exercise has a rule of its own to edit; it saves as you change it */}
+        {exercise && <ExerciseProgression exerciseId={exercise.id} name={exercise.name} />}
       </div>
 
       <div className="bg-popover shrink-0 border-t px-5 py-4">
