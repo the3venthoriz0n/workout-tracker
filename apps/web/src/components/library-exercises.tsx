@@ -2,7 +2,6 @@ import { Plus, Video } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { DeleteConfirm, focusLibraryPanel, RowActions, tileClick, useRestoreFocus } from '@/components/row-actions'
@@ -15,7 +14,6 @@ import {
   useDeleteExercise,
   useExercises,
   useExerciseUsage,
-  useGear,
   useProfile,
   useSaveExercise,
 } from '@/repo/hooks'
@@ -29,10 +27,8 @@ export function LibraryExercises({
   onAdd?: () => void
 }) {
   const exercises = useExercises()
-  const gear = useGear()
   const units = useProfile().data?.units ?? 'lb'
 
-  const gearNames = new Map((gear.data ?? []).map((g) => [g.id, g.name]))
   const list = exercises.data ?? []
 
   return (
@@ -57,7 +53,6 @@ export function LibraryExercises({
             key={ex.id}
             exercise={ex}
             units={units}
-            gearNames={gearNames}
             onEdit={() => onEdit(ex)}
           />
         ))}
@@ -69,12 +64,10 @@ export function LibraryExercises({
 function ExerciseRow({
   exercise: ex,
   units,
-  gearNames,
   onEdit,
 }: {
   exercise: Exercise
   units: string
-  gearNames: Map<string, string>
   onEdit: () => void
 }) {
   const save = useSaveExercise()
@@ -83,8 +76,6 @@ function ExerciseRow({
   const usage = useExerciseUsage(ex.id, confirming)
   const trashRef = useRestoreFocus(confirming)
 
-  const gearLabel =
-    ex.required_gear_ids.map((id) => gearNames.get(id)).filter(Boolean).join(', ') || 'No gear'
   const status: 'checking' | 'error' | 'ready' = usage.isFetching
     ? 'checking'
     : usage.isSuccess
@@ -110,11 +101,9 @@ function ExerciseRow({
           <span className={ex.active ? 'text-[17px] font-semibold' : 'text-muted-foreground text-[17px] font-semibold'}>
             {ex.name}
           </span>
-          <span className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="bg-background">{gearLabel}</Badge>
-            <span className="text-muted-foreground text-sm tabular-nums">
-              {ex.default_sets}×{ex.default_reps} @ {formatWeight(ex.default_weight)} {units}
-            </span>
+          {/* The numbers are the point of the tile: sets × reps at the working weight */}
+          <span className={cn('text-base font-semibold tabular-nums', !ex.active && 'text-muted-foreground')}>
+            {ex.default_sets}×{ex.default_reps} @ {formatWeight(ex.default_weight)} {units}
           </span>
         </button>
         {ex.video_url && isHttpUrl(ex.video_url) && (
