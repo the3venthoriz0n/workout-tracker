@@ -269,6 +269,7 @@ async function insertRows(tx: Tx, userId: string, d: ExportData): Promise<void> 
           defaultReps: r.default_reps,
           defaultWeight: dec(r.default_weight),
           supportsAngle: r.supports_angle,
+          unit: r.unit,
           defaultRule: r.default_rule,
           ...sync(r),
         })),

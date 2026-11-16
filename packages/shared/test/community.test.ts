@@ -33,7 +33,7 @@ function gear(name: string): Gear {
 function exercise(name: string, over: Partial<Exercise> = {}): Exercise {
   return {
     id: id(), name, notes: 'SECRET NOTE', video_url: 'https://video.example/secret', required_gear_ids: [], active: true,
-    default_sets: 3, default_reps: 5, default_weight: 100, supports_angle: false, default_rule: null, user_id: U, ...sync, ...over,
+    default_sets: 3, default_reps: 5, default_weight: 100, supports_angle: false, unit: null, default_rule: null, user_id: U, ...sync, ...over,
   }
 }
 function item(ex: Exercise, over: Partial<PlanItemView> = {}): PlanItemView {
@@ -304,6 +304,17 @@ describe('planFromSnapshot', () => {
     ...over,
   })
 
+  it('an existing exercise kept in the other unit gets the adopted weights and rule in its own unit', () => {
+    const kgBench = exercise('Bench Press', { unit: 'kg', default_weight: 60 })
+    // The snapshot is in lb; the existing exercise is in kg, so the values land in kg
+    const out = planFromSnapshot(snap(), source, ctx({ exercises: [kgBench] }))
+    const bench = out.items.find((i) => i.exercise_id === kgBench.id)!
+    expect(bench.weight).toBe(60) // 135 lb is 61.2 kg, snapped to the exercise's 2.5 kg step
+    expect(out.rules.find((r) => r.plan_item_id === bench.id)?.success_amount).toBe(5)
+    // Exercises created by the copy follow the adopter's own unit
+    expect(out.newExercises.every((e) => e.unit === null)).toBe(true)
+  })
+
   it('reuses exercises and gear by case-insensitive name, creates the missing ones, never touches existing rows', () => {
     const barbell = gear('barbell')
     const myBench = exercise('BENCH PRESS', { supports_angle: false, default_weight: 50 })
@@ -452,5 +463,28 @@ describe('public client', () => {
     const extra = { items: [{ ...listing, owner_id: 'x' }], next_cursor: null }
     const page = await fetchCommunityList({}, { fetch: stub(200, extra).fetch })
     expect(page.items[0]).not.toHaveProperty('owner_id')
+  })
+})
+
+describe('publishing an exercise kept in the other unit', () => {
+  it('converts its weight and rule into the plan unit', () => {
+    const barbell = gear('barbell')
+    const kg = exercise('Kettlebell Swing', { unit: 'kg', default_weight: 24 })
+    const lb = exercise('Back Squat', { unit: null, default_weight: 225 })
+    const t = tree([
+      {
+        name: 'D',
+        items: [
+          item(kg, { effective: { sets: 3, baseReps: 10, baseWeight: 24, targetReps: 10, targetWeight: 24 }, rule: { ...defaultRule(2.5), success_amount: 5 } }),
+          item(lb, { effective: { sets: 3, baseReps: 5, baseWeight: 225, targetReps: 5, targetWeight: 225 }, rule: defaultRule(5) }),
+        ],
+      },
+    ])
+    const out = snapshotFromPlanTree(t, 'lb', [barbell])
+    const [swing, squat] = out.days[0]!.items
+    expect(swing!.weight).toBe(53) // 24 kg -> 52.9 lb, snapped to a whole pound
+    expect(swing!.rule?.success_amount).toBe(10) // 5 kg -> 11 lb, snapped to the lb step grid
+    expect(squat!.weight).toBe(225)
+    expect(out.units).toBe('lb')
   })
 })

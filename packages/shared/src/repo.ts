@@ -45,6 +45,8 @@ export type SessionDetail = WorkoutSession & {
     exercise_name: string
     video_url: string | null
     notes: string
+    /** The unit this exercise's weights are shown in (its own, else the app unit). */
+    unit: Units
     sets: SetLog[]
   }[]
 }

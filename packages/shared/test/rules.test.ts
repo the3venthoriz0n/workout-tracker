@@ -58,7 +58,7 @@ describe('groupProgressionByExercise', () => {
     const out = groupProgressionByExercise(
       [e('b', 'Bench', ex), e('a', 'Squat')],
       [row('i1', 'a', 'profile', prof), row('i2', 'a', 'item', item), row('i3', 'b', 'exercise', ex), row('i4', 'a', 'item', null)],
-      { default_rule: prof, weight_increment: 5 },
+      { units: 'lb', default_rule: prof, weight_increment: 5 },
     )
     expect(out.map((x) => x.exercise_name)).toEqual(['Bench', 'Squat'])
     expect(out[0]).toMatchObject({ exercise_id: 'b', rule: ex, source: 'exercise', overrides: [], inheriting: [{ item_id: 'i3' }] })

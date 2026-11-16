@@ -5,12 +5,14 @@ import {
   SessionInProgressError,
   compareSetLogs,
   effectiveValues,
+  exerciseRuleContext,
+  exerciseUnit,
   newId,
   planSessionSets,
   progress,
   setLogSchema,
 } from '@workout/shared'
-import type { FinishSummary, SessionDetail, SetLog, WorkoutSession } from '@workout/shared'
+import type { FinishSummary, SessionDetail, SetLog, Units, WorkoutSession } from '@workout/shared'
 import {
   exercise,
   itemState,
@@ -57,12 +59,15 @@ async function detailOf(tx: Tx, userId: string, session: WorkoutSession): Promis
           .from(exercise)
           .where(and(eq(exercise.userId, userId), inArray(exercise.id, exerciseIds)))
   const exercises = new Map(exerciseRows.map((r) => [r.id, toExercise(r)]))
+  const [prof] = await tx.select({ units: profile.units }).from(profile).where(eq(profile.userId, userId))
+  const appUnits: Units = prof?.units === 'kg' ? 'kg' : 'lb'
   const out: SessionDetail['exercises'] = []
   for (const [plan_item_id, sets] of groups) {
     const first = sets[0]
     if (!first) continue
     const ex = exercises.get(first.exercise_id)
     out.push({
+      unit: ex ? exerciseUnit(ex, appUnits) : appUnits,
       plan_item_id,
       exercise_id: first.exercise_id,
       exercise_name: first.exercise_name,
@@ -238,7 +243,6 @@ export async function finishSession(db: Db, userId: string, id: string): Promise
     const detail = await detailOf(tx, userId, toSession(row))
     const [prof] = await tx.select().from(profile).where(eq(profile.userId, userId))
     if (!prof) throw new NotFoundError('Profile')
-    const increment = num(prof.weightIncrement)
     const profileView = toProfile(prof)
     const ts = now()
     const summary: FinishSummary = []
@@ -279,7 +283,7 @@ export async function finishSession(db: Db, userId: string, id: string): Promise
         ruleOf(item, ex, profileView, ruleRow).rule,
         stateRow?.failStreak ?? 0,
         group.sets,
-        increment,
+        exerciseRuleContext(ex, profileView).increment,
       )
       // Spec §6 step 1: a skipped item changes nothing.
       if (result.outcome !== 'skipped') {

@@ -26,7 +26,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-import type { NutritionSettings, PlanSource, RuleInput } from '@workout/shared'
+import type { NutritionSettings, PlanSource, RuleInput, Units } from '@workout/shared'
 import { user } from './auth.js'
 import { sharedPlan } from './community.js'
 
@@ -92,6 +92,8 @@ export const exercise = pgTable(
     defaultReps: integer('default_reps').notNull(),
     defaultWeight: numeric('default_weight', { precision: 8, scale: 2 }).notNull(),
     supportsAngle: boolean('supports_angle').notNull().default(false),
+    // The unit this exercise's weights are in; null follows the profile's unit.
+    unit: text('unit').$type<Units>(),
     // Rule shape validated by the shared zod schema on every write; null = inherit the profile's.
     defaultRule: jsonb('default_rule').$type<RuleInput>(),
     ...syncColumns(),
