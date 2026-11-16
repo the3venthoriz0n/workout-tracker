@@ -1,7 +1,8 @@
 import type { SetLog } from '@workout/shared'
 import { CheckIcon, MinusIcon, PencilIcon, PlusIcon } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { NumberField } from '@/components/number-field'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatWeight } from '@/lib/format'
 import { tapHaptic } from '@/lib/haptics'
@@ -17,12 +18,18 @@ type Props = {
   onEdit: (patch: Patch) => Promise<boolean>
   /** In a superset block: the member's label (A1) and exercise name, shown on the row. */
   member?: { label: string; name: string }
+  /** Later sets of this exercise, not done, whose weight differs from this set's. */
+  restCount?: number
+  /** Copies this set's weight onto those later sets. */
+  onApplyToRest?: () => Promise<boolean>
+  /** Called when the editor opens, so the page can stop showing the first-use hint. */
+  onEditOpen?: () => void
 }
 
 const LONG_PRESS_MS = 500
 const MOVE_TOLERANCE_PX = 10
 
-export function SetRow({ set, unit, step = 5, onToggle, onEdit, member }: Props) {
+export function SetRow({ set, unit, step = 5, onToggle, onEdit, member, restCount = 0, onApplyToRest, onEditOpen }: Props) {
   const [editing, setEditing] = useState(false)
   const [focusReps, setFocusReps] = useState(false)
   const [note, setNote] = useState(set.note)
@@ -38,6 +45,10 @@ export function SetRow({ set, unit, step = 5, onToggle, onEdit, member }: Props)
     timer.current = null
   }
   useEffect(() => cancelPress, [])
+  useEffect(() => {
+    if (editing) onEditOpen?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing])
   useEffect(() => {
     if (!editing || !focusReps) return
     const el = document.getElementById(repsId) as HTMLInputElement | null
@@ -176,8 +187,16 @@ export function SetRow({ set, unit, step = 5, onToggle, onEdit, member }: Props)
       </div>
       {editing && (
         <div className="surface rounded-row mt-2 mb-1 flex flex-col gap-3 p-3.5">
-          <div className="grid grid-cols-2 gap-3">
+          {/* Each number sits between the two buttons that nudge it, so a thumb never leaves the field it is editing */}
+          <div className="flex items-end gap-2">
+            <StepButton
+              label="Less reps"
+              onClick={() => set.actual_reps > 0 && void onEdit({ actual_reps: set.actual_reps - 1 })}
+            >
+              <MinusIcon className="size-5" aria-hidden />
+            </StepButton>
             <NumberField
+              className="min-w-0 flex-1"
               label="Reps"
               id={repsId}
               kind="reps"
@@ -187,7 +206,19 @@ export function SetRow({ set, unit, step = 5, onToggle, onEdit, member }: Props)
                 return onEdit({ actual_reps: v })
               }}
             />
+            <StepButton label="More reps" onClick={() => void onEdit({ actual_reps: set.actual_reps + 1 })}>
+              <PlusIcon className="size-5" aria-hidden />
+            </StepButton>
+          </div>
+          <div className="flex items-end gap-2">
+            <StepButton
+              label={`Less weight by ${formatWeight(step)}`}
+              onClick={() => set.weight - step >= 0 && void onEdit({ weight: Number((set.weight - step).toFixed(2)) })}
+            >
+              −{formatWeight(step)}
+            </StepButton>
             <NumberField
+              className="min-w-0 flex-1"
               label="Weight"
               kind="weight"
               suffix={unit}
@@ -197,19 +228,18 @@ export function SetRow({ set, unit, step = 5, onToggle, onEdit, member }: Props)
                 return onEdit({ weight: v })
               }}
             />
+            <StepButton
+              label={`More weight by ${formatWeight(step)}`}
+              onClick={() => void onEdit({ weight: Number((set.weight + step).toFixed(2)) })}
+            >
+              +{formatWeight(step)}
+            </StepButton>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Stepper
-              label="reps"
-              onMinus={() => set.actual_reps > 0 && void onEdit({ actual_reps: set.actual_reps - 1 })}
-              onPlus={() => void onEdit({ actual_reps: set.actual_reps + 1 })}
-            />
-            <Stepper
-              label={`weight by ${formatWeight(step)}`}
-              onMinus={() => set.weight - step >= 0 && void onEdit({ weight: Number((set.weight - step).toFixed(2)) })}
-              onPlus={() => void onEdit({ weight: Number((set.weight + step).toFixed(2)) })}
-            />
-          </div>
+          {restCount > 0 && onApplyToRest && (
+            <Button variant="secondary" className="min-h-11" onClick={() => void onApplyToRest()}>
+              Use {formatWeight(set.weight)} {unit} for the other {restCount} {restCount === 1 ? 'set' : 'sets'}
+            </Button>
+          )}
           <Input
             aria-label={`Note for set ${set.set_no}`}
             placeholder="Note"
@@ -228,17 +258,16 @@ export function SetRow({ set, unit, step = 5, onToggle, onEdit, member }: Props)
   )
 }
 
-// Two thumb-sized buttons for the commonest correction: one more rep, or one progression step more
-function Stepper({ label, onMinus, onPlus }: { label: string; onMinus: () => void; onPlus: () => void }) {
-  const btn = 'bg-secondary text-secondary-foreground flex h-12 flex-1 items-center justify-center rounded-full'
+// A 48px round nudge button (the commonest correction: one more rep, or one progression step more)
+function StepButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
   return (
-    <div className="flex gap-2">
-      <button type="button" aria-label={`Less ${label}`} className={btn} onClick={onMinus}>
-        <MinusIcon className="size-5" aria-hidden />
-      </button>
-      <button type="button" aria-label={`More ${label}`} className={btn} onClick={onPlus}>
-        <PlusIcon className="size-5" aria-hidden />
-      </button>
-    </div>
+    <button
+      type="button"
+      aria-label={label}
+      className="bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_6%)] flex size-12 shrink-0 items-center justify-center rounded-full text-sm font-medium tabular-nums"
+      onClick={onClick}
+    >
+      {children}
+    </button>
   )
 }

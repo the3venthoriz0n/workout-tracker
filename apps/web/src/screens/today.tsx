@@ -1,11 +1,11 @@
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, CheckIcon, MinusIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { OfflineError, type SetLog } from '@workout/shared'
 import { toast } from 'sonner'
 import { Screen } from '@/app/screen'
-import { AngleChip, DayDot, Rail, SupersetLabel, nameWithAngle } from '@/components/plan-bits'
+import { AngleChip, DayDot, SupersetLabel, nameWithAngle } from '@/components/plan-bits'
 import { RestTimer } from '@/components/rest-timer'
 import { SetRow } from '@/components/set-row'
 import { fieldClass } from '@/components/ui/input'
@@ -219,6 +219,30 @@ function SessionNote({ session }: { session: SessionDetail }) {
 
 type SessionExercise = SessionDetail['exercises'][number]
 
+// Marks the exercise the lifter is on: a solid rail in the accent (active, so within the One Blue Rule).
+// Supersets always carry a quiet rail for the grouping; it turns accent when the block is current.
+function NowRail({ active, inGutter }: { active: boolean; inGutter?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'absolute w-[3px] rounded-full',
+        inGutter ? 'top-1 bottom-1 -left-3' : 'top-6 bottom-6 left-0',
+        active ? 'bg-brand' : 'bg-foreground/20',
+      )}
+    />
+  )
+}
+
+const EDIT_HINT_KEY = 'wt.editHintSeen'
+function readHintSeen() {
+  try {
+    return localStorage.getItem(EDIT_HINT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 function ExerciseHeading({ ex }: { ex: SessionExercise }) {
   return (
     <h2 className="text-xl leading-tight font-semibold tracking-[-0.015em]">
@@ -309,7 +333,10 @@ function ActiveSession({
     )
   }
 
-  const setRow = (s: SetLog, member?: { label: string; name: string }) => (
+  const setRow = (s: SetLog, siblings: SetLog[], member?: { label: string; name: string }) => {
+    // Later sets of the same exercise still to do: what "use this weight for the rest" would change
+    const rest = siblings.slice(siblings.indexOf(s) + 1).filter((x) => !x.done && x.weight !== s.weight)
+    return (
     <SetRow
       key={s.id}
       set={s}
@@ -323,14 +350,40 @@ function ActiveSession({
         return ok
       }}
       onEdit={(patch) => save(s.id, patch)}
+      restCount={rest.length}
+      onApplyToRest={async () => {
+        const results = await Promise.all(rest.map((x) => save(x.id, { weight: s.weight })))
+        return results.every(Boolean)
+      }}
+      onEditOpen={() => {
+        if (hintSeen) return
+        setHintSeen(true)
+        try {
+          localStorage.setItem(EDIT_HINT_KEY, '1')
+        } catch {
+          // The hint just shows again next time
+        }
+      }}
     />
-  )
+    )
+  }
 
   const blocks = sessionBlocks(session.exercises)
   const blockSets = (b: (typeof blocks)[number]) => (b.kind === 'exercise' ? b.exercise.sets : b.sets.map((x) => x.set))
   const blockDone = (b: (typeof blocks)[number]) => blockSets(b).every((x) => x.done)
   // The first exercise with a set still to do: the one the lifter is on
   const currentBlock = blocks.find((b) => !blockDone(b))
+  const currentKey = currentBlock ? (currentBlock.kind === 'exercise' ? currentBlock.exercise.plan_item_id : currentBlock.group) : null
+  const currentRef = useRef<HTMLElement>(null)
+  const lastKey = useRef(currentKey)
+  const [hintSeen, setHintSeen] = useState(readHintSeen)
+  // When finishing a block moves the lifter on, bring the next one into view (never on first render)
+  useEffect(() => {
+    if (lastKey.current === currentKey) return
+    lastKey.current = currentKey
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    currentRef.current?.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' })
+  }, [currentKey])
 
   return (
     <>
@@ -341,29 +394,32 @@ function ActiveSession({
       />
       <div className="flex flex-col gap-7 px-4">
         <SessionNote key={session.id} session={session} />
-        {doneCount === 0 && (
+        {(!hintSeen || doneCount === 0) && (
           <p className="text-muted-foreground -mt-4 text-sm">Tap a set when it's done. Hold a set to change its reps or weight.</p>
         )}
         {blocks.map((block) =>
           block.kind === 'exercise' ? (
             <section
               key={block.exercise.plan_item_id}
+              ref={block === currentBlock ? currentRef : undefined}
               aria-current={block === currentBlock ? 'step' : undefined}
-              className={cn('flex flex-col gap-2.5', blockDone(block) && 'opacity-60')}
+              className={cn('relative flex scroll-mt-28 flex-col gap-2.5', blockDone(block) && 'opacity-60')}
             >
+              {block === currentBlock && <NowRail active inGutter />}
               <ExerciseHeading ex={block.exercise} />
               <LastTime text={lastTime.get(block.exercise.exercise_id)} />
               <ExerciseExtras ex={block.exercise} />
-              <ul className="flex flex-col gap-2">{block.exercise.sets.map((s) => setRow(s))}</ul>
+              <ul className="flex flex-col gap-2">{block.exercise.sets.map((s) => setRow(s, block.exercise.sets))}</ul>
             </section>
           ) : (
             <section
               key={block.group}
               aria-label={`Superset ${block.letter}`}
+              ref={block === currentBlock ? currentRef : undefined}
               aria-current={block === currentBlock ? 'step' : undefined}
-              className={cn('surface relative -mx-2 flex flex-col gap-2.5 rounded-card p-2.5 pl-3.5', blockDone(block) && 'opacity-60')}
+              className={cn('surface relative -mx-2 flex scroll-mt-28 flex-col gap-2.5 rounded-card p-2.5 pl-3.5', blockDone(block) && 'opacity-60')}
             >
-              <Rail />
+              <NowRail active={block === currentBlock} />
               <p className="text-muted-foreground text-sm font-medium">Superset</p>
               {block.members.map((ex) => (
                 <div key={ex.plan_item_id} className="flex flex-col gap-1">
@@ -377,7 +433,11 @@ function ActiveSession({
               ))}
               <ul className="flex flex-col gap-2">
                 {block.sets.map(({ set, exercise }) =>
-                  setRow(set, { label: set.superset_label ?? '', name: exercise.exercise_name }),
+                  setRow(
+                    set,
+                    block.sets.filter((x) => x.exercise === exercise).map((x) => x.set),
+                    { label: set.superset_label ?? '', name: exercise.exercise_name },
+                  ),
                 )}
               </ul>
             </section>
