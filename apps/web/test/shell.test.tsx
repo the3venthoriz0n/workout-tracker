@@ -45,7 +45,7 @@ test('shell renders the Library route with five tabs and a Settings gear in the 
     </QueryClientProvider>,
   )
   expect(await screen.findByRole('heading', { name: 'Library' })).toBeTruthy()
-  for (const label of ['Today', 'Plans', 'Library', 'Progress', 'History']) {
+  for (const label of ['Today', 'Plans', 'Library', 'Nutrition', 'History']) {
     expect(screen.getByRole('link', { name: label })).toBeTruthy()
   }
   const nav = within(screen.getByRole('navigation', { name: 'Main' }))
@@ -55,17 +55,17 @@ test('shell renders the Library route with five tabs and a Settings gear in the 
   expect(screen.getByRole('heading', { name: 'Library' }).parentElement!.contains(gear)).toBe(true)
 })
 
-test('Progress sits after Library and highlights on /progress', async () => {
-  renderAt('/progress')
+test('Nutrition sits after Library and highlights on /nutrition', async () => {
+  renderAt('/nutrition')
   expect(
-    (await screen.findByRole('link', { name: 'Progress' })).getAttribute('aria-current'),
+    (await screen.findByRole('link', { name: 'Nutrition' })).getAttribute('aria-current'),
   ).toBe('page')
   const nav = within(screen.getByRole('navigation', { name: 'Main' }))
   expect(nav.getAllByRole('link').map((l) => l.textContent)).toEqual([
     'Today',
     'Plans',
     'Library',
-    'Progress',
+    'Nutrition',
     'History',
   ])
   expect(screen.getByRole('link', { name: 'Library' }).getAttribute('aria-current')).toBeNull()

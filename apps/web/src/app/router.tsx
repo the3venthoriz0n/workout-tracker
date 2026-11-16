@@ -6,7 +6,7 @@ import { HistoryDetailScreen } from '@/screens/history-detail'
 import { LibraryScreen } from '@/screens/library'
 import { PlanDetailScreen } from '@/screens/plan-detail'
 import { PlansScreen } from '@/screens/plans'
-import { ProgressScreen } from '@/screens/progress'
+import { NutritionScreen } from '@/screens/nutrition'
 import { ResetPasswordScreen } from '@/screens/reset-password'
 import { SettingsScreen } from '@/screens/settings'
 import { TodayScreen } from '@/screens/today'
@@ -23,7 +23,7 @@ export const routes: RouteObject[] = [
       { path: '/plans/community/:id', element: <CommunityPlanScreen /> },
       { path: '/plans/:id', element: <PlanDetailScreen /> },
       { path: '/library', element: <LibraryScreen /> },
-      { path: '/progress', element: <ProgressScreen /> },
+      { path: '/nutrition', element: <NutritionScreen /> },
       // Progression settings moved into Library
       { path: '/progression', element: <Navigate to="/library?section=progression" replace /> },
       { path: '/history', element: <HistoryScreen /> },

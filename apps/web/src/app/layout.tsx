@@ -1,4 +1,4 @@
-import { CalendarCheck, ClipboardList, Dumbbell, History, TrendingUp } from 'lucide-react'
+import { CalendarCheck, ClipboardList, Dumbbell, History, Salad } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
 import { Toaster } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
@@ -8,7 +8,7 @@ const tabs = [
   { to: '/', label: 'Today', icon: CalendarCheck, end: true },
   { to: '/plans', label: 'Plans', icon: ClipboardList, end: false },
   { to: '/library', label: 'Library', icon: Dumbbell, end: false },
-  { to: '/progress', label: 'Progress', icon: TrendingUp, end: false },
+  { to: '/nutrition', label: 'Nutrition', icon: Salad, end: false },
   { to: '/history', label: 'History', icon: History, end: false },
 ]
 

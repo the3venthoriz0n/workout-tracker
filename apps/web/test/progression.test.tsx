@@ -62,39 +62,42 @@ async function openProgression(user: ReturnType<typeof userEvent.setup>, name: s
 const progressionOf = async (repo: LocalRepo, id: string) =>
   (await repo.listProgressionByExercise()).find((e) => e.exercise_id === id)!
 
-test('Library has a Progression section with the step and its helper text', async () => {
+test('Library has a Progression section with one Default progression card and no separate step', async () => {
   await setup(false)
   expect((await screen.findByRole('tab', { name: 'Progression' })).getAttribute('aria-selected')).toBe('true')
-  expect(await screen.findByLabelText('Progression step')).toBeTruthy()
-  expect(
-    screen.getByText(
-      'The smallest weight change you can load. Progress steps and deloads snap to it.',
-    ),
-  ).toBeTruthy()
+  expect(await screen.findByText('Default progression')).toBeTruthy()
+  expect(screen.queryByLabelText('Progression step')).toBeNull()
+  expect(screen.getByText(/it adds is your progression step/)).toBeTruthy()
 })
 
-test('step rejects 0 (reverts) and persists a valid value', async () => {
+test('the Add amount is the progression step: rejects 0 and saves both together', async () => {
   const user = userEvent.setup()
   const { repo } = await setup(false)
-  const input = await screen.findByLabelText('Progression step')
+  const input = await screen.findByLabelText('Add (lb)')
   await user.clear(input)
-  await user.type(input, '0')
-  await user.tab()
-  expect(await screen.findByText('Progression step must be greater than 0.')).toBeTruthy()
-  expect((await repo.getProfile()).weight_increment).toBe(5)
+  await user.type(input, '0{Enter}')
   await waitFor(() => expect((input as HTMLInputElement).value).toBe('5'))
+  expect((await repo.getProfile()).weight_increment).toBe(5)
   await user.clear(input)
-  await user.type(input, '2,5')
-  await user.tab()
+  await user.type(input, '2,5{Enter}')
   await waitFor(async () => expect((await repo.getProfile()).weight_increment).toBe(2.5))
+  expect((await repo.getProfile()).default_rule?.success_amount).toBe(2.5)
 })
 
-test('app default card shows the effective default, persists edits and says it applies live', async () => {
+test('adding reps leaves the progression step as it was', async () => {
   const user = userEvent.setup()
   const { repo } = await setup(false)
-  const heading = await screen.findByText('App default rule')
+  await user.selectOptions(await screen.findByLabelText('On success'), 'add_reps')
+  await waitFor(async () => expect((await repo.getProfile()).default_rule?.success_action).toBe('add_reps'))
+  expect((await repo.getProfile()).weight_increment).toBe(5)
+})
+
+test('default progression shows the effective default, persists edits and says it applies live', async () => {
+  const user = userEvent.setup()
+  const { repo } = await setup(false)
+  const heading = await screen.findByText('Default progression')
   const card = within(heading.closest('[data-slot="card"]') as HTMLElement)
-  expect(card.getByText(/Used by every exercise without its own default/)).toBeTruthy()
+  expect(card.getByText(/Used by every exercise without its own rule/)).toBeTruthy()
   expect(screen.queryByText(/only affects plan items you add afterwards/)).toBeNull()
   expect((card.getByLabelText('Fail streak limit') as HTMLInputElement).value).toBe('3')
   expect((await repo.getProfile()).default_rule).toBeUndefined()
@@ -120,12 +123,12 @@ test('app default card shows the effective default, persists edits and says it a
   expect(card.queryByRole('switch')).toBeNull()
 })
 
-test('defaults card rejects deload % of 0 and 101 and clears the rep ceiling to null', async () => {
+test('default progression rejects deload % of 0 and 101 and clears the rep ceiling to null', async () => {
   const user = userEvent.setup()
   const { repo } = await setup(false, async (r) => {
     await r.updateProfile({ default_rule: repsRule })
   })
-  const heading = await screen.findByText('App default rule')
+  const heading = await screen.findByText('Default progression')
   const card = within(heading.closest('[data-slot="card"]') as HTMLElement)
   const deload = card.getByLabelText('Deload %') as HTMLInputElement
   for (const bad of ['0', '101']) {
@@ -224,8 +227,8 @@ test('a no-progression override shows as such', async () => {
   expect(within(dialog).getByText(/No items inherit/)).toBeTruthy()
 })
 
-test('the Progress tab is a placeholder for nutrition tracking', async () => {
-  await setup(false, undefined, '/progress')
+test('the Nutrition tab is a placeholder for nutrition tracking', async () => {
+  await setup(false, undefined, '/nutrition')
   expect(await screen.findByText('Nutrition tracking is coming soon.')).toBeTruthy()
 })
 

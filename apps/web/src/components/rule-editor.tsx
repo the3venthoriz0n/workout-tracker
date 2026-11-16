@@ -76,8 +76,8 @@ export function RuleFields({ rule, onSave, idPrefix, showStepHint = true }: Fiel
         />
         {showStepHint && rule.success_action === 'add_weight' && (
           <p className="text-muted-foreground col-span-2 -mt-1 text-sm">
-            Steps snap to your {formatWeight(step)} {units} progression step (change it in Library,
-            Progression).
+            Steps snap to your {formatWeight(step)} {units} progression step (set by the default progression in
+            Library, Progression).
           </p>
         )}
         <NumberField
