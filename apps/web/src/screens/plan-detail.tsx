@@ -260,13 +260,50 @@ export function PlanDetailScreen() {
         </div>
       </StickyBar>
       <h1 className="sr-only">{tree.name}</h1>
-      <InlineName
-        label="Plan name"
-        autoSelect={isNewPlan}
-        className="h-14 text-[26px] font-semibold tracking-[-0.025em] md:text-[26px]"
-        value={tree.name}
-        onCommit={(name) => savePlan.mutate({ id: tree.id, name }, { onError: (e) => notifyError(e) })}
-      />
+      <div className="flex items-center gap-1">
+        <InlineName
+          label="Plan name"
+          autoSelect={isNewPlan}
+          className="h-14 flex-1 text-[26px] font-semibold tracking-[-0.025em] md:text-[26px]"
+          value={tree.name}
+          onCommit={(name) => savePlan.mutate({ id: tree.id, name }, { onError: (e) => notifyError(e) })}
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-destructive focus-visible:text-destructive min-h-11 min-w-11"
+          aria-label="Delete plan"
+          aria-expanded={confirmPlan}
+          onClick={() => setConfirmPlan(true)}
+        >
+          <Trash2 className="size-5" aria-hidden />
+        </Button>
+      </div>
+
+      {confirmPlan && (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-muted-foreground w-full text-sm">
+            Deletes {tree.name} with its days and exercises. Past workouts keep their records.
+          </p>
+          <Button
+            variant="destructive"
+            className="min-h-11"
+            aria-label="Confirm delete plan"
+            disabled={removePlan.isPending}
+            onClick={() =>
+              removePlan.mutate(tree.id, {
+                onSuccess: () => navigate('/plans', { replace: true }),
+                onError: (e) => notifyError(e),
+              })
+            }
+          >
+            Confirm delete
+          </Button>
+          <Button variant="ghost" className="min-h-11" autoFocus onClick={() => setConfirmPlan(false)}>
+            Cancel
+          </Button>
+        </div>
+      )}
 
       {tree.days.length === 0 && (
         <p className="text-muted-foreground text-sm">No days yet. Add a day to start building.</p>
@@ -401,41 +438,6 @@ export function PlanDetailScreen() {
       >
         <Plus aria-hidden /> Add day
       </Button>
-
-      <div className="flex flex-wrap items-center gap-2 pt-2">
-        {confirmPlan ? (
-          <>
-            <Button
-              variant="destructive"
-              className="min-h-11"
-              aria-label="Confirm delete plan"
-              disabled={removePlan.isPending}
-              onClick={() =>
-                removePlan.mutate(tree.id, {
-                  onSuccess: () => navigate('/plans', { replace: true }),
-                  onError: (e) => notifyError(e),
-                })
-              }
-            >
-              Confirm delete
-            </Button>
-            <Button variant="ghost" className="min-h-11" autoFocus onClick={() => setConfirmPlan(false)}>
-              Cancel
-            </Button>
-            <p className="text-muted-foreground w-full text-sm">
-              Deletes {tree.name} with its days and exercises. Past workouts keep their records.
-            </p>
-          </>
-        ) : (
-          <Button
-            variant="ghost"
-            className="text-muted-foreground hover:text-destructive focus-visible:text-destructive min-h-11"
-            onClick={() => setConfirmPlan(true)}
-          >
-            <Trash2 aria-hidden /> Delete plan
-          </Button>
-        )}
-      </div>
 
       <ShareSheet tree={tree} open={sharing} onOpenChange={setSharing} />
       <ExercisePicker
