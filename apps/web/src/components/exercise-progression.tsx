@@ -8,9 +8,6 @@ import { notifyError } from '@/lib/notify'
 import { SOURCE_NAMES, summarizeRule } from '@/lib/rule-summary'
 import { useClearRule, useProfile, useProgressionByExercise, useSetExerciseRule } from '@/repo/hooks'
 
-const itemsInherit = (n: number) =>
-  n === 0 ? 'No items inherit' : n === 1 ? '1 item inherits' : `${n} items inherit`
-
 /**
  * An exercise's progression rule, inside its editor: where the rule comes from, the rule itself,
  * and the plan items that override it. Changes save as you make them (they do not wait for Save).
@@ -25,13 +22,12 @@ export function ExerciseProgression({ exerciseId, name }: { exerciseId: string; 
   const row = rows?.find((r) => r.exercise_id === exerciseId)
 
   if (isPending || !row) return <SkeletonRows rows={1} />
-  const used = row.inheriting.length + row.overrides.length
 
   return (
     <section aria-label={`Progression for ${name}`}>
       <Disclosure
         id="ex-progression"
-        title="Progression"
+        title="Progression override"
         summary={
           <>
             <span>{SOURCE_NAMES[row.source]}</span> · <span>{summarizeRule(row.rule, units)}</span>
@@ -43,8 +39,7 @@ export function ExerciseProgression({ exerciseId, name }: { exerciseId: string; 
       <p className="text-muted-foreground text-sm">
         {row.source === 'exercise'
           ? `Default for every ${name} item without its own override.`
-          : `Uses the ${row.source === 'profile' ? 'app' : 'built-in'} default. Changing a value gives ${name} its own default.`}{' '}
-        {used === 0 ? 'Not in any plan.' : `${itemsInherit(row.inheriting.length)}.`} Saves as you change it.
+          : `Uses the ${row.source === 'profile' ? 'app' : 'built-in'} default. Changing a value gives ${name} its own default.`}
       </p>
       <RuleFields
         rule={row.rule}

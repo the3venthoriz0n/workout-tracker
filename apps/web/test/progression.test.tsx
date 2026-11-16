@@ -144,18 +144,14 @@ test('default progression rejects deload % of 0 and 101 and clears the rep ceili
   await waitFor(async () => expect((await repo.getProfile()).default_rule?.rep_ceiling).toBeNull())
 })
 
-test('an exercise shows its effective rule, its source and how many items inherit', async () => {
+test('an exercise shows its effective rule and its source', async () => {
   const user = userEvent.setup()
   await setup(true, undefined, '/library')
-  let dialog = await openProgression(user, 'Back Squat')
+  const dialog = await openProgression(user, 'Back Squat')
   expect(within(dialog).getByText('+5 lb on success · deload 10% after 3 misses')).toBeTruthy()
   expect(within(dialog).getByText('Built-in')).toBeTruthy()
-  expect(within(dialog).getByText(/2 items inherit/)).toBeTruthy()
   await user.keyboard('{Escape}')
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-  // Exercises in no plan say so too
-  dialog = await openProgression(user, 'Deadlift')
-  expect(within(dialog).getByText(/Not in any plan/)).toBeTruthy()
 })
 
 test('the app default shows as the source when set', async () => {
@@ -202,13 +198,11 @@ test('overriding items are listed in the exercise with plan · day and Use defau
     '/library',
   )
   const dialog = await openProgression(user, 'Back Squat')
-  expect(within(dialog).getByText(/1 item inherits/)).toBeTruthy()
   const overrides = within(dialog).getByRole('list', { name: 'Overrides of Back Squat' })
   expect(within(overrides).getByText('PPL · Legs')).toBeTruthy()
   expect(within(overrides).getByText('Adds 1 rep · up to 12 reps · deload 15% after 2 misses')).toBeTruthy()
   await user.click(within(overrides).getByRole('button', { name: 'Use default for Back Squat in PPL · Legs' }))
   await waitFor(async () => expect((await progressionOf(repo, ex.id)).overrides).toHaveLength(0))
-  await waitFor(() => expect(within(dialog).getByText(/2 items inherit/)).toBeTruthy())
   expect(within(dialog).queryByRole('list', { name: 'Overrides of Back Squat' })).toBeNull()
 })
 
@@ -224,7 +218,6 @@ test('a no-progression override shows as such', async () => {
   const dialog = await openProgression(user, 'Bench Press')
   const overrides = within(dialog).getByRole('list', { name: 'Overrides of Bench Press' })
   expect(within(overrides).getByText('No progression')).toBeTruthy()
-  expect(within(dialog).getByText(/No items inherit/)).toBeTruthy()
 })
 
 test('the Nutrition tab is a placeholder for nutrition tracking', async () => {

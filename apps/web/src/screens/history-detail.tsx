@@ -14,6 +14,8 @@ import { SkeletonRows } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDate, formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
+import { useHold } from '@/lib/use-hold'
+import { cn } from '@/lib/utils'
 import { useProfile, useSession, useUpdateSessionNote, useUpdateSet } from '@/repo/hooks'
 
 export function HistoryDetailScreen() {
@@ -27,7 +29,7 @@ function HistoryDetailBody({ id }: { id: string }) {
   const updateSet = useUpdateSet()
   const updateNote = useUpdateSessionNote()
   const dayColors = useDayColors()
-  const [editMode, setEditMode] = useState(false)
+  const [noteOpen, setNoteOpen] = useState(false)
   const [openSet, setOpenSet] = useState<string | null>(null)
   const [noteDraft, setNoteDraft] = useState<string | null>(null)
 
@@ -81,7 +83,7 @@ function HistoryDetailBody({ id }: { id: string }) {
 
   // Only finished workouts are editable here; the Today screen handles the active one
   const editable = session.completed_at !== null
-  const editing = editable && editMode
+  const editing = editable
 
   function saveNote() {
     if (!session || noteDraft === null) return
@@ -101,43 +103,17 @@ function HistoryDetailBody({ id }: { id: string }) {
   const units = profile.units
   // label: the superset label (A1) when the line sits in a superset block
   const setLine = (s: SetLog, exerciseName: string, label?: string | null) => (
-    <li key={s.id} className="px-4 py-1">
-      <div className="flex min-h-11 items-center gap-2">
-        <span className={s.done ? 'flex-1 tabular-nums' : 'text-muted-foreground flex-1 tabular-nums'}>
-          {label && (
-            <>
-              <span className="font-semibold">{label}</span>{' '}
-              <span className="text-muted-foreground">{exerciseName}</span>{' '}
-            </>
-          )}
-          {s.set_no}. {s.actual_reps} × {formatWeight(s.weight)} {units}
-          {!s.done && ' · skipped'}
-          {s.done && s.amrap && (
-            <>
-              {' · '}
-              <span className="font-semibold">
-                {s.actual_reps > s.target_reps ? `AMRAP +${s.actual_reps - s.target_reps}` : 'AMRAP'}
-              </span>
-            </>
-          )}
-        </span>
-        {editing && (
-          <button
-            type="button"
-            aria-label={`Edit set ${s.set_no} of ${exerciseName}`}
-            aria-expanded={openSet === s.id}
-            className="text-muted-foreground hover:bg-accent hover:text-foreground flex min-h-11 min-w-11 items-center justify-center rounded-full aria-expanded:bg-accent"
-            onClick={() => setOpenSet(openSet === s.id ? null : s.id)}
-          >
-            <PencilIcon className="size-4" aria-hidden />
-          </button>
-        )}
-      </div>
-      {s.note && <p className="text-muted-foreground pb-1 text-sm">{s.note}</p>}
-      {editing && openSet === s.id && (
-        <HistorySetEditor set={s} unit={units} onSave={(patch) => saveSet(s.id, patch)} />
-      )}
-    </li>
+    <HistorySetLine
+      key={s.id}
+      set={s}
+      exerciseName={exerciseName}
+      label={label}
+      units={units}
+      editable={editing}
+      open={openSet === s.id}
+      onToggle={() => setOpenSet((cur) => (cur === s.id ? null : s.id))}
+      onSave={(patch) => saveSet(s.id, patch)}
+    />
   )
 
   return (
@@ -147,25 +123,10 @@ function HistoryDetailBody({ id }: { id: string }) {
         title={formatDate(session.completed_at ?? session.started_at)}
         note={`${session.plan_name} · ${session.day_name}`}
         noteAccent={dayColors.get(session.plan_day_id)}
-        action={
-          editable && (
-            <Button
-              variant={editMode ? 'default' : 'outline'}
-              className="min-h-11"
-              aria-pressed={editMode}
-              onClick={() => {
-                setEditMode((v) => !v)
-                setOpenSet(null)
-              }}
-            >
-              Edit workout
-            </Button>
-          )
-        }
       />
       <div className="flex flex-col gap-6 px-4 pb-6">
-        {editing && (
-          <p className="text-muted-foreground text-sm">
+        {editing && openSet !== null && (
+          <p role="status" className="text-muted-foreground text-sm">
             Editing a past workout doesn't change your plan targets or progression.
           </p>
         )}
@@ -203,13 +164,18 @@ function HistoryDetailBody({ id }: { id: string }) {
             </section>
           ),
         )}
-        {editing ? (
+        {editing && session.note === '' && !noteOpen ? (
+          <Button variant="ghost" className="text-muted-foreground -ml-4 min-h-11 self-start" onClick={() => setNoteOpen(true)}>
+            Add a note
+          </Button>
+        ) : editing ? (
           <section className="flex flex-col gap-1.5">
             <label htmlFor="session-note" className="text-muted-foreground text-sm">
               Note
             </label>
             <Textarea
               id="session-note"
+              autoFocus={noteOpen && session.note === ''}
               value={noteDraft ?? session.note}
               onChange={(e) => setNoteDraft(e.target.value)}
               onBlur={saveNote}
@@ -225,5 +191,71 @@ function HistoryDetailBody({ id }: { id: string }) {
         )}
       </div>
     </div>
+  )
+}
+
+type SetPatch = Parameters<Parameters<typeof HistorySetEditor>[0]['onSave']>[0]
+
+// One logged set. On a finished workout it carries a pencil, and holding the line opens or closes its
+// editor, the same as the sets on Today.
+function HistorySetLine({
+  set: s,
+  exerciseName,
+  label,
+  units,
+  editable,
+  open,
+  onToggle,
+  onSave,
+}: {
+  set: SetLog
+  exerciseName: string
+  label?: string | null
+  units: string
+  editable: boolean
+  open: boolean
+  onToggle: () => void
+  onSave: (patch: SetPatch) => Promise<boolean>
+}) {
+  const hold = useHold(onToggle)
+  return (
+    <li className="px-4 py-1">
+      <div className="flex min-h-11 items-center gap-2">
+        <span
+          className={cn('flex-1 tabular-nums', !s.done && 'text-muted-foreground', editable && 'select-none')}
+          {...(editable ? hold : {})}
+        >
+          {label && (
+            <>
+              <span className="font-semibold">{label}</span>{' '}
+              <span className="text-muted-foreground">{exerciseName}</span>{' '}
+            </>
+          )}
+          {s.set_no}. {s.actual_reps} × {formatWeight(s.weight)} {units}
+          {!s.done && ' · skipped'}
+          {s.done && s.amrap && (
+            <>
+              {' · '}
+              <span className="font-semibold">
+                {s.actual_reps > s.target_reps ? `AMRAP +${s.actual_reps - s.target_reps}` : 'AMRAP'}
+              </span>
+            </>
+          )}
+        </span>
+        {editable && (
+          <button
+            type="button"
+            aria-label={`Edit set ${s.set_no} of ${exerciseName}`}
+            aria-expanded={open}
+            className="text-muted-foreground hover:bg-accent hover:text-foreground flex min-h-11 min-w-11 items-center justify-center rounded-full aria-expanded:bg-accent"
+            onClick={onToggle}
+          >
+            <PencilIcon className="size-4" aria-hidden />
+          </button>
+        )}
+      </div>
+      {s.note && <p className="text-muted-foreground pb-1 text-sm">{s.note}</p>}
+      {editable && open && <HistorySetEditor set={s} unit={units} onSave={onSave} />}
+    </li>
   )
 }

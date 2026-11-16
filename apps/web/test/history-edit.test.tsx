@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -10,7 +10,10 @@ import { AppDb } from '../src/repo/db'
 import { LocalRepo } from '../src/repo/local-repo'
 import { RepoProvider } from '../src/repo/provider'
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 function renderAt(repo: LocalRepo, path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
@@ -39,23 +42,22 @@ async function setup(finish = true) {
 }
 
 async function openEditor(n: number, exName: string) {
-  await userEvent.click(await screen.findByRole('button', { name: 'Edit workout' }))
-  await userEvent.click(screen.getByRole('button', { name: `Edit set ${n} of ${exName}` }))
+  await userEvent.click(await screen.findByRole('button', { name: `Edit set ${n} of ${exName}` }))
 }
 
-test('helper line and set edit controls only show in edit mode', async () => {
+test('finished workouts have a pencil on every set and no Edit workout button; the helper line shows only while an editor is open', async () => {
   const { repo, ex, session } = await setup()
   renderAt(repo, `/history/${session.id}`)
-  const edit = await screen.findByRole('button', { name: 'Edit workout' })
-  expect(edit.className).toContain('min-h-11')
+  const pencil = await screen.findByRole('button', { name: `Edit set 1 of ${ex.name}` })
+  expect(screen.queryByRole('button', { name: 'Edit workout' })).toBeNull()
+  expect(screen.getAllByRole('button', { name: /^Edit set/ })).toHaveLength(2)
   expect(screen.queryByText(/doesn't change your plan targets/)).toBeNull()
-  expect(screen.queryByRole('button', { name: /Edit set/ })).toBeNull()
-  await userEvent.click(edit)
+  await userEvent.click(pencil)
   expect(screen.getByText(/doesn't change your plan targets or progression/)).toBeTruthy()
-  expect(screen.getByRole('button', { name: `Edit set 1 of ${ex.name}` })).toBeTruthy()
-  await userEvent.click(screen.getByRole('button', { name: 'Edit workout' }))
+  expect(screen.getByLabelText('Reps')).toBeTruthy()
+  await userEvent.click(pencil)
+  expect(screen.queryByLabelText('Reps')).toBeNull()
   expect(screen.queryByText(/doesn't change your plan targets/)).toBeNull()
-  expect(screen.queryByRole('button', { name: /Edit set/ })).toBeNull()
 })
 
 test('edit reps and weight persist, including zero', async () => {
@@ -107,7 +109,6 @@ test('toggling done and skipped updates the display and the list count', async (
   await waitFor(() => expect(toggle.getAttribute('aria-pressed')).toBe('true'))
   expect(screen.queryByText(/skipped/)).toBeNull()
   expect((await repo.getSession(session.id))!.exercises[0]!.sets[1]!.done).toBe(true)
-  await userEvent.click(screen.getByRole('button', { name: 'Edit workout' }))
   await router.navigate('/history')
   expect(await screen.findByText('2 sets done')).toBeTruthy()
 })
@@ -131,12 +132,13 @@ test('edit a set note and the session note', async () => {
   await waitFor(async () => {
     expect((await repo.getSession(session.id))!.exercises[0]!.sets[0]!.note).toBe('tweaky elbow')
   })
+  // The session note starts as a quiet 'Add a note' line
+  await userEvent.click(screen.getByRole('button', { name: 'Add a note' }))
   const sessionNote = screen.getByRole('textbox', { name: 'Note' })
   await userEvent.type(sessionNote, 'good day')
   await userEvent.tab()
   await waitFor(async () => expect((await repo.getSession(session.id))!.note).toBe('good day'))
-  await userEvent.click(screen.getByRole('button', { name: 'Edit workout' }))
-  expect(await screen.findByText('good day')).toBeTruthy()
+  expect((screen.getByRole('textbox', { name: 'Note' }) as HTMLTextAreaElement).value).toBe('good day')
 })
 
 test('a failing save reverts and toasts', async () => {
@@ -171,22 +173,33 @@ test('names stay snapshotted after renaming the exercise', async () => {
   expect(screen.queryByText('Renamed Lift')).toBeNull()
 })
 
-test('an in-progress session has no Edit button', async () => {
+test('an in-progress session has no edit controls', async () => {
   const { repo, session } = await setup(false)
   renderAt(repo, `/history/${session.id}`)
   await screen.findByText('Plan · Day')
   expect(screen.queryByRole('button', { name: 'Edit workout' })).toBeNull()
+  expect(screen.queryByRole('button', { name: /^Edit set/ })).toBeNull()
 })
 
-test('leaving edit mode closes an open editor and hides the controls', async () => {
+test('holding a set line opens its editor and holding again closes it; a quick press does nothing', async () => {
   const { repo, ex, session } = await setup()
   renderAt(repo, `/history/${session.id}`)
-  await openEditor(1, ex.name)
-  expect(screen.getByLabelText('Reps')).toBeTruthy()
-  await userEvent.click(screen.getByRole('button', { name: 'Edit workout' }))
+  await screen.findByRole('button', { name: `Edit set 1 of ${ex.name}` })
+  const line = () => screen.getByText(/^1\. 5 × 100 lb/)
+  const hold = (ms: number) => {
+    vi.useFakeTimers()
+    fireEvent.pointerDown(line(), { clientX: 10, clientY: 10, button: 0 })
+    act(() => {
+      vi.advanceTimersByTime(ms)
+    })
+    vi.useRealTimers()
+    fireEvent.pointerUp(line())
+  }
+  hold(200)
   expect(screen.queryByLabelText('Reps')).toBeNull()
-  expect(screen.queryByRole('button', { name: /Edit set/ })).toBeNull()
-  await userEvent.click(screen.getByRole('button', { name: 'Edit workout' }))
+  hold(500)
+  expect(screen.getByLabelText('Reps')).toBeTruthy()
+  hold(500)
   expect(screen.queryByLabelText('Reps')).toBeNull()
 })
 
@@ -205,15 +218,4 @@ test('a trailing space in the set note is trimmed in the field', async () => {
   await userEvent.type(note, 'tight ')
   await userEvent.tab()
   await waitFor(() => expect(note.value).toBe('tight'))
-})
-
-test('the Edit button visibly changes state', async () => {
-  const { repo, session } = await setup()
-  renderAt(repo, `/history/${session.id}`)
-  const btn = await screen.findByRole('button', { name: 'Edit workout' })
-  const before = btn.className
-  expect(btn.getAttribute('aria-pressed')).toBe('false')
-  await userEvent.click(btn)
-  expect(btn.getAttribute('aria-pressed')).toBe('true')
-  expect(btn.className).not.toBe(before)
 })
