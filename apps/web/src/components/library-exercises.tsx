@@ -101,8 +101,8 @@ function ExerciseRow({
           <span className={ex.active ? 'text-[17px] font-semibold' : 'text-muted-foreground text-[17px] font-semibold'}>
             {ex.name}
           </span>
-          {/* The numbers are the point of the tile: sets × reps at the working weight */}
-          <span className={cn('text-base font-semibold tabular-nums', !ex.active && 'text-muted-foreground')}>
+          {/* A subheading under the name, like the exercise count on a gear tile */}
+          <span className="text-muted-foreground text-sm font-normal tabular-nums">
             {ex.default_sets}×{ex.default_reps} @ {formatWeight(ex.default_weight)} {units}
           </span>
         </button>
