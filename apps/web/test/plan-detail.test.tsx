@@ -39,8 +39,11 @@ test('builds a plan through the UI and overrides reps with fallback to the defau
   const { repo, plan, view } = await setup('/plans')
   void plan
   view()
-  await user.type(await screen.findByLabelText('New plan name'), 'Fresh{Enter}')
-  await user.click(await screen.findByRole('link', { name: /Fresh/ }))
+  await user.click(await screen.findByRole('button', { name: 'Add plan' }))
+  const nameInput = await screen.findByLabelText('Plan name')
+  await waitFor(() => expect(document.activeElement).toBe(nameInput))
+  await user.keyboard('Fresh{Enter}')
+  await waitFor(() => expect((nameInput as HTMLInputElement).value).toBe('Fresh'))
   await user.click(await screen.findByRole('button', { name: 'Add day' }))
   await screen.findByLabelText('Day name')
   await user.click(screen.getByRole('button', { name: /Add exercise to Day A/ }))

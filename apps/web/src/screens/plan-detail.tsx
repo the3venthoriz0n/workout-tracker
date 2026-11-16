@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronLeft, ChevronUp, Link2, Plus, Share, Trash2, Unlink } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { SettingsLink, StickyBar, headerIconButton } from '@/app/screen'
 import {
   DayColorButton,
@@ -35,11 +35,14 @@ function InlineName({
   label,
   className,
   onCommit,
+  autoSelect,
 }: {
   value: string
   label: string
   className?: string
   onCommit: (name: string) => void
+  /** Focus on arrival with the text selected, so a new plan can be named by typing. */
+  autoSelect?: boolean
 }) {
   const [text, setText] = useState(value)
   const [seen, setSeen] = useState(value)
@@ -60,6 +63,8 @@ function InlineName({
     <Input
       className={className}
       aria-label={label}
+      autoFocus={autoSelect}
+      onFocus={(e) => autoSelect && e.currentTarget.select()}
       value={text}
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}
@@ -81,6 +86,8 @@ export function PlanDetailScreen() {
   const removeDay = useDeletePlanDay()
   const removePlan = useDeletePlan()
   const navigate = useNavigate()
+  // Arriving from Add plan: the name is focused and selected
+  const isNewPlan = (useLocation().state as { newPlan?: boolean } | null)?.newPlan === true
   const [confirmPlan, setConfirmPlan] = useState(false)
   const moveDay = useMove()
   const addItem = useAddPlanItem()
@@ -136,6 +143,7 @@ export function PlanDetailScreen() {
       <h1 className="sr-only">{tree.name}</h1>
       <InlineName
         label="Plan name"
+        autoSelect={isNewPlan}
         className="h-14 text-[26px] font-semibold tracking-[-0.025em] md:text-[26px]"
         value={tree.name}
         onCommit={(name) => savePlan.mutate({ id: tree.id, name }, { onError: (e) => notifyError(e) })}

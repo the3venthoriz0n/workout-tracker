@@ -22,40 +22,30 @@ function renderPlans(repo = new LocalRepo(new AppDb(`plans-${crypto.randomUUID()
   return { repo, router }
 }
 
-test('creates a plan from the inline input and links to its detail page', async () => {
+test('Add plan matches the Library Add button and goes straight into the new plan with its name selected', async () => {
   const user = userEvent.setup()
   const { repo, router } = renderPlans()
-  await user.type(await screen.findByLabelText('New plan name'), 'Starter{Enter}')
-  const link = await screen.findByRole('link', { name: /Starter/ })
-  expect((await repo.listPlans()).map((p) => p.name)).toEqual(['Starter'])
-  expect((screen.getByLabelText('New plan name') as HTMLInputElement).value).toBe('')
-  await user.click(link)
-  expect(router.state.location.pathname).toMatch(/^\/plans\/.+/)
-})
-
-test('ignores an empty plan name', async () => {
-  const user = userEvent.setup()
-  const { repo } = renderPlans()
-  await user.type(await screen.findByLabelText('New plan name'), '   {Enter}')
-  expect(await repo.listPlans()).toEqual([])
-})
-
-test('Add plan is a text-only button, visibly disabled until the name has text, and Enter submits', async () => {
-  const user = userEvent.setup()
-  const { repo } = renderPlans()
-  const input = await screen.findByLabelText('New plan name')
-  expect(input.getAttribute('placeholder')).toBe('New plan name')
-  const add = screen.getByRole('button', { name: 'Add plan' })
-  expect(add.querySelector('svg')).toBeNull()
-  expect(add.getAttribute('aria-disabled')).toBe('true')
-  await user.type(input, '   ')
-  expect(add.getAttribute('aria-disabled')).toBe('true')
+  const add = await screen.findByRole('button', { name: 'Add plan' })
+  expect(add.textContent).toContain('Add')
+  expect(add.querySelector('svg')).not.toBeNull()
+  expect(screen.queryByLabelText('New plan name')).toBeNull()
   await user.click(add)
-  expect(await repo.listPlans()).toEqual([])
-  await user.type(input, 'Push')
-  expect(add.getAttribute('aria-disabled')).toBe('false')
-  await user.type(input, '{Enter}')
-  await waitFor(async () => expect((await repo.listPlans()).map((p) => p.name)).toEqual(['Push']))
+  await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/plans\/.+/))
+  expect((await repo.listPlans()).map((p) => p.name)).toEqual(['New plan'])
+  const name = (await screen.findByLabelText('Plan name')) as HTMLInputElement
+  await waitFor(() => expect(document.activeElement).toBe(name))
+  expect(name.value).toBe('New plan')
+  expect(name.selectionStart).toBe(0)
+  expect(name.selectionEnd).toBe('New plan'.length)
+  await user.keyboard('Starter{Enter}')
+  await waitFor(async () => expect((await repo.listPlans()).map((p) => p.name)).toEqual(['Starter']))
+})
+
+test('the empty state offers Create plan, which behaves like Add', async () => {
+  const user = userEvent.setup()
+  const { router } = renderPlans()
+  await user.click(await screen.findByRole('button', { name: /Create plan/ }))
+  await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/plans\/.+/))
 })
 
 test('plan list rows have no Delete text; deleting a plan lives on its page and needs a confirm step', async () => {

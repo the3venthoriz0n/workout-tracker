@@ -1,12 +1,11 @@
 import { LoadError } from '@/components/load-error'
-import { ChevronRight } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronRight, Plus } from 'lucide-react'
 import type { Plan } from '@workout/shared'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { Screen } from '@/app/screen'
+import { AddButton } from '@/components/add-button'
 import { PlansToggle } from '@/components/plans-toggle'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { notifyError } from '@/lib/notify'
 import { listGroup } from '@/lib/styles'
@@ -38,52 +37,36 @@ function SourceLine({ source }: { source: NonNullable<Plan['source']> }) {
 export function PlansScreen() {
   const plans = usePlans()
   const save = useSavePlan()
-  const [name, setName] = useState('')
+  const navigate = useNavigate()
   const list = plans.data ?? []
-  const ready = name.trim().length > 0
 
-  function add(e: React.FormEvent) {
-    e.preventDefault()
-    const trimmed = name.trim()
-    if (!trimmed) return
+  // Adding goes straight into the new plan, where its name is focused and ready to type over
+  function add() {
+    if (save.isPending) return
     save.mutate(
-      { name: trimmed },
-      { onSuccess: () => setName(''), onError: (e) => notifyError(e) },
+      { name: 'New plan' },
+      {
+        onSuccess: (plan) => navigate(`/plans/${plan.id}`, { state: { newPlan: true } }),
+        onError: (e) => notifyError(e),
+      },
     )
   }
 
   return (
     <div>
-      <Screen title="Plans" />
+      <Screen title="Plans" action={<AddButton label="Add plan" onClick={add} />} />
       <div className="flex flex-col gap-4 px-4 pb-6">
         <PlansToggle />
-        <form onSubmit={add} className="flex gap-2">
-          <Input
-            className="flex-1"
-            enterKeyHint="done"
-            autoComplete="off"
-            aria-label="New plan name"
-            placeholder="New plan name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <Button
-            type="submit"
-            aria-disabled={!ready || save.isPending}
-            className={cn(
-              'h-12 px-5',
-              (!ready || save.isPending) &&
-                'bg-secondary text-muted-foreground hover:bg-secondary cursor-default',
-            )}
-          >
-            Add plan
-          </Button>
-        </form>
 
         {plans.isError && <LoadError what="your plans" onRetry={() => void plans.refetch()} />}
         {plans.isPending && <SkeletonRows />}
         {plans.isSuccess && list.length === 0 && (
-          <p className="text-muted-foreground text-sm">No plans yet. Name one above to start.</p>
+          <div className="flex flex-col items-start gap-3">
+            <p className="text-muted-foreground text-sm">No plans yet. Add your first plan to get started.</p>
+            <Button type="button" variant="outline" className="min-h-11" onClick={add}>
+              <Plus aria-hidden /> Create plan
+            </Button>
+          </div>
         )}
 
         <ul className={cn(listGroup, list.length === 0 && 'hidden')}>
