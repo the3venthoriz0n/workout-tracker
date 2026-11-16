@@ -171,6 +171,33 @@ export class PublishLimitError extends ApiError {
   }
 }
 
+// The AI meal parser. Fixed messages on purpose: nothing from the provider, the key or the user's
+// meal text is ever put into one of these.
+/** The daily cap or the provider's own rate limit was hit (429 ai_limit). */
+export class AiLimitError extends ApiError {
+  constructor() {
+    super(429, 'ai_limit')
+    this.message = 'AI limit reached'
+    this.name = 'AiLimitError'
+  }
+}
+/** No provider is configured, or it rejected the key (503 ai_unavailable). */
+export class AiUnavailableError extends ApiError {
+  constructor() {
+    super(503, 'ai_unavailable')
+    this.message = 'AI is unavailable'
+    this.name = 'AiUnavailableError'
+  }
+}
+/** The provider failed, timed out or answered with something unusable (502 ai_failed). */
+export class AiFailedError extends ApiError {
+  constructor() {
+    super(502, 'ai_failed')
+    this.message = 'AI could not read that'
+    this.name = 'AiFailedError'
+  }
+}
+
 /** Owners cannot upvote their own listing (409 own_listing). */
 export class OwnListingError extends ApiError {
   constructor() {
