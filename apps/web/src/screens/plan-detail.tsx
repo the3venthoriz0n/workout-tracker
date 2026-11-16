@@ -1,8 +1,8 @@
-import { ChevronDown, ChevronLeft, ChevronUp, Link2, Plus, Share, Trash2, Unlink } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronUp, Link2, Plus, Trash2, Unlink } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
-import { SettingsLink, StickyBar, headerIconButton } from '@/app/screen'
+import { SettingsLink, StickyBar } from '@/app/screen'
 import {
   DayColorButton,
   DayColorPicker,
@@ -16,7 +16,6 @@ import { Rail } from '@/components/plan-bits'
 import { PlanItemRow } from '@/components/plan-item-row'
 import { useDragReorder } from '@/lib/use-drag-reorder'
 import { cn } from '@/lib/utils'
-import { ShareSheet } from '@/components/share-sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { notifyError } from '@/lib/notify'
@@ -216,7 +215,6 @@ export function PlanDetailScreen() {
   const [confirmDay, setConfirmDay] = useState<string | null>(null)
   const [colorDay, setColorDay] = useState<string | null>(null)
   const [linkDay, setLinkDay] = useState<string | null>(null)
-  const [sharing, setSharing] = useState(false)
 
   if (plan.isPending) return <div className="p-4" aria-busy="true" />
   const tree = plan.data
@@ -246,15 +244,6 @@ export function PlanDetailScreen() {
             Plans
           </Link>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className={`${headerIconButton} w-auto gap-1.5 px-4 text-[15px] font-medium`}
-              aria-haspopup="dialog"
-              onClick={() => setSharing(true)}
-            >
-              <Share className="size-[18px]" aria-hidden />
-              Share
-            </button>
             <SettingsLink />
           </div>
         </div>
@@ -439,7 +428,6 @@ export function PlanDetailScreen() {
         <Plus aria-hidden /> Add day
       </Button>
 
-      <ShareSheet tree={tree} open={sharing} onOpenChange={setSharing} />
       <ExercisePicker
         open={pickerDay !== null}
         onOpenChange={(open) => !open && setPickerDay(null)}

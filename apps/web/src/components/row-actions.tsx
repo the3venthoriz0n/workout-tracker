@@ -1,21 +1,35 @@
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Share, Trash2 } from 'lucide-react'
 import { useEffect, useRef, type Ref } from 'react'
 import { Button } from '@/components/ui/button'
 
-// Standard pencil + trash pair for a Library row.
+// Standard pencil + trash pair for a Library row; plans add a share icon in front.
 export function RowActions({
   name,
+  onShare,
   onEdit,
   onDelete,
   trashRef,
 }: {
   name: string
+  onShare?: () => void
   onEdit: () => void
   onDelete: () => void
   trashRef?: Ref<HTMLButtonElement>
 }) {
   return (
     <div className="flex items-center gap-0.5">
+      {onShare && (
+        <Button
+          type="button"
+          variant="ghost"
+          className="text-muted-foreground hover:text-foreground size-11 p-0"
+          aria-label={`Share ${name}`}
+          aria-haspopup="dialog"
+          onClick={onShare}
+        >
+          <Share className="size-5" aria-hidden />
+        </Button>
+      )}
       <Button
         type="button"
         variant="ghost"

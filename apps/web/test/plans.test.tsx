@@ -138,3 +138,26 @@ test('a plan row renames in place and deletes after a confirm, without opening t
   await waitFor(async () => expect((await repo.listPlans()).map((p) => p.name)).toEqual(['Keep']))
   expect(router.state.location.pathname).toBe('/plans')
 })
+
+test('a published plan shows a Community link on its row; unpublished and private plans do not; every row can be shared', async () => {
+  const repo = new LocalRepo(new AppDb(`plans-${crypto.randomUUID()}`))
+  await repo.init()
+  const live = await repo.savePlan({ name: 'Live' })
+  const gone = await repo.savePlan({ name: 'Gone' })
+  await repo.savePlan({ name: 'Private' })
+  const listPlans = repo.listPlans.bind(repo)
+  repo.listPlans = async () =>
+    (await listPlans()).map((p) =>
+      p.id === live.id
+        ? { ...p, published: { shared_plan_id: LISTING_ID, version: 2, status: 'published' as const } }
+        : p.id === gone.id
+          ? { ...p, published: { shared_plan_id: LISTING_ID, version: 1, status: 'unpublished' as const } }
+          : p,
+    )
+  renderPlans(repo)
+  const link = await screen.findByRole('link', { name: 'View Live in Community' })
+  expect(link.getAttribute('href')).toBe(`/plans/community/${LISTING_ID}`)
+  expect(screen.queryByRole('link', { name: 'View Gone in Community' })).toBeNull()
+  expect(screen.queryByRole('link', { name: 'View Private in Community' })).toBeNull()
+  for (const n of ['Live', 'Gone', 'Private']) expect(screen.getByRole('button', { name: `Share ${n}` })).toBeTruthy()
+})

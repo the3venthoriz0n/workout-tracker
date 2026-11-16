@@ -1,5 +1,5 @@
 import { LoadError } from '@/components/load-error'
-import { Plus } from 'lucide-react'
+import { Globe, Plus } from 'lucide-react'
 import { useState } from 'react'
 import type { Plan } from '@workout/shared'
 import { Link, useNavigate } from 'react-router'
@@ -13,7 +13,8 @@ import { SkeletonRows } from '@/components/ui/skeleton'
 import { notifyError } from '@/lib/notify'
 import { listGroup } from '@/lib/styles'
 import { cn } from '@/lib/utils'
-import { useCommunityPlan, useDeletePlan, usePlans, useSavePlan } from '@/repo/hooks'
+import { ShareSheet } from '@/components/share-sheet'
+import { useCommunityPlan, useDeletePlan, usePlan, usePlans, useSavePlan } from '@/repo/hooks'
 
 /**
  * "Based on X by Y · v1" for copies of community plans, plus "Update available" when the public
@@ -37,6 +38,13 @@ function SourceLine({ source }: { source: NonNullable<Plan['source']> }) {
   )
 }
 
+// The share sheet needs the whole plan, so it is loaded only once someone asks to share.
+function PlanShare({ id, onClose }: { id: string; onClose: () => void }) {
+  const tree = usePlan(id)
+  if (!tree.data) return null
+  return <ShareSheet tree={tree.data} open onOpenChange={(o) => !o && onClose()} />
+}
+
 // One plan: the name opens it; the pencil renames in place and the trash deletes after a confirm,
 // so neither needs a trip into the plan.
 function PlanRow({ plan }: { plan: Plan }) {
@@ -45,7 +53,9 @@ function PlanRow({ plan }: { plan: Plan }) {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(plan.name)
   const [confirming, setConfirming] = useState(false)
+  const [sharing, setSharing] = useState(false)
   const trashRef = useRestoreFocus(confirming)
+  const published = plan.published?.status === 'published' ? plan.published : null
 
   function commit() {
     const trimmed = name.trim()
@@ -113,10 +123,20 @@ function PlanRow({ plan }: { plan: Plan }) {
                 {plan.source && <SourceLine source={plan.source} />}
               </span>
             </Link>
+            {published && (
+              <Link
+                to={`/plans/community/${published.shared_plan_id}`}
+                aria-label={`View ${plan.name} in Community`}
+                className="text-muted-foreground hover:text-foreground hover:bg-accent flex size-11 shrink-0 items-center justify-center rounded-full"
+              >
+                <Globe className="size-5" aria-hidden />
+              </Link>
+            )}
             {!confirming && (
               <RowActions
                 trashRef={trashRef}
                 name={plan.name}
+                onShare={() => setSharing(true)}
                 onEdit={() => {
                   setName(plan.name)
                   setRenaming(true)
@@ -127,6 +147,7 @@ function PlanRow({ plan }: { plan: Plan }) {
           </>
         )}
       </div>
+      {sharing && <PlanShare id={plan.id} onClose={() => setSharing(false)} />}
       {confirming && (
         <DeleteConfirm
           name={plan.name}

@@ -58,9 +58,12 @@ function signedIn(repo: LocalRepo, opts: { published?: number; status?: SharedLi
   return { publishPlan, unpublishPlan, state }
 }
 
-async function openSheet(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: 'Share' }))
-  return screen.findByRole('dialog', { name: 'Share plan' })
+async function openSheet(user: ReturnType<typeof userEvent.setup>, planName = 'Starter') {
+  await user.click(await screen.findByRole('button', { name: `Share ${planName}` }))
+  const sheet = await screen.findByRole('dialog', { name: 'Share plan' })
+  // Opened from the list, the sheet first loads the plan and the profile
+  await waitFor(() => expect(within(sheet).queryByRole('status', { name: 'Loading' })).toBeNull())
+  return sheet
 }
 
 test('guests are asked to create an account', async () => {
@@ -68,7 +71,7 @@ test('guests are asked to create an account', async () => {
   const repo = await guestRepo()
   const plan = await planWithItem(repo)
   const publish = vi.spyOn(repo, 'publishPlan')
-  renderApp(repo, `/plans/${plan.id}`)
+  renderApp(repo, '/plans')
   const sheet = await openSheet(user)
   expect(within(sheet).getByText('Create an account to share plans')).toBeTruthy()
   expect(within(sheet).getByRole('link', { name: /Settings/ }).getAttribute('href')).toBe('/settings')
@@ -82,7 +85,7 @@ test('a public name is required first, then title, description and level are val
   const plan = await planWithItem(repo)
   const { publishPlan } = signedIn(repo)
   stubFetch(() => undefined)
-  renderApp(repo, `/plans/${plan.id}`, { signedIn: true })
+  renderApp(repo, '/plans', { signedIn: true })
   let sheet = await openSheet(user)
   expect(within(sheet).queryByLabelText('Title')).toBeNull()
   expect(within(sheet).getByRole('link', { name: /Settings/ })).toBeTruthy()
@@ -122,7 +125,7 @@ test('publish limit, server field errors, then success shows the status with cou
   publishPlan.mockRejectedValueOnce(new PublishLimitError()).mockRejectedValueOnce(new ValidationError('title'))
   const ok = vi.spyOn(toast, 'success')
   stubFetch(() => undefined) // public API unreachable: "Publish update" stays allowed
-  renderApp(repo, `/plans/${plan.id}`, { signedIn: true })
+  renderApp(repo, '/plans', { signedIn: true })
   const sheet = await openSheet(user)
   await user.click(within(sheet).getByRole('button', { name: 'Publish' }))
   expect((await within(sheet).findByRole('alert')).textContent).toBe('You can publish 5 times a day. Try again tomorrow.')
@@ -142,8 +145,8 @@ test('an unshareable plan explains why before calling the server', async () => {
   await repo.updateProfile({ display_name: 'Sam Lifts' })
   const plan = await repo.savePlan({ name: 'Empty' })
   const { publishPlan } = signedIn(repo)
-  renderApp(repo, `/plans/${plan.id}`, { signedIn: true })
-  const sheet = await openSheet(user)
+  renderApp(repo, '/plans', { signedIn: true })
+  const sheet = await openSheet(user, 'Empty')
   await user.click(within(sheet).getByRole('button', { name: 'Publish' }))
   expect((await within(sheet).findByRole('alert')).textContent).toBe('Add at least one exercise before sharing this plan')
   expect(publishPlan).not.toHaveBeenCalled()
@@ -164,7 +167,7 @@ test('after edits "Publish update" makes v2; unpublish needs a confirm', async (
       ? json({ listing: { id: LISTING_ID, title: 'Starter for all', description: 'Easy', level: 'beginner', author: 'Sam Lifts', day_count: 1, version: 1, upvotes: 3, downloads: 7, updated_at: '2026-10-01T00:00:00.000Z' }, version: 1, snapshot: before })
       : undefined,
   )
-  renderApp(repo, `/plans/${plan.id}`, { signedIn: true })
+  renderApp(repo, '/plans', { signedIn: true })
   const sheet = await openSheet(user)
   expect(await within(sheet).findByText(/Shared · v1/)).toBeTruthy()
   expect(await within(sheet).findByText('Changed since v1.')).toBeTruthy()
