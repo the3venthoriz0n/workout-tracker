@@ -119,7 +119,35 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
         >
           <ChevronDown aria-hidden />
         </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-destructive focus-visible:text-destructive min-h-11 min-w-11"
+          aria-label={`Delete ${name}`}
+          aria-expanded={confirmDelete}
+          onClick={() => setConfirmDelete(true)}
+        >
+          <Trash2 className="size-5" aria-hidden />
+        </Button>
       </div>
+
+      {confirmDelete && (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-muted-foreground w-full text-sm">Removes {name} from this day. Past workouts keep their records.</p>
+          <Button
+            variant="destructive"
+            className="min-h-11"
+            aria-label={`Confirm delete ${name}`}
+            disabled={remove.isPending}
+            onClick={() => remove.mutate(item.id, { onError: (e) => fail(e) })}
+          >
+            Confirm delete
+          </Button>
+          <Button variant="ghost" className="min-h-11" autoFocus onClick={() => setConfirmDelete(false)}>
+            Cancel
+          </Button>
+        </div>
+      )}
 
       {open && (
         <div id={bodyId} className="flex flex-col gap-3">
@@ -214,35 +242,6 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
                 onClear={() => clearRule.mutateAsync(item.id)}
               />
             </div>
-          )}
-
-          {confirmDelete ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-muted-foreground w-full text-sm">Removes {name} from this day. Past workouts keep their records.</p>
-              <Button
-                variant="destructive"
-                className="min-h-11"
-                aria-label={`Confirm delete ${name}`}
-                disabled={remove.isPending}
-                onClick={() => remove.mutate(item.id, { onError: (e) => fail(e) })}
-              >
-                Confirm delete
-              </Button>
-              <Button variant="ghost" className="min-h-11" autoFocus onClick={() => setConfirmDelete(false)}>
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-destructive focus-visible:text-destructive min-h-11 min-w-11 self-end"
-              aria-label={`Delete ${name}`}
-              aria-expanded={confirmDelete}
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 className="size-5" aria-hidden />
-            </Button>
           )}
         </div>
       )}
