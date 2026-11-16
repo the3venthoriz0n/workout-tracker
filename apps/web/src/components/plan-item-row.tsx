@@ -101,20 +101,11 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
         >
           <ChevronDown aria-hidden />
         </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:text-destructive focus-visible:text-destructive min-h-11 min-w-11"
-          aria-label={`Delete ${name}`}
-          aria-expanded={confirmDelete}
-          onClick={() => setConfirmDelete(true)}
-        >
-          <Trash2 className="size-5" aria-hidden />
-        </Button>
       </div>
 
       {confirmDelete && (
         <div className="flex flex-wrap items-center gap-2">
+          <p className="text-muted-foreground w-full text-sm">Removes {name} from this day. Past workouts keep their records.</p>
           <Button
             variant="destructive"
             className="min-h-11"
@@ -124,7 +115,7 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
           >
             Confirm delete
           </Button>
-          <Button variant="ghost" className="min-h-11" onClick={() => setConfirmDelete(false)}>
+          <Button variant="ghost" className="min-h-11" autoFocus onClick={() => setConfirmDelete(false)}>
             Cancel
           </Button>
         </div>
@@ -208,6 +199,16 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
           onClick={() => setExpanded((e) => !e)}
         >
           Progression
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-destructive focus-visible:text-destructive ml-auto min-h-11 min-w-11"
+          aria-label={`Delete ${name}`}
+          aria-expanded={confirmDelete}
+          onClick={() => setConfirmDelete(true)}
+        >
+          <Trash2 className="size-5" aria-hidden />
         </Button>
       </div>
 

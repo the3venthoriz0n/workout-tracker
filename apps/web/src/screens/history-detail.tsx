@@ -1,3 +1,4 @@
+import { LoadError } from '@/components/load-error'
 import type { SetLog } from '@workout/shared'
 import { ChevronLeft, PencilIcon } from 'lucide-react'
 import { useState } from 'react'
@@ -21,7 +22,7 @@ export function HistoryDetailScreen() {
 }
 
 function HistoryDetailBody({ id }: { id: string }) {
-  const { data: session, isPending } = useSession(id)
+  const { data: session, isPending, isError, refetch } = useSession(id)
   const { data: profile } = useProfile()
   const updateSet = useUpdateSet()
   const updateNote = useUpdateSessionNote()
@@ -51,6 +52,16 @@ function HistoryDetailBody({ id }: { id: string }) {
     </Link>
   )
 
+  if (isError) {
+    return (
+      <div>
+        {back}
+        <div className="px-4">
+          <LoadError what="this workout" onRetry={() => void refetch()} />
+        </div>
+      </div>
+    )
+  }
   if (isPending || !profile) {
     return (
       <div>
@@ -118,7 +129,7 @@ function HistoryDetailBody({ id }: { id: string }) {
             className="text-muted-foreground hover:bg-accent hover:text-foreground flex min-h-11 min-w-11 items-center justify-center rounded-full aria-expanded:bg-accent"
             onClick={() => setOpenSet(openSet === s.id ? null : s.id)}
           >
-            <PencilIcon className="size-4" />
+            <PencilIcon className="size-4" aria-hidden />
           </button>
         )}
       </div>

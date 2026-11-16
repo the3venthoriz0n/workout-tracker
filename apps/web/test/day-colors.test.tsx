@@ -29,7 +29,7 @@ test('plan detail: the swatch picker saves a named colour and Automatic goes bac
   const { repo, plan, push } = await twoDays()
   renderAt(repo, `/plans/${plan.id}`)
   const region = await screen.findByRole('region', { name: 'Day Push' })
-  const dot = within(region).getByRole('button', { name: 'Day colour' })
+  const dot = within(region).getByRole('button', { name: /^Colour for / })
   expect(dot.getAttribute('aria-expanded')).toBe('false')
   expect(region.querySelectorAll('[data-day-color]').length).toBe(1)
   expect(within(region).queryByRole('radiogroup')).toBeNull()
@@ -58,7 +58,7 @@ test('plan detail: the swatch picker saves a named colour and Automatic goes bac
 
   // Picking collapsed the palette; reopen it to go back to Automatic
   expect(within(region).queryByRole('radiogroup')).toBeNull()
-  await user.click(within(region).getByRole('button', { name: 'Day colour' }))
+  await user.click(within(region).getByRole('button', { name: /^Colour for / }))
   await user.click(within(region).getByRole('radio', { name: 'Automatic (Blue)' }))
   await waitFor(async () => expect((await repo.getPlan(plan.id))!.days.find((d) => d.id === push.id)!.color).toBeNull())
 })
@@ -68,12 +68,12 @@ test('plan detail: picking a colour collapses the palette; tapping the dot again
   const { repo, plan } = await twoDays()
   renderAt(repo, `/plans/${plan.id}`)
   const region = await screen.findByRole('region', { name: 'Day Pull' })
-  await user.click(within(region).getByRole('button', { name: 'Day colour' }))
+  await user.click(within(region).getByRole('button', { name: /^Colour for / }))
   await user.click(within(region).getByRole('radio', { name: 'Teal' }))
   await waitFor(() => expect(within(region).queryByRole('radiogroup')).toBeNull())
-  await user.click(within(region).getByRole('button', { name: 'Day colour' }))
+  await user.click(within(region).getByRole('button', { name: /^Colour for / }))
   expect(within(region).getByRole('radiogroup')).toBeTruthy()
-  await user.click(within(region).getByRole('button', { name: 'Day colour' }))
+  await user.click(within(region).getByRole('button', { name: /^Colour for / }))
   expect(within(region).queryByRole('radiogroup')).toBeNull()
 })
 

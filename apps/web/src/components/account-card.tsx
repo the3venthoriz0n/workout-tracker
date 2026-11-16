@@ -177,7 +177,9 @@ export function AccountCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Account</CardTitle>
+        <CardTitle>
+          <h2>Account</h2>
+        </CardTitle>
       </CardHeader>
       <CardContent>{body}</CardContent>
     </Card>

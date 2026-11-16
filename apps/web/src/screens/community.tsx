@@ -41,7 +41,7 @@ export function Counts({ upvotes, downloads, className }: { upvotes?: number; do
 export function LevelChip({ level }: { level: PublicListing['level'] }) {
   if (!level) return null
   return (
-    <span className="bg-secondary text-secondary-foreground inline-flex h-6 items-center rounded-full px-2.5 text-xs font-medium">
+    <span className="bg-secondary text-secondary-foreground inline-flex h-6 items-center rounded-full px-2.5 text-sm font-medium">
       {LEVEL_NAMES[level]}
     </span>
   )

@@ -48,7 +48,11 @@ function StepCard() {
         <p className="text-muted-foreground text-sm">
           The smallest weight change you can load. Progress steps and deloads snap to it.
         </p>
-        {error && <p className="text-destructive text-sm">{error}</p>}
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
       </CardContent>
     </Card>
   )

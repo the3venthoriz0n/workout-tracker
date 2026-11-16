@@ -446,7 +446,7 @@ function ActiveSession({
 
         {confirm === 'discard' ? (
           <div className={confirmPanel}>
-            <p>Discard this workout? All logged sets are deleted.</p>
+            <p role="alert">Discard this workout? All logged sets are deleted.</p>
             <div className="flex gap-2">
               <Button
                 variant="destructive"
@@ -458,7 +458,7 @@ function ActiveSession({
               >
                 Yes, discard
               </Button>
-              <Button variant="outline" className="min-h-11 flex-1" onClick={() => setConfirm(null)}>
+              <Button variant="outline" className="min-h-11 flex-1" autoFocus onClick={() => setConfirm(null)}>
                 Cancel
               </Button>
             </div>
@@ -481,12 +481,12 @@ function ActiveSession({
             )}
             {confirm === 'finish' ? (
               <div className="flex flex-col gap-2">
-                <p>No sets marked done — finish anyway?</p>
+                <p role="alert">No sets marked done — finish anyway?</p>
                 <div className="flex gap-2">
                   <Button size="big" className="flex-1" onClick={doFinish} disabled={finish.isPending}>
                     Finish anyway
                   </Button>
-                  <Button variant="outline" className="min-h-14 flex-1" onClick={() => setConfirm(null)}>
+                  <Button variant="outline" className="min-h-14 flex-1" autoFocus onClick={() => setConfirm(null)}>
                     Keep going
                   </Button>
                 </div>
@@ -512,6 +512,10 @@ export function TodayScreen() {
   const active = useActiveSession()
   const profile = useProfile().data
   const [summary, setSummary] = useState<FinishSummary | null>(null)
+  // Keep the last summary on screen while the sheet slides out, so it does not collapse first
+  const lastSummary = useRef<FinishSummary | null>(null)
+  if (summary) lastSummary.current = summary
+  const shown = summary ?? lastSummary.current
   const unit = profile?.units ?? 'lb'
 
   let body
@@ -537,17 +541,17 @@ export function TodayScreen() {
     <div>
       {body}
       <Sheet open={summary !== null} onOpenChange={(o) => !o && setSummary(null)}>
-        <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto">
+        <SheetContent side="bottom" className="max-h-[92dvh] overflow-hidden">
           <SheetHeader>
             <SheetTitle>Workout complete</SheetTitle>
-            <SheetDescription>
-              {summary
-                ? `${summary.filter((r) => r.outcome === 'success').length} of ${summary.length} lifts progressed. Targets for your next session:`
-                : ''}
+            <SheetDescription className="text-foreground text-xl leading-tight font-semibold tracking-[-0.015em] tabular-nums">
+              {shown ? `${shown.filter((r) => r.outcome === 'success').length} of ${shown.length} lifts progressed` : ''}
             </SheetDescription>
           </SheetHeader>
-          <ul className="flex flex-col gap-2 px-5">
-            {summary?.map((row, i) => (
+          <p className="text-muted-foreground -mb-2 px-5 text-sm font-medium">Targets for your next session</p>
+          {/* Only the list scrolls: Done and the close button stay in reach however many lifts there are */}
+          <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-5">
+            {shown?.map((row, i) => (
               <li
                 key={i}
                 className={cn('flex items-start gap-2 tabular-nums', row.outcome === 'success' && 'text-success font-semibold')}
@@ -557,7 +561,7 @@ export function TodayScreen() {
               </li>
             ))}
           </ul>
-          <SheetFooter>
+          <SheetFooter className="bg-popover">
             <Button size="big" onClick={() => setSummary(null)}>
               Done
             </Button>

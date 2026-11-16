@@ -1,3 +1,4 @@
+import { LoadError } from '@/components/load-error'
 import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import type { Plan } from '@workout/shared'
@@ -26,7 +27,7 @@ function SourceLine({ source }: { source: NonNullable<Plan['source']> }) {
         Based on {source.title} by {source.author} · v{source.version}
       </span>
       {newer && (
-        <span className="bg-brand/12 text-foreground inline-flex h-6 items-center rounded-full px-2.5 text-xs font-medium">
+        <span className="bg-secondary text-foreground inline-flex h-6 items-center rounded-full px-2.5 text-sm font-medium">
           Update available
         </span>
       )}
@@ -79,6 +80,7 @@ export function PlansScreen() {
           </Button>
         </form>
 
+        {plans.isError && <LoadError what="your plans" onRetry={() => void plans.refetch()} />}
         {plans.isPending && <SkeletonRows />}
         {plans.isSuccess && list.length === 0 && (
           <p className="text-muted-foreground text-sm">No plans yet. Name one above to start.</p>

@@ -83,7 +83,7 @@ export function ResetPasswordScreen() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <p className="text-muted-foreground text-xs">10 to 128 characters.</p>
+          <p className="text-muted-foreground text-sm">10 to 128 characters.</p>
         </div>
         <Button type="button" variant="outline" className="min-h-11" onClick={() => setShow((v) => !v)}>
           {show ? 'Hide password' : 'Show password'}

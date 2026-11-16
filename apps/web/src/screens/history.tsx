@@ -1,3 +1,4 @@
+import { LoadError } from '@/components/load-error'
 import type { DayColor } from '@workout/shared'
 import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
@@ -50,13 +51,15 @@ function SessionRow({
 }
 
 export function HistoryScreen() {
-  const { data, isPending } = useSessions()
+  const { data, isPending, isError, refetch } = useSessions()
   const dayColors = useDayColors()
   return (
     <div>
       <Screen title="History" />
       <div className="px-4 pb-6">
-        {isPending || !data ? (
+        {isError ? (
+          <LoadError what="your workouts" onRetry={() => void refetch()} />
+        ) : isPending || !data ? (
           <SkeletonRows />
         ) : data.length === 0 ? (
           <div className="flex flex-col items-start gap-3">

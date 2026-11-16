@@ -97,7 +97,7 @@ function VoteButton({ detail }: { detail: PublicPlanDetail }) {
 
   return (
     <Button
-      variant={state.voted ? 'default' : 'secondary'}
+      variant="secondary"
       className="min-h-11 gap-1.5 px-4 tabular-nums"
       aria-pressed={state.voted}
       aria-label={`Upvote, ${pluralize(state.upvotes, 'upvote')}`}

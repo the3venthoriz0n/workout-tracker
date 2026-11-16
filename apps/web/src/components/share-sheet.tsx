@@ -315,7 +315,7 @@ function PublishForm({
   })
   const fieldError = (id: keyof PublishErrors) =>
     errors[id] ? (
-      <p id={`share-${id}-error`} className="text-destructive text-sm">
+      <p id={`share-${id}-error`} role="alert" className="text-destructive text-sm">
         {errors[id]}
       </p>
     ) : null

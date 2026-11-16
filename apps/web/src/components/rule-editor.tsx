@@ -75,7 +75,7 @@ export function RuleFields({ rule, onSave, idPrefix, showStepHint = true }: Fiel
           onCommit={(v) => (v === null || v <= 0 ? false : save({ ...rule, success_amount: v }))}
         />
         {showStepHint && rule.success_action === 'add_weight' && (
-          <p className="text-muted-foreground col-span-2 -mt-1 text-xs">
+          <p className="text-muted-foreground col-span-2 -mt-1 text-sm">
             Steps snap to your {formatWeight(step)} {units} progression step (change it in the
             Progression tab).
           </p>

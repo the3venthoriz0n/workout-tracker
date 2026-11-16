@@ -47,7 +47,9 @@ export function SettingsScreen() {
       <div className="flex flex-col gap-4 px-4 pb-6">
         <Card>
           <CardHeader>
-            <CardTitle>Units</CardTitle>
+            <CardTitle>
+              <h2>Units</h2>
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div role="radiogroup" aria-label="Units" className={segmentedTrack}>

@@ -42,7 +42,7 @@ export function SupersetLabel({ label, className }: { label: string; className?:
   return (
     <span
       className={cn(
-        'bg-brand/12 text-foreground inline-flex h-6 min-w-9 shrink-0 items-center justify-center rounded-full px-2 text-[13px] leading-none font-semibold tabular-nums',
+        'bg-secondary text-foreground inline-flex h-6 min-w-9 shrink-0 items-center justify-center rounded-full px-2 text-sm leading-none font-semibold tabular-nums',
         className,
       )}
     >
@@ -51,7 +51,7 @@ export function SupersetLabel({ label, className }: { label: string; className?:
   )
 }
 
-/** Thin accent rail on the left edge of a grouped surface (supersets, overrides). */
+/** Thin neutral rail on the left edge of a grouped surface (supersets, overrides). Grouping is not an accent state. */
 export function Rail() {
-  return <span aria-hidden className="bg-brand absolute top-6 bottom-6 left-0 w-[3px] rounded-r-full" />
+  return <span aria-hidden className="bg-foreground/25 absolute top-6 bottom-6 left-0 w-[3px] rounded-r-full" />
 }

@@ -119,7 +119,7 @@ function PickerBody({
             <li>
               <button
                 type="button"
-                className="hover:bg-accent text-brand flex min-h-12 w-full items-center gap-2 rounded-row px-3 text-left font-semibold"
+                className="hover:bg-accent text-foreground flex min-h-12 w-full items-center gap-2 rounded-row px-3 text-left font-semibold"
                 onClick={() => onCreate?.(query.trim())}
               >
                 <Plus className="size-4 shrink-0" aria-hidden />

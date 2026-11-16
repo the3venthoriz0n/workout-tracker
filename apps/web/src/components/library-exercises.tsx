@@ -44,7 +44,7 @@ export function LibraryExercises({
             No exercises yet. Add your first exercise to get started.
           </p>
           {onAdd && (
-            <Button type="button" className="min-h-11" onClick={onAdd}>
+            <Button type="button" variant="outline" className="min-h-11" onClick={onAdd}>
               <Plus aria-hidden /> Create exercise
             </Button>
           )}

@@ -133,6 +133,7 @@ export function PlanDetailScreen() {
           </div>
         </div>
       </StickyBar>
+      <h1 className="sr-only">{tree.name}</h1>
       <InlineName
         label="Plan name"
         className="h-14 text-[26px] font-semibold tracking-[-0.025em] md:text-[26px]"
@@ -188,20 +189,13 @@ export function PlanDetailScreen() {
             >
               <ChevronDown aria-hidden />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-destructive focus-visible:text-destructive min-h-11 min-w-11"
-              aria-label={`Delete day ${day.name}`}
-              aria-expanded={confirmDay === day.id}
-              onClick={() => setConfirmDay(day.id)}
-            >
-              <Trash2 className="size-5" aria-hidden />
-            </Button>
           </div>
 
           {confirmDay === day.id && (
             <div className="flex flex-wrap items-center gap-2">
+              <p className="text-muted-foreground w-full text-sm">
+                Removes {day.name} and its {day.items.length} {day.items.length === 1 ? 'exercise' : 'exercises'} from this plan. Past workouts keep their records.
+              </p>
               <Button
                 variant="destructive"
                 className="min-h-11"
@@ -216,7 +210,7 @@ export function PlanDetailScreen() {
               >
                 Confirm delete
               </Button>
-              <Button variant="ghost" className="min-h-11" onClick={() => setConfirmDay(null)}>
+              <Button variant="ghost" className="min-h-11" autoFocus onClick={() => setConfirmDay(null)}>
                 Cancel
               </Button>
             </div>
@@ -250,7 +244,7 @@ export function PlanDetailScreen() {
                     >
                       <Rail />
                       <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-base leading-none font-semibold">Superset {block.letter}</h3>
+                        <h2 className="text-base leading-none font-semibold">Superset {block.letter}</h2>
                         <Button
                           variant="ghost"
                           className="min-h-11"
@@ -292,6 +286,16 @@ export function PlanDetailScreen() {
               onClick={() => setPickerDay(day.id)}
             >
               <Plus aria-hidden /> Add exercise
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-destructive focus-visible:text-destructive ml-auto min-h-11 min-w-11"
+              aria-label={`Delete day ${day.name}`}
+              aria-expanded={confirmDay === day.id}
+              onClick={() => setConfirmDay(day.id)}
+            >
+              <Trash2 className="size-5" aria-hidden />
             </Button>
             {day.items.length >= 2 && linkDay !== day.id && (
               <Button
@@ -337,7 +341,7 @@ export function PlanDetailScreen() {
             >
               Confirm delete
             </Button>
-            <Button variant="ghost" className="min-h-11" onClick={() => setConfirmPlan(false)}>
+            <Button variant="ghost" className="min-h-11" autoFocus onClick={() => setConfirmPlan(false)}>
               Cancel
             </Button>
             <p className="text-muted-foreground w-full text-sm">

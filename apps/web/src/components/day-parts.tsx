@@ -30,7 +30,7 @@ export function DayColorButton({ day, open, onToggle }: { day: Day; open: boolea
       size="icon"
       className="-mr-1 min-h-11 min-w-11 rounded-full"
       aria-expanded={open}
-      aria-label="Day colour"
+      aria-label={`Colour for ${day.name}`}
       onClick={onToggle}
     >
       <span
