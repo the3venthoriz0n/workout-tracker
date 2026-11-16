@@ -29,4 +29,5 @@ runRepoContract(
       replaceAll: (data) => repo.replaceAll(GOOD_PASSWORD, data),
     }
   },
+  { groups: ['profile', 'gear', 'exercises', 'plans', 'progression', 'sessions', 'transfer', 'restore', 'community', 'nutrition'] },
 )

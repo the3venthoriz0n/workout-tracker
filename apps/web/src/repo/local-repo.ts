@@ -53,6 +53,10 @@ import type {
   RuleSource,
   SetLog,
   Units,
+  MealDraft,
+  NutritionEntry,
+  NutritionEntryInput,
+  NutritionSettings,
   WorkoutSession,
 } from '@workout/shared'
 import type { AppDb } from './db'
@@ -282,7 +286,10 @@ export class LocalRepo implements Repo {
     weight_increment?: number
     default_rule?: RuleInput
     display_name?: string
+    nutrition?: NutritionSettings
   }): Promise<Profile> {
+    // Nutrition is signed-in only, so a guest device never stores its settings.
+    if (patch.nutrition !== undefined) throw new UnauthenticatedError()
     if (patch.weight_increment !== undefined && !(patch.weight_increment > 0)) {
       throw new Error('weight_increment must be greater than 0')
     }
@@ -955,6 +962,23 @@ export class LocalRepo implements Repo {
       }
       return rows
     })
+  }
+
+  // Nutrition: signed-in only (the AI key lives on the server), so a guest device refuses every call.
+  async listNutrition(_from: string, _to: string): Promise<NutritionEntry[]> {
+    throw new UnauthenticatedError()
+  }
+
+  async saveNutritionEntry(_entry: NutritionEntryInput): Promise<NutritionEntry> {
+    throw new UnauthenticatedError()
+  }
+
+  async deleteNutritionEntry(_id: string): Promise<void> {
+    throw new UnauthenticatedError()
+  }
+
+  async parseMeal(_text: string): Promise<{ items: MealDraft[]; remaining_today: number }> {
+    throw new UnauthenticatedError()
   }
 
   // Community plans: guests have no account, so they cannot publish or vote (spec §3).

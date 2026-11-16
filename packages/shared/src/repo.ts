@@ -15,7 +15,7 @@ import type {
   SetLog,
   WorkoutSession,
 } from './schemas.js'
-import type { NutritionEntry, NutritionSettings } from './nutrition.js'
+import type { MealDraft, NutritionEntry, NutritionEntryInput, NutritionSettings } from './nutrition.js'
 import type { ExerciseProgression } from './rules.js'
 import type { ListingMeta, SharedListing, SharedSnapshot } from './community.js'
 import type { Effective } from './effective.js'
@@ -278,6 +278,16 @@ export interface Repo {
   exportAll(): Promise<ExportData>
   listProgression(): Promise<ProgressionRow[]> // live plan items with their rules, in plan/day/item order
   listProgressionByExercise(): Promise<ExerciseProgression[]> // every live exercise once, sorted by name
+
+  // Nutrition (spec: docs/superpowers/specs/2026-11-16-nutrition-tracker-design.md). Signed-in only:
+  // a guest device throws UnauthenticatedError from every one of these.
+  /** Entries from `from` to `to` (YYYY-MM-DD, inclusive, at most 366 days), by date then creation time. */
+  listNutrition(from: string, to: string): Promise<NutritionEntry[]>
+  /** Idempotent save (an upsert on the entry's id; a new id when omitted). */
+  saveNutritionEntry(entry: NutritionEntryInput): Promise<NutritionEntry>
+  deleteNutritionEntry(id: string): Promise<void>
+  /** Estimates the foods in `text` for the tracked nutrients. Writes nothing; the caller saves what it keeps. */
+  parseMeal(text: string): Promise<{ items: MealDraft[]; remaining_today: number }>
 
   // Community plans (spec §3, §9). Guests (LocalRepo) cannot publish, unpublish or vote
   // (UnauthenticatedError); they have no listings and no votes, and adopt from a fetched snapshot.

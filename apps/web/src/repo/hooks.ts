@@ -19,6 +19,7 @@ export const keys = {
   communityPlan: (id: string) => ['community', 'plan', id] as const,
   voted: (id: string) => ['community', 'voted', id] as const,
   myShared: ['community', 'mine'] as const,
+  nutrition: (date: string) => ['nutrition', date] as const,
 }
 
 export const useProfile = () => {
@@ -185,3 +186,17 @@ export const usePublishPlan = () =>
 export const useUnpublishPlan = () => useRepoMutation((r, planId: string) => r.unpublishPlan(planId))
 export const useAdoptSharedPlan = () =>
   useRepoMutation((r, input: Parameters<Repo['adoptSharedPlan']>[0]) => r.adoptSharedPlan(input))
+
+// Nutrition (signed-in only: a guest device rejects every call, so callers pass enabled=false for guests).
+export const useNutrition = (date: string, enabled = true) => {
+  const repo = useRepo()
+  return useQuery({ queryKey: keys.nutrition(date), queryFn: () => repo.listNutrition(date, date), enabled, retry: false })
+}
+export const useSaveNutritionEntry = () =>
+  useRepoMutation((r, entry: Parameters<Repo['saveNutritionEntry']>[0]) => r.saveNutritionEntry(entry))
+export const useDeleteNutritionEntry = () => useRepoMutation((r, id: string) => r.deleteNutritionEntry(id))
+/** A parse writes nothing, so unlike the other mutations it does not refetch every query. */
+export const useParseMeal = () => {
+  const repo = useRepo()
+  return useMutation<Awaited<ReturnType<Repo['parseMeal']>>, Error, string>({ mutationFn: (text) => repo.parseMeal(text) })
+}
