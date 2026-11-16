@@ -10,7 +10,10 @@ import { AppDb } from '../src/repo/db'
 import { LocalRepo } from '../src/repo/local-repo'
 import { RepoProvider } from '../src/repo/provider'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  localStorage.removeItem('wt.restTimer')
+})
 
 function renderApp(repo: LocalRepo) {
   const router = createMemoryRouter(routes, { initialEntries: ['/'] })
@@ -39,6 +42,7 @@ async function seed() {
 const setButtons = () => screen.getAllByRole('button', { name: /^Set \d:/ })
 
 test('shows set progress, a rest timer after a set, and no rest timer once it is dismissed', async () => {
+  localStorage.setItem('wt.restTimer', 'on')
   const user = userEvent.setup()
   const { repo } = await seed()
   renderApp(repo)
@@ -104,4 +108,15 @@ test('lastTimeByExercise skips exercises with nothing done', () => {
   )
   expect(m.has('a')).toBe(false)
   expect(m.get('b')).toBe('4 × 102.5 kg')
+})
+
+test('no rest timer appears after a set while the setting is off (the default)', async () => {
+  const user = userEvent.setup()
+  const { repo } = await seed()
+  renderApp(repo)
+  await user.click(await screen.findByRole('button', { name: 'Start workout' }))
+  await screen.findByText(/0 of 4 sets/)
+  await user.click(setButtons()[0]!)
+  await screen.findByText(/1 of 4 sets/)
+  expect(screen.queryByRole('timer')).toBeNull()
 })

@@ -27,6 +27,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import { isHttpUrl } from '@/lib/links'
+import { useRestTimerEnabled } from '@/lib/rest-timer-pref'
 import { useWakeLock } from '@/lib/wake-lock'
 import { lastTimeByExercise } from '@/lib/last-time'
 import { nextDay } from '@/lib/next-day'
@@ -312,6 +313,7 @@ function ActiveSession({
   useWakeLock(true)
   const [confirm, setConfirm] = useState<'finish' | 'discard' | null>(null)
   const [restSince, setRestSince] = useState<number | null>(null)
+  const restTimerOn = useRestTimerEnabled()
   const profile = useProfile().data
   const previous = usePreviousSession(session.plan_day_id, session.id).data
   const lastTime = lastTimeByExercise(previous, unit)
@@ -487,7 +489,7 @@ function ActiveSession({
 
         {confirm !== 'discard' && (
           <div className={cn(actionBarClass, 'mt-4')}>
-            {restSince !== null && confirm === null && (
+            {restTimerOn && restSince !== null && confirm === null && (
               <RestTimer since={restSince} onDismiss={() => setRestSince(null)} />
             )}
             {confirm === 'finish' ? (

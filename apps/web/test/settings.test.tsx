@@ -30,7 +30,10 @@ function renderSettings() {
 test('Settings no longer shows gear, but keeps units, export and account', async () => {
   renderSettings()
   expect(await screen.findByText('Email')).toBeTruthy()
-  expect(screen.queryAllByRole('switch')).toHaveLength(0)
+  // The only switch is the rest timer; gear toggles are gone and the timer defaults to off
+  const switches = screen.getAllByRole('switch')
+  expect(switches).toHaveLength(1)
+  expect(switches[0]!.getAttribute('aria-checked')).toBe('false')
   expect(screen.queryByRole('button', { name: 'Add custom gear' })).toBeNull()
   expect(screen.queryByLabelText('Custom gear name')).toBeNull()
   expect(screen.getByRole('radio', { name: 'kg' })).toBeTruthy()
@@ -110,4 +113,16 @@ describe('public name', () => {
     await waitFor(async () => expect((await repo.getProfile()).display_name).toBe('Sam Lifts'))
     expect(update).toHaveBeenCalledWith({ display_name: 'Sam Lifts' })
   })
+})
+
+test('the rest timer switch turns the setting on and is remembered on this device', async () => {
+  const user = userEvent.setup()
+  localStorage.removeItem('wt.restTimer')
+  renderSettings()
+  await screen.findByText('Email')
+  const sw = screen.getByRole('switch', { name: 'Show a rest timer after each set' })
+  await user.click(sw)
+  expect(sw.getAttribute('aria-checked')).toBe('true')
+  expect(localStorage.getItem('wt.restTimer')).toBe('on')
+  localStorage.removeItem('wt.restTimer')
 })

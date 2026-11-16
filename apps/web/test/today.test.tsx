@@ -384,3 +384,26 @@ test('the picker preselects the day after the last completed one, and a manual p
   await user.click(screen.getByRole('radio', { name: /Day A/ }))
   expect((screen.getByRole('radio', { name: /Day A/ }) as HTMLInputElement).checked).toBe(true)
 })
+
+test('holding a set again closes its editor', async () => {
+  const user = userEvent.setup()
+  const { repo } = await seed()
+  renderApp(repo)
+  await start(user)
+  const row = () => screen.getByRole('button', { name: /^Set 1:/ })
+  const hold = () => {
+    vi.useFakeTimers()
+    fireEvent.pointerDown(row(), { clientX: 10, clientY: 10 })
+    act(() => {
+      vi.advanceTimersByTime(500)
+    })
+    vi.useRealTimers()
+    fireEvent.pointerUp(row())
+    fireEvent.click(row())
+  }
+  hold()
+  expect(screen.getByLabelText('Weight')).toBeTruthy()
+  hold()
+  expect(screen.queryByLabelText('Weight')).toBeNull()
+  expect(pressed(1)).toBe('false')
+})

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { Screen } from '@/app/screen'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useProfile, useUpdateProfile } from '@/repo/hooks'
 import { AboutFooter } from '@/components/about-footer'
@@ -12,6 +13,7 @@ import { DeleteAccountCard } from '@/components/delete-account-card'
 import { PublicNameCard } from '@/components/public-name-card'
 import { useSignedIn } from '@/auth/context'
 import { notifyError } from '@/lib/notify'
+import { setRestTimerEnabled, useRestTimerEnabled } from '@/lib/rest-timer-pref'
 import { confirmBox, segmentedItem, segmentedTrack } from '@/lib/styles'
 
 const UNITS: Units[] = ['lb', 'kg']
@@ -20,6 +22,7 @@ export function SettingsScreen() {
   const profile = useProfile().data
   const updateProfile = useUpdateProfile()
   const signedIn = useSignedIn()
+  const restTimerOn = useRestTimerEnabled()
   const [pendingUnits, setPendingUnits] = useState<Units | null>(null)
   const [unitsError, setUnitsError] = useState<string | null>(null)
 
@@ -94,6 +97,21 @@ export function SettingsScreen() {
                 </div>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2>Rest timer</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
+              Show a rest timer after each set
+              <Switch checked={restTimerOn} aria-label="Show a rest timer after each set" onCheckedChange={setRestTimerEnabled} />
+            </label>
+            <p className="text-muted-foreground text-sm">Off by default. Saved on this device only.</p>
           </CardContent>
         </Card>
 

@@ -88,7 +88,8 @@ export function SetRow({ set, unit, step = 5, onToggle, onEdit, member, restCoun
             cancelPress()
             timer.current = setTimeout(() => {
               longPressed.current = true
-              setEditing(true)
+              // Hold to open the editor, hold again to close it
+              setEditing((open) => !open)
             }, LONG_PRESS_MS)
           }}
           onPointerUp={cancelPress}
@@ -175,7 +176,8 @@ export function SetRow({ set, unit, step = 5, onToggle, onEdit, member, restCoun
           type="button"
           aria-label={`Edit set ${set.set_no}`}
           aria-expanded={editing}
-          className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-11 shrink-0 items-center justify-center self-center rounded-full aria-expanded:bg-accent aria-expanded:text-foreground"
+          // Touch screens edit by holding the set (the hint says so); the button stays for screen readers there and for mouse users
+          className="text-muted-foreground hover:bg-accent hover:text-foreground pointer-coarse:sr-only flex size-11 shrink-0 items-center justify-center self-center rounded-full aria-expanded:bg-accent aria-expanded:text-foreground"
           onClick={() => setEditing((v) => !v)}
         >
           <PencilIcon className="size-4" />
