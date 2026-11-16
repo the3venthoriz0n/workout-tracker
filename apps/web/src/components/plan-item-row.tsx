@@ -80,16 +80,17 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
           aria-expanded={open}
           aria-controls={bodyId}
           aria-label={`${name} details`}
-          className="rounded-row flex min-h-14 min-w-0 flex-1 items-center gap-3 text-left"
+          className="rounded-row flex min-h-14 min-w-0 flex-1 items-center gap-2 text-left"
           onClick={() => setOpen((o) => !o)}
         >
           <ChevronRight
             aria-hidden
             className={cn('text-muted-foreground size-5 shrink-0', open && 'rotate-90')}
           />
-          {supersetLabel && <SupersetLabel label={supersetLabel} />}
           <span className="min-w-0 flex-1">
             <span className="block text-[17px] font-semibold">
+              {/* In a superset the A1/A2 chip rides on the name line so the row is as wide as any other */}
+              {supersetLabel && <SupersetLabel label={supersetLabel} className="mr-2 h-5 min-w-7 px-1.5 align-[2px]" />}
               {name}
               <AngleChip angle={item.angle} />
             </span>

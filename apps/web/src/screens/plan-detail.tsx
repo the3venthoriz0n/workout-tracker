@@ -248,7 +248,7 @@ export function PlanDetailScreen() {
                     <div
                       role="group"
                       aria-label={`Superset ${block.letter}`}
-                      className="bg-background relative flex flex-col rounded-row py-1 pr-3 pl-4 [--field:var(--card)]"
+                      className="bg-background relative flex flex-col rounded-row py-1 pr-1 pl-3 [--field:var(--card)]"
                     >
                       <Rail />
                       <div className="flex items-center justify-between gap-2">
