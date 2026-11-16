@@ -102,11 +102,7 @@ test('sheet puts name first, sets/reps/weight in one row, and hides optional det
   expect(within(dialog).queryByText('Required gear')).toBeNull()
 
   weight.focus()
-  // The Unit choice (three options) and Has angle sit between the numbers and the dropdown
-  await user.tab()
-  expect(document.activeElement).toBe(within(dialog).getByRole('radio', { name: 'App unit (lb)' }))
-  await user.tab()
-  await user.tab()
+  // Has angle sits between the numbers and the dropdown
   await user.tab()
   expect(document.activeElement).toBe(within(dialog).getByRole('switch', { name: 'Has angle (flat / incline / decline)' }))
   await user.tab()
@@ -608,6 +604,9 @@ test('an exercise can be kept in kg: the editor converts its weights on save and
   renderLibrary(repo)
   await user.click(await screen.findByRole('button', { name: 'Edit Back Squat' }))
   const dialog = await screen.findByRole('dialog')
+  // The Unit choice is optional, so it sits inside Optional details
+  expect(within(dialog).queryByRole('radio', { name: 'kg' })).toBeNull()
+  await user.click(within(dialog).getByRole('button', { name: 'Optional details' }))
   expect(within(dialog).getByRole('radio', { name: 'App unit (lb)' }).getAttribute('aria-checked')).toBe('true')
   await user.click(within(dialog).getByRole('radio', { name: 'kg' }))
   // The weight field switches to kg straight away, and the dialog says what saving does

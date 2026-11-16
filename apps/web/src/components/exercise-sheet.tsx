@@ -99,12 +99,13 @@ function ExerciseForm({
   const angleWarning = !!exercise?.supports_angle && !supportsAngle
   const detailsSummary =
     [
+      unitChoice && `${unitChoice} units`,
       gearIds.length > 0 && sortedGear.filter((g) => gearIds.includes(g.id)).map((g) => g.name).join(', '),
       videoUrl.trim() !== '' && 'Video',
       notes.trim() !== '' && 'Notes',
     ]
       .filter(Boolean)
-      .join(' · ') || 'Gear, video, notes'
+      .join(' · ') || 'Unit, gear, video, notes'
 
   function toggleGear(id: string, on: boolean) {
     setGearIds((ids) => (on ? [...ids, id] : ids.filter((g) => g !== id)))
@@ -195,43 +196,6 @@ function ExerciseForm({
             />
           </div>
 
-          {/* Optional: keep this exercise in its own unit, whatever the app unit is */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex min-h-11 items-center justify-between gap-3">
-              <span id="ex-unit-label" className="text-sm font-medium">
-                Unit
-              </span>
-              <div role="radiogroup" aria-labelledby="ex-unit-label" className={cn(segmentedTrack, 'w-64 shrink-0')}>
-                {([null, 'lb', 'kg'] as const).map((u) => {
-                  const on = unitChoice === u
-                  return (
-                    <button
-                      key={u ?? 'app'}
-                      type="button"
-                      role="radio"
-                      aria-checked={on}
-                      aria-label={u === null ? `App unit (${appUnits})` : u}
-                      className={cn(segmentedItem(on), 'px-2')}
-                      onClick={() => chooseUnit(u)}
-                    >
-                      {u === null ? `App (${appUnits})` : u}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-            {unitChanged && (
-              <p role="status" className="text-muted-foreground text-sm">
-                Saving converts this exercise&apos;s weights, plans and history to {unit}.
-              </p>
-            )}
-          </div>
-          {(errors.default_sets || errors.default_reps || errors.default_weight) && (
-            <p className="text-destructive -mt-2 text-sm">
-              {errors.default_sets ?? errors.default_reps ?? errors.default_weight}
-            </p>
-          )}
-
           <div className="flex flex-col">
             <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
               Has angle (flat / incline / decline)
@@ -260,6 +224,43 @@ function ExerciseForm({
             open={detailsOpen}
             onToggle={() => setDetailsOpen((o) => !o)}
           >
+            {/* Keep this exercise in its own unit, whatever the app unit is */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex min-h-11 items-center justify-between gap-3">
+                <span id="ex-unit-label" className="text-sm font-medium">
+                  Unit
+                </span>
+                <div role="radiogroup" aria-labelledby="ex-unit-label" className={cn(segmentedTrack, 'w-64 shrink-0')}>
+                  {([null, 'lb', 'kg'] as const).map((u) => {
+                    const on = unitChoice === u
+                    return (
+                      <button
+                        key={u ?? 'app'}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        aria-label={u === null ? `App unit (${appUnits})` : u}
+                        className={cn(segmentedItem(on), 'px-2')}
+                        onClick={() => chooseUnit(u)}
+                      >
+                        {u === null ? `App (${appUnits})` : u}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              {unitChanged && (
+                <p role="status" className="text-muted-foreground text-sm">
+                  Saving converts this exercise&apos;s weights, plans and history to {unit}.
+                </p>
+              )}
+            </div>
+            {(errors.default_sets || errors.default_reps || errors.default_weight) && (
+              <p className="text-destructive -mt-2 text-sm">
+                {errors.default_sets ?? errors.default_reps ?? errors.default_weight}
+              </p>
+            )}
+
             {sortedGear.length > 0 && (
               <fieldset className="flex flex-col">
                 <legend className="mb-1 text-sm font-medium">Required gear</legend>
