@@ -1,4 +1,4 @@
-import { nutritionSettingsOf } from '@workout/shared'
+import { aiEnabledOf, nutritionSettingsOf } from '@workout/shared'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
@@ -127,8 +127,8 @@ function Track() {
       ) : (
         <>
           <NutritionTotals entries={entries.data} settings={settings} />
-          <NutritionAdd date={date} />
-          <NutritionLog entries={entries.data} tracked={settings.tracked} />
+          <NutritionAdd date={date} aiOn={aiEnabledOf(settings)} tracked={settings.tracked} />
+          <NutritionLog entries={entries.data} tracked={settings.tracked} aiOn={aiEnabledOf(settings)} />
         </>
       )}
     </>

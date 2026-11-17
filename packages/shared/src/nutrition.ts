@@ -59,9 +59,14 @@ export type NutrientTotal = {
   total: number
   /** How many entries had a value for this nutrient. */
   counted: number
+  /** The goal, or the top of the range when there is a minimum. */
   goal: number | null
+  /** The bottom of the range, when there is one. */
+  goalMin: number | null
   /** Goal minus total; negative when over; null without a goal. */
   left: number | null
+  /** How far below the minimum the total still is; null when there is no minimum or it is reached. */
+  toMin: number | null
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -83,7 +88,15 @@ export function dayTotals(
     }
     const total = round1(sum)
     const goal = settings.goals[key] ?? null
-    out[key] = { total, counted, goal, left: goal === null ? null : round1(goal - total) }
+    const goalMin = settings.goalMins?.[key] ?? null
+    out[key] = {
+      total,
+      counted,
+      goal,
+      goalMin,
+      left: goal === null ? null : round1(goal - total),
+      toMin: goalMin !== null && total < goalMin ? round1(goalMin - total) : null,
+    }
   }
   return out
 }

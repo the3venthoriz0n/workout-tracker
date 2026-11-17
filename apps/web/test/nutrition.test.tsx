@@ -113,7 +113,7 @@ describe('Track', () => {
     const settings = nutritionSettingsSchema.parse({ tracked: ['calories', 'protein_g'], goals: { calories: 2400 } })
     const { repo } = await setup({ settings, entries: [entryOf(), entryOf({ id: newId(), name: 'Yogurt', calories: 150, protein_g: 12 })] })
     renderApp(repo, '/nutrition', { signedIn: true })
-    expect(await screen.findByRole('group', { name: 'Calories: 830 of 2400 kcal, 1570 left' })).toBeTruthy()
+    expect(await screen.findByRole('group', { name: 'Calories: 830 of 2400 kcal, 1570 kcal left' })).toBeTruthy()
     expect(screen.getByRole('group', { name: 'Protein: 44 g' })).toBeTruthy()
     expect(screen.queryByRole('group', { name: /Carbs/ })).toBeNull()
   })
@@ -122,7 +122,7 @@ describe('Track', () => {
     const settings = nutritionSettingsSchema.parse({ tracked: ['calories'], goals: { calories: 2400 } })
     const { repo } = await setup({ settings, entries: [entryOf({ calories: 2600 })] })
     renderApp(repo, '/nutrition', { signedIn: true })
-    expect(await screen.findByRole('group', { name: 'Calories: 2600 of 2400 kcal, 200 over' })).toBeTruthy()
+    expect(await screen.findByRole('group', { name: 'Calories: 2600 of 2400 kcal, 200 kcal over' })).toBeTruthy()
   })
 
   it('an entry without a value for a nutrient shows a dash there and is not counted in its total', async () => {
@@ -167,7 +167,7 @@ describe('Track', () => {
 
   it.each([
     ['the daily limit', () => new AiLimitError(), 'AI limit reached. Try again later.'],
-    ['no provider', () => new AiUnavailableError(), "AI isn't set up on this server yet."],
+    ['no provider', () => new AiUnavailableError(), "AI isn't set up yet. Check your key in Settings."],
     ['a failed read', () => new AiFailedError(), "Couldn't read that. Try describing it differently."],
     ['being offline', () => new OfflineError(), 'Needs a connection.'],
   ])('%s shows its own message and the log stays usable', async (_n, make, message) => {

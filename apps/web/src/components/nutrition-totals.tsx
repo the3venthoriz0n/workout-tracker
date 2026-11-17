@@ -14,10 +14,12 @@ export function NutritionTotals({ entries, settings }: { entries: readonly Nutri
       {NUTRIENTS.filter((n) => settings.tracked.includes(n.key)).map((n) => {
         const t = totals[n.key]
         const over = t.left !== null && t.left < 0
+        const goalText = t.goalMin !== null && t.goal !== null ? `${t.goalMin}\u2013${t.goal}` : String(t.goal)
         const notCounted = t.counted < entries.length
         const parts = [
-          t.goal === null ? `${n.label}: ${t.total} ${n.unit}` : `${n.label}: ${t.total} of ${t.goal} ${n.unit}`,
-          t.left === null ? null : `${Math.abs(t.left)} ${over ? 'over' : 'left'}`,
+          t.goal === null ? `${n.label}: ${t.total} ${n.unit}` : `${n.label}: ${t.total} of ${goalText} ${n.unit}`,
+          t.toMin !== null ? `${t.toMin} ${n.unit} to reach the minimum` : null,
+          t.left === null ? null : `${Math.abs(t.left)} ${n.unit} ${over ? 'over' : 'left'}`,
           notCounted ? `${t.counted} of ${entries.length} entries counted` : null,
         ].filter(Boolean)
         return (
@@ -26,7 +28,7 @@ export function NutritionTotals({ entries, settings }: { entries: readonly Nutri
               <p className="text-muted-foreground text-sm font-medium">{n.label}</p>
               <p className="tabular-nums">
                 <span className="text-[26px] leading-none font-semibold tracking-[-0.02em]">{t.total}</span>
-                <span className="text-muted-foreground text-sm"> {t.goal === null ? n.unit : `/ ${t.goal} ${n.unit}`}</span>
+                <span className="text-muted-foreground text-sm"> {t.goal === null ? n.unit : `/ ${goalText} ${n.unit}`}</span>
               </p>
               {t.goal !== null && (
                 <div className="bg-muted h-1.5 overflow-hidden rounded-full">
@@ -38,7 +40,8 @@ export function NutritionTotals({ entries, settings }: { entries: readonly Nutri
               )}
               {t.left !== null && (
                 <p className={cn('text-sm tabular-nums', over ? 'text-destructive font-medium' : 'text-muted-foreground')}>
-                  {Math.abs(t.left)} {over ? 'over' : 'left'}
+                  {Math.abs(t.left)} {n.unit} {over ? 'over' : 'left'}
+                  {t.toMin !== null && ` \u00b7 ${t.toMin} ${n.unit} to minimum`}
                 </p>
               )}
               {notCounted && (

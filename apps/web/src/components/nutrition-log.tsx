@@ -18,9 +18,9 @@ function summary(entry: NutritionEntry, tracked: NutrientKey[]): string {
     .join(' · ')
 }
 
-export function NutritionLog({ entries, tracked }: { entries: readonly NutritionEntry[]; tracked: NutrientKey[] }) {
+export function NutritionLog({ entries, tracked, aiOn = true }: { entries: readonly NutritionEntry[]; tracked: NutrientKey[]; aiOn?: boolean }) {
   if (entries.length === 0) {
-    return <p className="text-muted-foreground text-sm">Nothing logged yet. Say what you ate above.</p>
+    return <p className="text-muted-foreground text-sm">{aiOn ? 'Nothing logged yet. Say what you ate above.' : 'Nothing logged yet. Add what you ate above.'}</p>
   }
   return (
     <ul className={listGroup}>
@@ -41,38 +41,38 @@ function EntryRow({ entry, tracked }: { entry: NutritionEntry; tracked: Nutrient
 
   return (
     <>
-    <li className="flex cursor-pointer flex-col py-1.5 pr-1.5 pl-4" onClick={tileClick(onEdit, confirming)}>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="flex min-h-12 min-w-0 flex-1 flex-col items-start justify-center gap-0.5 py-1 text-left"
-          onClick={onEdit}
-        >
-          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-[17px] font-semibold break-words">{entry.name}</span>
-            {entry.source === 'ai' && (
-              <span className="bg-secondary text-foreground inline-flex h-6 items-center rounded-full px-2.5 text-sm font-medium">estimate</span>
-            )}
-          </span>
-          {entry.quantity !== '' && <span className="text-muted-foreground text-sm">{entry.quantity}</span>}
-          <span className="text-muted-foreground text-sm tabular-nums">{summary(entry, tracked)}</span>
-        </button>
-        {!confirming && <RowActions trashRef={trashRef} name={entry.name} onEdit={onEdit} onDelete={() => setConfirming(true)} />}
-      </div>
-      {confirming && (
-        <DeleteConfirm
-          name={entry.name}
-          subject="entry"
-          status="ready"
-          impact="This can't be undone."
-          pending={remove.isPending}
-          onCancel={() => setConfirming(false)}
-          onConfirm={() => remove.mutate(entry.id, { onError: (err) => notifyError(err, "Couldn't delete the entry") })}
-        />
-      )}
-    </li>
-    {/* Outside the <li>: a click inside the sheet would otherwise bubble up through React to the tile */}
-    <NutritionEntrySheet entry={entry} tracked={tracked} open={editing} onOpenChange={setEditing} />
+      <li className="flex cursor-pointer flex-col py-1.5 pr-1.5 pl-4" onClick={tileClick(onEdit, confirming)}>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="flex min-h-12 min-w-0 flex-1 flex-col items-start justify-center gap-0.5 py-1 text-left"
+            onClick={onEdit}
+          >
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-[17px] font-semibold break-words">{entry.name}</span>
+              {entry.source === 'ai' && (
+                <span className="bg-secondary text-foreground inline-flex h-6 items-center rounded-full px-2.5 text-sm font-medium">estimate</span>
+              )}
+            </span>
+            {entry.quantity !== '' && <span className="text-muted-foreground text-sm">{entry.quantity}</span>}
+            <span className="text-muted-foreground text-sm tabular-nums">{summary(entry, tracked)}</span>
+          </button>
+          {!confirming && <RowActions trashRef={trashRef} name={entry.name} onEdit={onEdit} onDelete={() => setConfirming(true)} />}
+        </div>
+        {confirming && (
+          <DeleteConfirm
+            name={entry.name}
+            subject="entry"
+            status="ready"
+            impact="This can't be undone."
+            pending={remove.isPending}
+            onCancel={() => setConfirming(false)}
+            onConfirm={() => remove.mutate(entry.id, { onError: (err) => notifyError(err, "Couldn't delete the entry") })}
+          />
+        )}
+      </li>
+      {/* Outside the <li>: a click inside the sheet would otherwise bubble up through React to the tile */}
+      <NutritionEntrySheet entry={entry} tracked={tracked} open={editing} onOpenChange={setEditing} />
     </>
   )
 }

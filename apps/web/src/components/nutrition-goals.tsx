@@ -1,10 +1,13 @@
 import { NUTRIENTS, NUTRITION_LIMITS, nutritionSettingsOf, nutritionSettingsSchema } from '@workout/shared'
 import type { NutrientKey, NutritionSettings } from '@workout/shared'
-import { useRef } from 'react'
+import { useId, useRef, useState } from 'react'
 import { LoadError } from '@/components/load-error'
-import { NumberField } from '@/components/number-field'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { parseGoal, showGoal } from '@/lib/nutrition-goal-text'
+import type { GoalValue } from '@/lib/nutrition-goal-text'
 import { notifyError } from '@/lib/notify'
 import { listGroup } from '@/lib/styles'
 import { useProfile, useUpdateProfile } from '@/repo/hooks'
@@ -14,6 +17,12 @@ import { useProfile, useUpdateProfile } from '@/repo/hooks'
  * field under it while it is on. Turning one off only hides it: entries keep what they stored. At
  * least one nutrient stays on, so the last switch is disabled and says why.
  */
+// Leaves goalMins off entirely when empty, so settings without a range stay as they were
+function withMins(settings: NutritionSettings, goalMins: NonNullable<NutritionSettings['goalMins']>): NutritionSettings {
+  const { goalMins: _old, ...rest } = settings
+  return Object.keys(goalMins).length === 0 ? rest : { ...rest, goalMins }
+}
+
 export function NutritionGoals() {
   const query = useProfile()
   const update = useUpdateProfile()
@@ -47,12 +56,19 @@ export function NutritionGoals() {
   }
 
   // false (the field reverts) for a goal of zero, negative or beyond what one day can hold
-  function setGoal(key: NutrientKey, value: number | null): boolean {
-    if (value !== null && (value <= 0 || value > NUTRITION_LIMITS[key])) return false
+  function setGoal(key: NutrientKey, value: GoalValue | null): boolean {
+    if (value !== null && (value.max <= 0 || value.max > NUTRITION_LIMITS[key])) return false
     const goals = { ...settings.goals }
-    if (value === null) delete goals[key]
-    else goals[key] = value
-    save({ ...settings, goals })
+    const goalMins = { ...settings.goalMins }
+    if (value === null) {
+      delete goals[key]
+      delete goalMins[key]
+    } else {
+      goals[key] = value.max
+      if (value.min === null) delete goalMins[key]
+      else goalMins[key] = value.min
+    }
+    save(withMins({ ...settings, goals }, goalMins))
     return true
   }
 
@@ -74,12 +90,10 @@ export function NutritionGoals() {
               </label>
               {on && (
                 <div className="pb-2">
-                  <NumberField
+                  <GoalField
                     label={`${n.label} goal (${n.unit})`}
-                    kind="weight"
-                    allowEmpty
-                    value={settings.goals[n.key] ?? null}
-                    placeholder="No goal"
+                    unit={n.unit}
+                    value={settings.goals[n.key] === undefined ? null : { min: settings.goalMins?.[n.key] ?? null, max: settings.goals[n.key]! }}
                     onCommit={(v) => setGoal(n.key, v)}
                   />
                 </div>
@@ -89,6 +103,49 @@ export function NutritionGoals() {
         })}
       </ul>
       {onlyOne && <p className="text-muted-foreground text-sm">Keep at least one nutrient on.</p>}
+    </div>
+  )
+}
+
+/** One text field for a goal: "190", or a range such as "170-190". Commits on blur or Enter; text that is not a goal reverts. */
+function GoalField({ label, unit, value, onCommit }: { label: string; unit: string; value: GoalValue | null; onCommit: (v: GoalValue | null) => boolean }) {
+  const id = useId()
+  const shown = showGoal(value)
+  const [text, setText] = useState(shown)
+  const [seen, setSeen] = useState(shown)
+  const [focused, setFocused] = useState(false)
+  // Follow the saved goal, but never while the person is typing
+  if (seen !== shown) {
+    setSeen(shown)
+    if (!focused) setText(shown)
+  }
+  function commit() {
+    setFocused(false)
+    const parsed = parseGoal(text, unit)
+    if (parsed === undefined || !onCommit(parsed)) setText(shown)
+    else setText(showGoal(parsed))
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        className="tabular-nums"
+        enterKeyHint="done"
+        autoComplete="off"
+        autoCapitalize="none"
+        placeholder="No goal. Try 190 or 170-190"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            e.currentTarget.blur()
+          }
+        }}
+      />
     </div>
   )
 }
