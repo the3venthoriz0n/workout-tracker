@@ -2,9 +2,14 @@ name: Release
 
 # Pushing a version tag (e.g. v1.2.0) tests, builds, publishes and deploys that commit, and
 # creates its GitHub Release with generated notes.
+# PAUSED: there is no production environment yet, so a tag does not run this; only staging.yml
+# (the self-hosted :staging image) runs on a tag. To resume, put the tag trigger back:
+#   on:
+#     push:
+#       tags: ['v*.*.*']
+# Until then it can only be started by hand (Actions > Release > Run workflow, from a tag).
 on:
-  push:
-    tags: ['v*.*.*']
+  workflow_dispatch:
 
 permissions: {}
 
