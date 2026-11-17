@@ -1,3 +1,4 @@
+import { AiUnavailableError } from '@workout/shared'
 import type { ExportData, PlanItem, Repo } from '@workout/shared'
 import type { Db } from '../db/types.js'
 import { deleteExercise, exerciseUsage, listExercises, saveExercise, setExerciseRule } from './exercises.js'
@@ -32,6 +33,7 @@ import {
 import { owns, type OwnedKind } from './ownership.js'
 import { exportAll, importAll, replaceAll } from './transfer.js'
 import { deleteAccount } from './account.js'
+import { deleteNutritionEntry, listNutrition, saveNutritionEntry, takeAiMeal } from './nutrition.js'
 import { adoptSharedPlan, hasVoted, listMyShared, publishPlan, setVote, unpublishPlan } from './community.js'
 
 export type Service = Repo & {
@@ -43,10 +45,22 @@ export type Service = Repo & {
   owns(kind: OwnedKind, id: string): Promise<boolean>
   /** Deletes the account and everything it owns (the route checks the password first). */
   deleteAccount(): Promise<void>
+  /** Counts one AI parse for `today`; returns how many remain, or null when the day's limit is reached. */
+  takeAiMeal(dailyLimit: number, today: string): Promise<number | null>
 }
 
 export function createService(db: Db, userId: string): Service {
   return {
+    // nutrition
+    listNutrition: (from, to) => listNutrition(db, userId, from, to),
+    saveNutritionEntry: (input) => saveNutritionEntry(db, userId, input),
+    deleteNutritionEntry: (id) => deleteNutritionEntry(db, userId, id),
+    takeAiMeal: (dailyLimit, today) => takeAiMeal(db, userId, dailyLimit, today),
+    // Parsing belongs to the route layer, which holds the configured provider; the service has none.
+    parseMeal: async () => {
+      throw new AiUnavailableError()
+    },
+
     // profile, gear, exercises (Task 2a)
     init: () => init(db, userId),
     getProfile: () => getProfile(db, userId),

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { ExportData } from './repo.js'
 import { ImportInvalidError } from './repo.js'
 import { sharedListingSchema } from './community.js'
+import { nutritionEntrySchema } from './nutrition.js'
 import {
   exerciseSchema,
   gearSchema,
@@ -51,6 +52,8 @@ export const exportDataSchema = z.object({
   item_states: z.array(itemStateSchema),
   workout_sessions: z.array(workoutSessionSchema),
   set_logs: z.array(setLogSchema),
+  // Additive (nutrition): absent in exports written before it.
+  nutrition_entries: z.array(nutritionEntrySchema).optional(),
   // Additive (M2c): absent in guest exports and in exports written before them.
   account: exportAccountSchema.optional(),
   community: exportCommunitySchema.optional(),
@@ -90,6 +93,7 @@ function checkIntegrity(d: ExportData): void {
   const dayIds = unique('plan_days', d.plan_days.map((r) => r.id))
   const itemIds = unique('plan_items', d.plan_items.map((r) => r.id))
   const sessionIds = unique('workout_sessions', d.workout_sessions.map((r) => r.id))
+  unique('nutrition_entries', (d.nutrition_entries ?? []).map((r) => r.id))
   unique('set_logs', d.set_logs.map((r) => r.id))
   unique('progression_rules', d.progression_rules.map((r) => r.plan_item_id))
   unique('item_states', d.item_states.map((r) => r.plan_item_id))
@@ -133,7 +137,7 @@ function checkIntegrity(d: ExportData): void {
     bad('workout_sessions: more than one active session')
   }
 
-  const stamps = [d.profile, ...d.gear, ...d.exercises, ...d.plans, ...d.plan_days, ...d.plan_items, ...d.progression_rules, ...d.item_states, ...d.workout_sessions, ...d.set_logs]
+  const stamps = [d.profile, ...d.gear, ...d.exercises, ...d.plans, ...d.plan_days, ...d.plan_items, ...d.progression_rules, ...d.item_states, ...d.workout_sessions, ...d.set_logs, ...(d.nutrition_entries ?? [])]
   for (const r of stamps) {
     for (const v of [r.created_at, r.updated_at, r.deleted_at]) {
       if (v !== null && Number.isNaN(Date.parse(v))) bad('timestamp is not a valid date')

@@ -111,7 +111,7 @@ export async function buildFixture(c: Client, opts: Opts = {}): Promise<Fixture>
   const active = (await ok('GET', '/api/v1/sessions/active')) as { id: string } | null
   if (active) await ok('DELETE', `/api/v1/sessions/${active.id}`)
   await ok('POST', '/api/v1/me/init')
-  const f = { gear: newId(), exercise: newId(), plan: newId(), day: newId() }
+  const f = { gear: newId(), exercise: newId(), plan: newId(), day: newId(), nutritionEntry: newId() }
   await ok('PUT', `/api/v1/gear/${f.gear}`, { name: `Rack ${f.gear.slice(0, 4)}`, owned: true })
   await ok('PUT', `/api/v1/exercises/${f.exercise}`, {
     name: 'Bench Press',
@@ -123,6 +123,19 @@ export async function buildFixture(c: Client, opts: Opts = {}): Promise<Fixture>
     default_sets: 2,
     default_reps: 5,
     default_weight: 95,
+  })
+  await ok('PUT', `/api/v1/nutrition/entries/${f.nutritionEntry}`, {
+    date: new Date().toISOString().slice(0, 10),
+    name: 'Oatmeal',
+    quantity: '1 bowl',
+    calories: 300,
+    protein_g: 10,
+    carbs_g: null,
+    fat_g: null,
+    fiber_g: null,
+    sugar_g: null,
+    sodium_mg: null,
+    source: 'manual',
   })
   await ok('PUT', `/api/v1/plans/${f.plan}`, { name: 'Plan A' })
   await ok('PUT', `/api/v1/days/${f.day}`, { plan_id: f.plan, name: 'Day 1' })
@@ -168,6 +181,7 @@ export function randomFixture(like: Fixture): Fixture {
     exercise: newId(),
     plan: newId(),
     day: newId(),
+    nutritionEntry: newId(),
     item: newId(),
     item2: newId(),
     group: newId(),

@@ -68,9 +68,28 @@ const schema = z.object({
       .regex(/^(?:[^\r\n<>@,]* <[^\s<>@,]+@[^\s<>@,]+>|[^\s<>@,]+@[^\s<>@,]+)$/, 'must be one address, optionally with a name')
       .optional(),
   ),
+  // AI meal parser (nutrition). Any service: `openai` is any OpenAI-compatible chat completions API
+  // (Groq, OpenRouter, Gemini's compatible endpoint, Ollama, ...), `anthropic` is Claude. With no key
+  // the feature reports itself unavailable. The key is never echoed.
+  AI_PROVIDER: z.enum(['openai', 'anthropic']).default('openai'),
+  AI_BASE_URL: z.preprocess(emptyToUndefined, z.url().optional()),
+  AI_API_KEY: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^\S+$/, 'must not contain whitespace')
+      .optional(),
+  ),
+  AI_MODEL: z.preprocess(emptyToUndefined, z.string().max(200).regex(/^\S+$/, 'must not contain whitespace').optional()),
   // Directory of the built SPA; set only in the production image.
   STATIC_DIR: z.string().optional(),
 }).superRefine((v, ctx) => {
+  if (v.AI_API_KEY) {
+    if (!v.AI_MODEL) ctx.addIssue({ code: 'custom', path: ['AI_MODEL'], message: 'required when AI_API_KEY is set' })
+    if (v.AI_PROVIDER === 'openai' && !v.AI_BASE_URL) {
+      ctx.addIssue({ code: 'custom', path: ['AI_BASE_URL'], message: 'required for an openai-compatible provider' })
+    }
+  }
   if (v.NODE_ENV !== 'production') return
   for (const name of ['RESEND_API_KEY', 'MAIL_FROM'] as const) {
     if (!v[name]) ctx.addIssue({ code: 'custom', path: [name], message: 'required in production' })

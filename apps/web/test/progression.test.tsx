@@ -220,9 +220,9 @@ test('a no-progression override shows as such', async () => {
   expect(within(overrides).getByText('No progression')).toBeTruthy()
 })
 
-test('the Nutrition tab is a placeholder for nutrition tracking', async () => {
+test('the Nutrition tab is the tracker; a guest is asked to create an account', async () => {
   await setup(false, undefined, '/nutrition')
-  expect(await screen.findByText('Nutrition tracking is coming soon.')).toBeTruthy()
+  expect(await screen.findByText('Create an account to track nutrition')).toBeTruthy()
 })
 
 test('the old /progression path opens the Progression section of Library', async () => {

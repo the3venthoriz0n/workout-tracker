@@ -15,6 +15,7 @@ import type {
   SetLog,
   WorkoutSession,
 } from './schemas.js'
+import type { MealDraft, NutritionEntry, NutritionEntryInput, NutritionSettings } from './nutrition.js'
 import type { ExerciseProgression } from './rules.js'
 import type { ListingMeta, SharedListing, SharedSnapshot } from './community.js'
 import type { Effective } from './effective.js'
@@ -65,6 +66,8 @@ export type ExportData = {
   item_states: ItemState[]
   workout_sessions: WorkoutSession[]
   set_logs: SetLog[]
+  /** Absent in exports written before nutrition. */
+  nutrition_entries?: NutritionEntry[]
   /** Server exports only: the sign-in email. Never imported. */
   account?: ExportAccount
   /** Server exports only: listings, votes and downloads. Never imported. */
@@ -168,6 +171,33 @@ export class PublishLimitError extends ApiError {
   }
 }
 
+// The AI meal parser. Fixed messages on purpose: nothing from the provider, the key or the user's
+// meal text is ever put into one of these.
+/** The daily cap or the provider's own rate limit was hit (429 ai_limit). */
+export class AiLimitError extends ApiError {
+  constructor() {
+    super(429, 'ai_limit')
+    this.message = 'AI limit reached'
+    this.name = 'AiLimitError'
+  }
+}
+/** No provider is configured, or it rejected the key (503 ai_unavailable). */
+export class AiUnavailableError extends ApiError {
+  constructor() {
+    super(503, 'ai_unavailable')
+    this.message = 'AI is unavailable'
+    this.name = 'AiUnavailableError'
+  }
+}
+/** The provider failed, timed out or answered with something unusable (502 ai_failed). */
+export class AiFailedError extends ApiError {
+  constructor() {
+    super(502, 'ai_failed')
+    this.message = 'AI could not read that'
+    this.name = 'AiFailedError'
+  }
+}
+
 /** Owners cannot upvote their own listing (409 own_listing). */
 export class OwnListingError extends ApiError {
   constructor() {
@@ -199,6 +229,8 @@ export interface Repo {
     default_rule?: RuleInput
     /** Public name (2-30 letters, digits, spaces, _ - .); it can be changed but not removed. */
     display_name?: string
+    /** Which nutrients are tracked and their goals (signed-in accounts only). */
+    nutrition?: NutritionSettings
   }): Promise<Profile>
   listGear(): Promise<Gear[]>
   saveGear(input: { id?: string; name: string; owned: boolean }): Promise<Gear>
@@ -246,6 +278,16 @@ export interface Repo {
   exportAll(): Promise<ExportData>
   listProgression(): Promise<ProgressionRow[]> // live plan items with their rules, in plan/day/item order
   listProgressionByExercise(): Promise<ExerciseProgression[]> // every live exercise once, sorted by name
+
+  // Nutrition (spec: docs/superpowers/specs/2026-11-16-nutrition-tracker-design.md). Signed-in only:
+  // a guest device throws UnauthenticatedError from every one of these.
+  /** Entries from `from` to `to` (YYYY-MM-DD, inclusive, at most 366 days), by date then creation time. */
+  listNutrition(from: string, to: string): Promise<NutritionEntry[]>
+  /** Idempotent save (an upsert on the entry's id; a new id when omitted). */
+  saveNutritionEntry(entry: NutritionEntryInput): Promise<NutritionEntry>
+  deleteNutritionEntry(id: string): Promise<void>
+  /** Estimates the foods in `text` for the tracked nutrients. Writes nothing; the caller saves what it keeps. */
+  parseMeal(text: string): Promise<{ items: MealDraft[]; remaining_today: number }>
 
   // Community plans (spec §3, §9). Guests (LocalRepo) cannot publish, unpublish or vote
   // (UnauthenticatedError); they have no listings and no votes, and adopt from a fetched snapshot.

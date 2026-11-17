@@ -1,5 +1,8 @@
 import type { Context } from 'hono'
 import {
+  AiFailedError,
+  AiLimitError,
+  AiUnavailableError,
   AlreadyHasDataError,
   ConflictError,
   IdParam,
@@ -76,6 +79,9 @@ export function mapDomainError(err: unknown, c: Context): Response | undefined {
   if (err instanceof ConflictError) return c.json({ error: 'conflict' }, 409)
   if (err instanceof OwnListingError) return c.json({ error: 'own_listing' }, 409)
   if (err instanceof PublishLimitError) return c.json({ error: 'publish_limit' }, 429)
+  if (err instanceof AiLimitError) return c.json({ error: 'ai_limit' }, 429)
+  if (err instanceof AiUnavailableError) return c.json({ error: 'ai_unavailable' }, 503)
+  if (err instanceof AiFailedError) return c.json({ error: 'ai_failed' }, 502)
   if (err instanceof TryAgainError) {
     c.header('Retry-After', '1')
     return c.json({ error: 'try_again' }, 503)

@@ -27,6 +27,8 @@ Settings → Delete account (signed in) deletes the account immediately after yo
 
 A forgotten password is reset by email ("Forgot password?"). Resetting also confirms the address and signs out every session. Mail goes through Resend in production and staging (`RESEND_API_KEY`, `MAIL_FROM`); the API refuses to start in production without both.
 
+The Nutrition tab (sign-in only) estimates what you eat with an AI service you choose: set `AI_PROVIDER`, `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL` (any OpenAI-compatible service such as Groq, OpenRouter, Gemini or a local Ollama, or Claude). Without a key the tab reports AI as unavailable. Meal text goes to the configured service and is never stored or logged here.
+
 ### Testing email flows locally
 
 `just dev` needs no mail account: the API prints every set-up and reset link in its log, on lines starting with `[mail]` (development only; follow them with `just logs dev`). `just preview` runs in production mode with placeholder mail settings, so emails cannot be sent there and new accounts cannot verify; to try the sign-up and reset flows, use `just dev`.

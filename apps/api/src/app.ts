@@ -12,6 +12,7 @@ import { rateLimitIpHeaders } from './auth.js'
 import { sanitizeError } from './logging.js'
 import type { Env } from './env.js'
 import { csrfGuard, requireUser, type AppEnv } from './middleware.js'
+import type { MealParser } from './ai/meal-parser.js'
 import type { PublicService } from './service/community.js'
 import type { Service } from './service/index.js'
 
@@ -24,6 +25,8 @@ export type AppDeps = {
   getPublic: () => PublicService
   /** Overrides of the public area's per-IP limit (defaults come from env; tests turn it off). */
   publicRateLimit?: Partial<PublicRateLimit>
+  /** The AI meal parser for nutrition; absent or null means the feature is unavailable. */
+  mealParser?: MealParser | null
   /** Resolves true when the database answers; defaults to always healthy (tests). */
   sqlHealth?: () => Promise<boolean>
 }
@@ -74,7 +77,7 @@ export function createApp(deps: AppDeps): Hono {
 
   const v1 = new Hono<AppEnv>()
   v1.use('*', requireUser(auth))
-  registerRoutes(v1, { getService: deps.getService, auth })
+  registerRoutes(v1, { getService: deps.getService, auth, mealParser: deps.mealParser ?? null })
   app.route(API_PREFIX, v1)
 
   // Public community area: outside the /api/v1 session guard, GET only, never reads a session.

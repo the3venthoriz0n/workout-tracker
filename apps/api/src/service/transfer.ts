@@ -15,6 +15,7 @@ import {
   planVote,
   profile,
   progressionRule,
+  nutritionEntry,
   setLog,
   sharedPlan,
   sharedPlanVersion,
@@ -35,6 +36,7 @@ import {
   toProfile,
   toRule,
   toSession,
+  toNutritionEntry,
   toSetLog,
 } from './mappers.js'
 import { TRANSIENT, TryAgainError } from './account.js'
@@ -55,6 +57,7 @@ export async function exportAll(db: Db, userId: string): Promise<ExportData> {
         rules: await tx.select().from(progressionRule).where(eq(progressionRule.userId, userId)).orderBy(asc(progressionRule.createdAt), asc(progressionRule.planItemId)),
         states: await tx.select().from(itemState).where(eq(itemState.userId, userId)).orderBy(asc(itemState.createdAt), asc(itemState.planItemId)),
         sessions: await tx.select().from(workoutSession).where(eq(workoutSession.userId, userId)).orderBy(asc(workoutSession.createdAt), asc(workoutSession.id)),
+        nutrition: await tx.select().from(nutritionEntry).where(eq(nutritionEntry.userId, userId)).orderBy(asc(nutritionEntry.createdAt), asc(nutritionEntry.id)),
         logs: await tx.select().from(setLog).where(eq(setLog.userId, userId)).orderBy(asc(setLog.createdAt), asc(setLog.sessionId), asc(setLog.position), asc(setLog.setNo), asc(setLog.id)),
         account: await tx.select({ email: user.email, createdAt: user.createdAt }).from(user).where(eq(user.id, userId)),
         listings: await tx
@@ -88,6 +91,7 @@ export async function exportAll(db: Db, userId: string): Promise<ExportData> {
         item_states: rows.states.map(toItemState),
         workout_sessions: rows.sessions.map(toSession),
         set_logs: rows.logs.map(toSetLog),
+        nutrition_entries: rows.nutrition.map(toNutritionEntry),
         ...(rows.account[0] && { account: { email: rows.account[0].email, created_at: rows.account[0].createdAt.toISOString() } }),
         community: {
           listings: rows.listings.map(({ l, planId }) => ({
@@ -152,6 +156,8 @@ async function asImportError<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+const decOrNull = (v: number | null): string | null => (v === null ? null : dec(v))
+
 const profileValues = (d: ExportData) => ({
   // Only billing may set the tier (spec section 10); an uploaded file never can.
   plan: 'free',
@@ -159,6 +165,7 @@ const profileValues = (d: ExportData) => ({
   weightIncrement: dec(d.profile.weight_increment),
   defaultRule: d.profile.default_rule ?? null,
   displayName: d.profile.display_name,
+  nutrition: d.profile.nutrition ?? null,
   ...sync(d.profile),
 })
 
@@ -227,7 +234,7 @@ async function replaceOnce(db: Db, userId: string, d: ExportData): Promise<void>
       .where(and(eq(plan.userId, userId), isNotNull(plan.sharedPlanId)))
 
     // Children first; the composite foreign keys would cascade anyway.
-    for (const table of [setLog, workoutSession, itemState, progressionRule, planItem, planDay, plan, exercise, gear]) {
+    for (const table of [setLog, workoutSession, itemState, progressionRule, planItem, planDay, plan, exercise, gear, nutritionEntry]) {
       await tx.delete(table).where(eq(table.userId, userId))
     }
     const values = { ...profileValues(d), displayName: prof?.displayName ?? d.profile.display_name }
@@ -353,6 +360,26 @@ async function insertRows(tx: Tx, userId: string, d: ExportData): Promise<void> 
           seq: r.seq,
           supersetGroup: r.superset_group,
           supersetLabel: r.superset_label,
+          ...sync(r),
+        })),
+      ),
+    )
+    await insertChunked(d.nutrition_entries ?? [], (c) =>
+      tx.insert(nutritionEntry).values(
+        c.map((r) => ({
+          id: r.id,
+          userId,
+          date: r.date,
+          name: r.name,
+          quantity: r.quantity,
+          calories: decOrNull(r.calories),
+          proteinG: decOrNull(r.protein_g),
+          carbsG: decOrNull(r.carbs_g),
+          fatG: decOrNull(r.fat_g),
+          fiberG: decOrNull(r.fiber_g),
+          sugarG: decOrNull(r.sugar_g),
+          sodiumMg: decOrNull(r.sodium_mg),
+          source: r.source,
           ...sync(r),
         })),
       ),

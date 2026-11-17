@@ -13,7 +13,9 @@ import { sql } from 'drizzle-orm'
 import {
   boolean,
   check,
+  date,
   foreignKey,
+  index,
   integer,
   jsonb,
   numeric,
@@ -24,7 +26,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-import type { PlanSource, RuleInput } from '@workout/shared'
+import type { NutritionSettings, PlanSource, RuleInput } from '@workout/shared'
 import { user } from './auth.js'
 import { sharedPlan } from './community.js'
 
@@ -52,6 +54,8 @@ export const profile = pgTable(
     defaultRule: jsonb('default_rule').$type<RuleInput>(),
     // Public name for community plans; null until set.
     displayName: text('display_name'),
+    // Tracked nutrients and goals (shape validated by the shared zod schema); null means the defaults.
+    nutrition: jsonb('nutrition').$type<NutritionSettings>(),
     ...syncColumns(),
   },
   (t) => [
@@ -269,4 +273,42 @@ export const setLog = pgTable(
       name: 'set_log_session_fk',
     }).onDelete('cascade'),
   ],
+)
+
+// Estimated or hand-entered food. A nutrient is null when it was not tracked at the time. The date
+// is the client's local calendar day; a day is simply the entries that share it.
+export const nutritionEntry = pgTable(
+  'nutrition_entry',
+  {
+    id: uuid('id').notNull(),
+    ...owner(),
+    date: date('date', { mode: 'string' }).notNull(),
+    name: text('name').notNull(),
+    quantity: text('quantity').notNull().default(''),
+    calories: numeric('calories', { precision: 8, scale: 2 }),
+    proteinG: numeric('protein_g', { precision: 8, scale: 2 }),
+    carbsG: numeric('carbs_g', { precision: 8, scale: 2 }),
+    fatG: numeric('fat_g', { precision: 8, scale: 2 }),
+    fiberG: numeric('fiber_g', { precision: 8, scale: 2 }),
+    sugarG: numeric('sugar_g', { precision: 8, scale: 2 }),
+    sodiumMg: numeric('sodium_mg', { precision: 8, scale: 2 }),
+    source: text('source').notNull(),
+    ...syncColumns(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.id] }),
+    check('nutrition_entry_source_check', sql`${t.source} in ('ai', 'manual')`),
+    index('nutrition_entry_day_idx').on(t.userId, t.date),
+  ],
+)
+
+// How many AI parses a user has used on a day (the per-user cap).
+export const aiUsage = pgTable(
+  'ai_usage',
+  {
+    ...owner(),
+    usageDate: date('usage_date', { mode: 'string' }).notNull(),
+    count: integer('count').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.usageDate] })],
 )

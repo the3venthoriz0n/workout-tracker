@@ -5,6 +5,8 @@ import {
   exerciseSchema,
   gearSchema,
   itemStateSchema,
+  nutritionEntrySchema,
+  nutritionSettingsSchema,
   planDaySchema,
   planItemSchema,
   planSchema,
@@ -19,6 +21,8 @@ import type {
   RuleInput,
   Gear,
   ItemState,
+  NutritionEntry,
+  NutritionSettings,
   Plan,
   PlanDay,
   PlanPublished,
@@ -32,6 +36,7 @@ import type {
   exercise,
   gear,
   itemState,
+  nutritionEntry,
   plan,
   planDay,
   planItem,
@@ -78,7 +83,38 @@ export function toProfile(row: typeof profile.$inferSelect): Profile {
     units: row.units,
     weight_increment: clampStep(num(row.weightIncrement)),
     ...(row.defaultRule === null ? {} : { default_rule: readRule(row.defaultRule) }),
+    ...readNutrition(row.nutrition),
     display_name: row.displayName,
+    created_at: iso(row.createdAt),
+    updated_at: iso(row.updatedAt),
+    deleted_at: isoOrNull(row.deletedAt),
+  })
+}
+
+/** The stored tracked metrics and goals as a profile fragment; nothing when absent or unreadable. */
+function readNutrition(raw: unknown): { nutrition?: NutritionSettings } {
+  if (raw === null || raw === undefined) return {}
+  const parsed = nutritionSettingsSchema.safeParse(raw)
+  return parsed.success ? { nutrition: parsed.data } : {}
+}
+
+const numOrNull = (v: string | null): number | null => (v === null ? null : num(v))
+
+export function toNutritionEntry(row: typeof nutritionEntry.$inferSelect): NutritionEntry {
+  return nutritionEntrySchema.parse({
+    id: row.id,
+    date: row.date,
+    name: row.name,
+    quantity: row.quantity,
+    calories: numOrNull(row.calories),
+    protein_g: numOrNull(row.proteinG),
+    carbs_g: numOrNull(row.carbsG),
+    fat_g: numOrNull(row.fatG),
+    fiber_g: numOrNull(row.fiberG),
+    sugar_g: numOrNull(row.sugarG),
+    sodium_mg: numOrNull(row.sodiumMg),
+    source: row.source,
+    user_id: row.userId,
     created_at: iso(row.createdAt),
     updated_at: iso(row.updatedAt),
     deleted_at: isoOrNull(row.deletedAt),

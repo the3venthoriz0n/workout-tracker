@@ -19,7 +19,7 @@ cd deploy/self-hosted
 cp .env.example .env && chmod 600 .env
 ```
 
-Edit `.env`: `DOMAIN`, `TUNNEL_NETWORK`, the database password and `BETTER_AUTH_SECRET` (`openssl rand -hex 32` for each), `SIGNUP_ALLOWLIST` (comma separated emails that may create an account; the line is required, and an explicitly empty value means open sign-up; compose refuses to start when it is missing), and `RESEND_API_KEY` and `MAIL_FROM` (set-up and password-reset email through Resend; sign-in needs a confirmed email, so both are required and compose refuses to start without them; use a sending-only API key and a sender on a domain verified in Resend). `.env` never leaves the host, and is gitignored. Back it up somewhere private: losing the secret signs everyone out.
+Edit `.env`: `DOMAIN`, `TUNNEL_NETWORK`, the database password and `BETTER_AUTH_SECRET` (`openssl rand -hex 32` for each), `SIGNUP_ALLOWLIST` (comma separated emails that may create an account; the line is required, and an explicitly empty value means open sign-up; compose refuses to start when it is missing), and `RESEND_API_KEY` and `MAIL_FROM` (set-up and password-reset email through Resend; sign-in needs a confirmed email, so both are required and compose refuses to start without them; use a sending-only API key and a sender on a domain verified in Resend). `Optionally, the Nutrition tab's AI: `AI_PROVIDER`, `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL` (see `.env.example`; any OpenAI-compatible service or Claude; leave `AI_API_KEY` unset and the tab says AI is unavailable). Meal text is sent to that service. `.env` never leaves the host, and is gitignored. Back it up somewhere private: losing the secret signs everyone out.
 
 ## 3. Tunnel public hostname
 

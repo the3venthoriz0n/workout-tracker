@@ -113,4 +113,64 @@ describe('env.ts optional settings', () => {
       expect(out).not.toContain('abc def-key-value')
     })
   })
+
+  describe('AI settings', () => {
+    const SECRET = 'sk-env-key-456'
+    beforeEach(() => {
+      for (const n of ['AI_PROVIDER', 'AI_BASE_URL', 'AI_API_KEY', 'AI_MODEL']) delete process.env[n]
+    })
+
+    it('are all optional: with nothing set the feature is simply off', async () => {
+      const { env } = await import('../src/env.js')
+      expect(env.AI_API_KEY).toBeUndefined()
+      expect(env.AI_PROVIDER).toBe('openai')
+    })
+
+    it('empty strings count as unset', async () => {
+      process.env.AI_API_KEY = ''
+      process.env.AI_MODEL = ''
+      process.env.AI_BASE_URL = ''
+      const { env } = await import('../src/env.js')
+      expect([env.AI_API_KEY, env.AI_MODEL, env.AI_BASE_URL]).toEqual([undefined, undefined, undefined])
+    })
+
+    it('a complete openai-compatible setup parses', async () => {
+      process.env.AI_API_KEY = SECRET
+      process.env.AI_MODEL = 'some-model'
+      process.env.AI_BASE_URL = 'https://api.example.test/v1'
+      const { env } = await import('../src/env.js')
+      expect(env).toMatchObject({ AI_PROVIDER: 'openai', AI_API_KEY: SECRET, AI_MODEL: 'some-model', AI_BASE_URL: 'https://api.example.test/v1' })
+    })
+
+    it('anthropic needs no base url', async () => {
+      process.env.AI_PROVIDER = 'anthropic'
+      process.env.AI_API_KEY = SECRET
+      process.env.AI_MODEL = 'claude-test'
+      expect((await import('../src/env.js')).env.AI_PROVIDER).toBe('anthropic')
+    })
+
+    it('a key without a model is a startup error that names AI_MODEL but not the key', async () => {
+      process.env.AI_API_KEY = SECRET
+      process.env.AI_BASE_URL = 'https://api.example.test/v1'
+      const out = await rejects('AI_MODEL')
+      expect(out).not.toContain(SECRET)
+    })
+
+    it('an openai provider with a key but no base url is a startup error that names AI_BASE_URL but not the key', async () => {
+      process.env.AI_API_KEY = SECRET
+      process.env.AI_MODEL = 'some-model'
+      const out = await rejects('AI_BASE_URL')
+      expect(out).not.toContain(SECRET)
+    })
+
+    it('an unknown provider or a key with whitespace is a startup error', async () => {
+      process.env.AI_PROVIDER = 'mystery'
+      await rejects('AI_PROVIDER')
+      vi.resetModules()
+      process.env.AI_PROVIDER = 'openai'
+      process.env.AI_API_KEY = 'has space'
+      const out = await rejects('AI_API_KEY')
+      expect(out).not.toContain('has space')
+    })
+  })
 })

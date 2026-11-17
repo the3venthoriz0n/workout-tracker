@@ -3,6 +3,7 @@ import { registerCommunity } from './community.js'
 import { registerExercises } from './exercises.js'
 import { registerGear } from './gear.js'
 import { registerMe } from './me.js'
+import { registerNutrition } from './nutrition.js'
 import { registerPlans } from './plans.js'
 import { registerProgression } from './progression.js'
 import { registerSessions } from './sessions.js'
@@ -22,5 +23,6 @@ export function registerRoutes(v1: V1, base: Omit<RouteDeps, 'passwordGate'>) {
   registerSessions(v1, deps)
   registerTransfer(v1, deps)
   registerCommunity(v1, deps)
+  registerNutrition(v1, deps)
   registerAccount(v1, deps)
 }

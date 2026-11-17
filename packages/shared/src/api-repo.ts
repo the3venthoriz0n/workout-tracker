@@ -1,4 +1,7 @@
 import {
+  AiFailedError,
+  AiLimitError,
+  AiUnavailableError,
   AlreadyHasDataError,
   ApiError,
   ConflictError,
@@ -14,6 +17,7 @@ import {
 } from './repo.js'
 import type { ExportData, FinishSummary, PlanTree, ProgressionRow, Repo, SessionDetail } from './repo.js'
 import type { SharedListing } from './community.js'
+import type { MealDraft, NutritionEntry } from './nutrition.js'
 import type { ExerciseProgression } from './rules.js'
 import { newId } from './id.js'
 import type { Exercise, Gear, Plan, PlanDay, PlanItem, Profile, SetLog, WorkoutSession } from './schemas.js'
@@ -66,6 +70,9 @@ export function responseError(status: number, data: unknown, notFound?: () => Er
     if (code === 'own_listing') return new OwnListingError()
   }
   if (status === 429 && code === 'publish_limit') return new PublishLimitError()
+  if (status === 429 && code === 'ai_limit') return new AiLimitError()
+  if (status === 503 && code === 'ai_unavailable') return new AiUnavailableError()
+  if (status === 502 && code === 'ai_failed') return new AiFailedError()
   if (status === 400 && code === 'invalid') {
     const issue = (data as { issues?: { path?: unknown }[] } | undefined)?.issues?.[0]
     return new ValidationError(typeof issue?.path === 'string' ? issue.path.slice(0, 200) : '')
@@ -131,6 +138,12 @@ export function createApiRepo(opts: ApiRepoOptions = {}): ApiRepo {
         throw e
       }
     },
+    listNutrition: (from, to) => get<NutritionEntry[]>(`/nutrition/entries?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    saveNutritionEntry({ id, ...rest }) {
+      return put<NutritionEntry>(`/nutrition/entries/${seg(id ?? newId())}`, rest)
+    },
+    deleteNutritionEntry: (id) => del(`/nutrition/entries/${seg(id)}`),
+    parseMeal: (text) => post<{ items: MealDraft[]; remaining_today: number }>('/nutrition/parse', { text }),
     deleteGear: (id) => del(`/gear/${seg(id)}`),
     listPlans: () => get<Plan[]>('/plans'),
     async getPlan(id) {

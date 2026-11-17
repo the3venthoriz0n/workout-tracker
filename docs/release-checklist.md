@@ -38,6 +38,13 @@ Do this once per sending domain; production and staging can share the account (u
 - [ ] Set `MAIL_FROM` to an address on that verified domain, for example `Workout Tracker <no-reply@mail.example.invalid>` (use your own domain).
 - [ ] After the first deploy, sign up with an address you control and confirm the set-up mail arrives, its link opens `https://<DOMAIN>/reset-password` reading "Choose your password", and you can sign in with the password you chose; then try "Forgot password?".
 
+### AI provider (nutrition)
+
+- [ ] Pick a service for the Nutrition tab and set `AI_PROVIDER`, `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL` in the host `.env` (any OpenAI-compatible service, or Claude with `AI_PROVIDER=anthropic`). Unset `AI_API_KEY` turns the feature off; nothing else depends on it.
+- [ ] Use a key with a spend limit if the service is paid, and a sending-only key where the service offers one. Never commit it.
+- [ ] Check the service's data terms before opening sign-up. Meal text is health-related; Google's Gemini free tier lets Google use and human-review what it receives, so prefer a paid tier or another service for real users.
+- [ ] Name the service in the privacy notice ("meal text is sent to <service> to estimate nutrition; it is not stored or logged here and is deleted with the account"). The account export includes nutrition entries and goals.
+
 ### DigitalOcean
 
 - [ ] API token with custom scopes and an expiry; 2FA on the account.

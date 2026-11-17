@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { defaultRule } from '../progression.js'
 import { LIMITS } from '../schemas.js'
-import { ImportInvalidError, SessionInProgressError } from '../repo.js'
+import { AiLimitError, ImportInvalidError, SessionInProgressError } from '../repo.js'
 import type { ExportData, PlanTree, Repo, SessionDetail } from '../repo.js'
 import type { Exercise, PlanItem, RuleInput } from '../schemas.js'
 import { newId } from '../id.js'
@@ -37,6 +37,7 @@ export type ContractGroup =
   | 'transfer'
   | 'restore'
   | 'community'
+  | 'nutrition'
 
 /** `empty`: the account must NOT be initialised (no profile, no seeds); used for the import target. */
 export type MakeOptions = { empty?: boolean }
@@ -226,6 +227,67 @@ export function runRepoContract(
         expect(await repo.updateProfile({ units: 'lb' })).toMatchObject({ units: 'lb', weight_increment: 5 })
       },
     )
+
+    // -------------------------------------------------------------- nutrition (signed-in repos only)
+    const dayStr = (offset = 0) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10)
+    const food = (over: Record<string, unknown> = {}) => ({
+      date: dayStr(),
+      name: 'Chicken burrito',
+      quantity: '1 burrito',
+      calories: 680,
+      protein_g: 32,
+      carbs_g: null,
+      fat_g: null,
+      fiber_g: null,
+      sugar_g: null,
+      sodium_mg: null,
+      source: 'ai' as const,
+      ...over,
+    })
+
+    contract('nutrition', 'saveNutritionEntry then listNutrition returns the entry', async ({ repo }) => {
+      const saved = await repo.saveNutritionEntry(food())
+      const list = await repo.listNutrition(dayStr(), dayStr())
+      expect(list.map((e) => e.id)).toEqual([saved.id])
+      expect(list[0]).toMatchObject({ name: 'Chicken burrito', calories: 680, protein_g: 32, carbs_g: null, source: 'ai' })
+      expect(await repo.listNutrition(dayStr(-3), dayStr(-1))).toEqual([])
+    })
+
+    contract('nutrition', 'saving the same id twice keeps one entry', async ({ repo }) => {
+      const first = await repo.saveNutritionEntry(food())
+      await repo.saveNutritionEntry({ ...food({ calories: 700, source: 'manual' }), id: first.id })
+      const list = await repo.listNutrition(dayStr(), dayStr())
+      expect(list).toHaveLength(1)
+      expect(list[0]).toMatchObject({ id: first.id, calories: 700, source: 'manual' })
+    })
+
+    contract('nutrition', 'deleteNutritionEntry removes it', async ({ repo }) => {
+      const saved = await repo.saveNutritionEntry(food())
+      await repo.deleteNutritionEntry(saved.id)
+      expect(await repo.listNutrition(dayStr(), dayStr())).toEqual([])
+    })
+
+    contract('nutrition', 'parseMeal returns drafts for the tracked nutrients and says how many parses remain', async ({ repo }) => {
+      await repo.updateProfile({ nutrition: { tracked: ['calories'], goals: {} } })
+      const first = await repo.parseMeal('1 chicken burrito')
+      expect(first.items.length).toBeGreaterThan(0)
+      expect(first.items[0]!.calories).not.toBeNull()
+      expect(first.items[0]!.protein_g).toBeNull()
+      const second = await repo.parseMeal('toast')
+      expect(second.remaining_today).toBe(first.remaining_today - 1)
+    })
+
+    contract('nutrition', 'parseMeal past the daily limit throws AiLimitError', async ({ repo }) => {
+      const first = await repo.parseMeal('x')
+      for (let i = 0; i < first.remaining_today; i++) await repo.parseMeal('x')
+      await expect(repo.parseMeal('x')).rejects.toBeInstanceOf(AiLimitError)
+    })
+
+    contract('nutrition', 'updateProfile stores tracked nutrients and goals', async ({ repo }) => {
+      const updated = await repo.updateProfile({ nutrition: { tracked: ['protein_g', 'calories'], goals: { protein_g: 160 } } })
+      expect(updated.nutrition).toEqual({ tracked: ['calories', 'protein_g'], goals: { protein_g: 160 } })
+      expect((await repo.getProfile()).nutrition?.goals.protein_g).toBe(160)
+    })
 
     // ------------------------------------------------------------------- gear
     contract('gear', 'saveGear renames and keeps the id; listGear is sorted by name', async ({ repo }) => {

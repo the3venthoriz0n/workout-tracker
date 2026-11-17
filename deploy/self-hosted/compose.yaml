@@ -27,6 +27,12 @@ services:
       # and the API refuses to start without these in production.
       RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY in .env}
       MAIL_FROM: ${MAIL_FROM:?set MAIL_FROM in .env}
+      # Optional: the AI that estimates nutrition (Nutrition tab). Any OpenAI-compatible service or
+      # Anthropic; unset means the feature reports itself unavailable. See .env.example.
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
       # The tunnel sets cf-connecting-ip and the app is reachable only through it (no published
       # ports), so this header is safe to trust for per-client rate limits.
       CLIENT_IP_HEADER: cf-connecting-ip

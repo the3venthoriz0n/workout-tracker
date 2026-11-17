@@ -41,6 +41,12 @@ services:
       # without them in production; add both to .env by hand (deploy.sh does not generate them).
       RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY in .env}
       MAIL_FROM: ${MAIL_FROM:?set MAIL_FROM in .env}
+      # Optional: the AI that estimates nutrition (Nutrition tab). Any OpenAI-compatible service or
+      # Anthropic; unset means the feature reports itself unavailable. See .env.example.
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
       # Extra allowed origins, comma separated (none needed for the web app; mobile builds later).
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
     depends_on:
