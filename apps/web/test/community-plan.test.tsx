@@ -118,6 +118,39 @@ test('signed in: adopt by id, hasVoted on load, optimistic upvote with rollback'
   expect(adopt).toHaveBeenCalledWith({ shared_plan_id: LISTING_ID, version: 2 })
 })
 
+test('a vote updates the count everywhere it is cached: the list, and the plan when you come back', async () => {
+  const user = userEvent.setup()
+  servePlan()
+  const repo = await guestRepo()
+  let serverVoted = false
+  const hasVoted = vi.fn(async () => serverVoted)
+  const setVote = vi.fn(async (_id: string, v: boolean) => {
+    serverVoted = v
+    return { upvotes: v ? 13 : 12 }
+  })
+  Object.assign(repo, { hasVoted, setVote })
+  const { router, client } = renderApp(repo, path, { signedIn: true })
+  // A list page cached earlier, showing the pre-vote count
+  const listing = detail().listing
+  client.setQueryData(['community', 'list', { sort: 'top' }], {
+    pageParams: [null],
+    pages: [{ items: [{ ...listing, upvotes: 12 }], next_cursor: null }],
+  })
+
+  const up = await screen.findByRole('button', { name: /Upvote/ })
+  await user.click(up)
+  await waitFor(() => expect(within(up).getByText('13')).toBeTruthy())
+  const cachedList = client.getQueryData<{ pages: { items: { upvotes: number }[] }[] }>(['community', 'list', { sort: 'top' }])
+  expect(cachedList!.pages[0]!.items[0]!.upvotes).toBe(13)
+
+  // Leave and come back (within the 30 s the page is cached): the count and the pressed state are the new ones
+  await router.navigate('/settings')
+  await router.navigate(path)
+  const again = await screen.findByRole('button', { name: /Upvote/ })
+  await waitFor(() => expect(again.getAttribute('aria-pressed')).toBe('true'))
+  expect(within(again).getByText('13')).toBeTruthy()
+})
+
 test('adopt errors show a clear toast and stay on the page', async () => {
   const user = userEvent.setup()
   servePlan()

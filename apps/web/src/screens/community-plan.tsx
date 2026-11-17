@@ -1,7 +1,7 @@
 import { NotFoundError, OfflineError, idSchema, type PublicPlanDetail, type SharedSnapshot } from '@workout/shared'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowBigUp, ChevronLeft } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { SettingsLink, StickyBar } from '@/app/screen'
@@ -13,7 +13,7 @@ import { GONE_TEXT, OFFLINE_TEXT, adoptErrorText, compactCount } from '@/lib/com
 import { dayColorOf } from '@/lib/day-colors'
 import { formatDate, formatWeight, pluralize } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { keys, useAdoptSharedPlan, useCommunityPlan, useHasVoted } from '@/repo/hooks'
+import { keys, setCachedUpvotes, useAdoptSharedPlan, useCommunityPlan, useHasVoted } from '@/repo/hooks'
 import { useRepo } from '@/repo/provider'
 import { Counts, LevelChip } from './community'
 
@@ -67,28 +67,31 @@ function Preview({ snapshot }: { snapshot: SharedSnapshot }) {
   )
 }
 
-/** Signed in: toggles with an optimistic count; a failure puts the old state back. */
+/**
+ * Signed in: toggles with an optimistic count. The count and the voted flag live in the query cache (not in
+ * this component), so the list and a reopened plan show the new number too; a failure puts the old ones back.
+ */
 function VoteButton({ detail }: { detail: PublicPlanDetail }) {
   const repo = useRepo()
   const queryClient = useQueryClient()
   const id = detail.listing.id
   const voted = useHasVoted(id, true)
-  const [local, setLocal] = useState<{ voted: boolean; upvotes: number } | null>(null)
   const busy = useRef(false)
-  const state = local ?? { voted: voted.data ?? false, upvotes: detail.listing.upvotes }
+  const state = { voted: voted.data ?? false, upvotes: detail.listing.upvotes }
 
   async function toggle() {
     if (busy.current || voted.isPending) return
     busy.current = true
     const before = state
     const next = !before.voted
-    setLocal({ voted: next, upvotes: Math.max(0, before.upvotes + (next ? 1 : -1)) })
+    queryClient.setQueryData(keys.voted(id), next)
+    setCachedUpvotes(queryClient, id, Math.max(0, before.upvotes + (next ? 1 : -1)))
     try {
       const { upvotes } = await repo.setVote(id, next)
-      setLocal({ voted: next, upvotes })
-      queryClient.setQueryData(keys.voted(id), next)
+      setCachedUpvotes(queryClient, id, upvotes)
     } catch (err) {
-      setLocal(before)
+      queryClient.setQueryData(keys.voted(id), before.voted)
+      setCachedUpvotes(queryClient, id, before.upvotes)
       toast.error(err instanceof OfflineError ? OFFLINE_TEXT : "Couldn't save your vote. Try again.")
     } finally {
       busy.current = false
