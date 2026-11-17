@@ -16,7 +16,7 @@
     "better-auth": "1.7.18",
     "drizzle-orm": "0.45.4",
     "hono": "4.13.17",
-    "postgres": "3.4.9",
+    "postgres": "4.1.1",
     "zod": "4.6.7"
   },
   "devDependencies": {
