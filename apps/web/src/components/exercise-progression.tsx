@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { Units } from '@workout/shared'
 import { Disclosure } from '@/components/disclosure'
 import { Rail } from '@/components/plan-bits'
 import { RuleFields } from '@/components/rule-editor'
@@ -6,15 +7,15 @@ import { Button } from '@/components/ui/button'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { notifyError } from '@/lib/notify'
 import { SOURCE_NAMES, summarizeRule } from '@/lib/rule-summary'
-import { useClearRule, useProfile, useProgressionByExercise, useSetExerciseRule } from '@/repo/hooks'
+import { useClearRule, useProgressionByExercise, useSetExerciseRule } from '@/repo/hooks'
 
 /**
  * An exercise's progression rule, inside its editor: where the rule comes from, the rule itself,
  * and the plan items that override it. Changes save as you make them (they do not wait for Save).
  * A plan item uses its own override, else the exercise's rule, else the app default (Library, Progression).
  */
-export function ExerciseProgression({ exerciseId, name }: { exerciseId: string; name: string }) {
-  const units = useProfile().data?.units ?? 'lb'
+export function ExerciseProgression({ exerciseId, name, unit }: { exerciseId: string; name: string; unit: Units }) {
+  const units = unit
   const { data: rows, isPending } = useProgressionByExercise()
   const setExerciseRule = useSetExerciseRule()
   const clearRule = useClearRule()
@@ -44,6 +45,7 @@ export function ExerciseProgression({ exerciseId, name }: { exerciseId: string; 
       <RuleFields
         rule={row.rule}
         idPrefix={`ex-rule-${row.exercise_id}`}
+        unit={unit}
         showStepHint={false}
         onSave={(next) => setExerciseRule.mutateAsync({ exerciseId: row.exercise_id, rule: next })}
       />

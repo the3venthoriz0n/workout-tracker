@@ -16,6 +16,7 @@ import { useSignedIn } from '@/auth/context'
 import { notifyError } from '@/lib/notify'
 import { cn } from '@/lib/utils'
 import { setRestTimerEnabled, useRestTimerEnabled } from '@/lib/rest-timer-pref'
+import { setShowBothUnits, useShowBothUnits } from '@/lib/show-both-units-pref'
 import { confirmBox, segmentedItem, segmentedTrack } from '@/lib/styles'
 
 const UNITS: Units[] = ['lb', 'kg']
@@ -25,6 +26,7 @@ export function SettingsScreen() {
   const updateProfile = useUpdateProfile()
   const signedIn = useSignedIn()
   const restTimerOn = useRestTimerEnabled()
+  const showBoth = useShowBothUnits()
   const [pendingUnits, setPendingUnits] = useState<Units | null>(null)
   const [unitsError, setUnitsError] = useState<string | null>(null)
 
@@ -112,6 +114,14 @@ export function SettingsScreen() {
                 </div>
               )}
             </div>
+
+            <label className="flex min-h-11 items-center justify-between gap-3 py-4">
+              <span className="flex min-w-0 flex-col text-sm">
+                <span className="font-medium">Show both units</span>
+                <span className="text-muted-foreground">Add the other unit next to each weight. Saved on this device only.</span>
+              </span>
+              <Switch checked={showBoth} aria-label="Show both units" onCheckedChange={setShowBothUnits} />
+            </label>
 
             <label className="flex min-h-11 items-center justify-between gap-3 pt-4">
               <span className="flex min-w-0 flex-col text-sm">

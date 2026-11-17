@@ -1,5 +1,5 @@
 import { LoadError } from '@/components/load-error'
-import type { SetLog } from '@workout/shared'
+import type { SetLog, Units } from '@workout/shared'
 import { ChevronLeft, PencilIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { formatDate, formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import { useHold } from '@/lib/use-hold'
+import { useWeightText } from '@/lib/weight-text'
 import { cn } from '@/lib/utils'
 import { useProfile, useSession, useUpdateSessionNote, useUpdateSet } from '@/repo/hooks'
 
@@ -100,15 +101,14 @@ function HistoryDetailBody({ id }: { id: string }) {
     )
   }
 
-  const units = profile.units
   // label: the superset label (A1) when the line sits in a superset block
-  const setLine = (s: SetLog, exerciseName: string, label?: string | null) => (
+  const setLine = (s: SetLog, exerciseName: string, unit: Units, label?: string | null) => (
     <HistorySetLine
       key={s.id}
       set={s}
       exerciseName={exerciseName}
       label={label}
-      units={units}
+      units={unit}
       editable={editing}
       open={openSet === s.id}
       onToggle={() => setOpenSet((cur) => (cur === s.id ? null : s.id))}
@@ -138,7 +138,7 @@ function HistoryDetailBody({ id }: { id: string }) {
                 <AngleChip angle={block.exercise.sets[0]?.angle} />
               </h2>
               <ul className={`${listGroup} mt-2.5`}>
-                {block.exercise.sets.map((s) => setLine(s, block.exercise.exercise_name))}
+                {block.exercise.sets.map((s) => setLine(s, block.exercise.exercise_name, block.exercise.unit))}
               </ul>
             </section>
           ) : (
@@ -159,7 +159,7 @@ function HistoryDetailBody({ id }: { id: string }) {
                 </p>
               ))}
               <ul className="bg-background divide-border-strong/70 mt-3 divide-y overflow-hidden rounded-row">
-                {block.sets.map(({ set, exercise }) => setLine(set, exercise.exercise_name, set.superset_label))}
+                {block.sets.map(({ set, exercise }) => setLine(set, exercise.exercise_name, exercise.unit, set.superset_label))}
               </ul>
             </section>
           ),
@@ -211,13 +211,14 @@ function HistorySetLine({
   set: SetLog
   exerciseName: string
   label?: string | null
-  units: string
+  units: Units
   editable: boolean
   open: boolean
   onToggle: () => void
   onSave: (patch: SetPatch) => Promise<boolean>
 }) {
   const hold = useHold(onToggle)
+  const weightText = useWeightText()
   // Holding anywhere on the tile counts, except inside the open editor or on its own buttons
   const holdProps = editable
     ? {
@@ -240,7 +241,7 @@ function HistorySetLine({
               <span className="text-muted-foreground">{exerciseName}</span>{' '}
             </>
           )}
-          {s.set_no}. {s.actual_reps} × {formatWeight(s.weight)} {units}
+          {s.set_no}. {s.actual_reps} × {weightText(s.weight, units)}
           {!s.done && ' · skipped'}
           {s.done && s.amrap && (
             <>

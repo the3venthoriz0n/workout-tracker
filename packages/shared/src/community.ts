@@ -26,7 +26,7 @@ import {
   unitsSchema,
 } from './schemas.js'
 import type { Exercise, Gear, ItemState, Plan, PlanDay, PlanItem, ProgressionRule, RuleInput } from './schemas.js'
-import { KG_PER_LB, roundToIncrement, type Units } from './units.js'
+import { DEFAULT_INCREMENT, KG_PER_LB, convertAmount, convertLoad, exerciseUnit, roundToIncrement, stepFor, type Units } from './units.js'
 
 export const COMMUNITY = {
   titleMin: 3,
@@ -186,6 +186,12 @@ const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
  * ValidationError. Values are the item's effective base values (sets, reps, weight), never
  * the sharer's progressed targets.
  */
+/** A rule in an exercise's own unit, expressed in the published plan's unit. */
+function publishedRule(rule: RuleInput, from: Units, to: Units): RuleInput {
+  if (from === to || rule.success_action !== 'add_weight') return rule
+  return { ...rule, success_amount: convertAmount(rule.success_amount, from, to, DEFAULT_INCREMENT[from], DEFAULT_INCREMENT[to]) }
+}
+
 export function snapshotFromPlanTree(tree: PlanTree, units: Units, gear: Pick<Gear, 'id' | 'name'>[]): SharedSnapshot {
   const gearName = new Map(gear.map((g) => [g.id, g.name]))
   const days: unknown[] = []
@@ -211,11 +217,12 @@ export function snapshotFromPlanTree(tree: PlanTree, units: Units, gear: Pick<Ge
         supports_angle: i.exercise.supports_angle,
         sets: i.effective.sets,
         reps: i.effective.baseReps,
-        weight: i.effective.baseWeight,
+        // An exercise kept in the other unit is published in the plan's unit
+        weight: convertLoad(i.effective.baseWeight, exerciseUnit(i.exercise, units), units),
         angle: i.exercise.supports_angle ? i.angle : null,
         amrap_last: i.amrap_last,
         superset: i.superset_group === null ? null : (letter.get(i.superset_group) ?? null),
-        rule: i.rule === null ? null : ruleFieldsOf(i.rule),
+        rule: i.rule === null ? null : publishedRule(ruleFieldsOf(i.rule), exerciseUnit(i.exercise, units), units),
       })),
     })
   }
@@ -266,19 +273,20 @@ export type AdoptedPlan = {
 export function planFromSnapshot(snapshot: unknown, source: unknown, ctx: AdoptContext): AdoptedPlan {
   const snap = parseOr(sharedSnapshotSchema, snapshot, 'snapshot')
   const src = parseOr(planSourceSchema, source, 'source')
-  const same = snap.units === ctx.units
   const toUnits = (w: number) => (snap.units === 'lb' ? w * KG_PER_LB : w / KG_PER_LB)
   const tooLarge = () => new ValidationError('snapshot', 'A weight in this plan is too large in your units')
-  const weight = (w: number): number => {
-    if (same) return w
+  // `to` and `increment` are the unit and step of the exercise the value lands on: the adopter's own
+  // unless that existing exercise is kept in the other one.
+  const weight = (w: number, to: Units = ctx.units, increment: number = ctx.increment): number => {
+    if (snap.units === to) return w
     const raw = toUnits(w)
-    const rounded = roundToIncrement(raw, ctx.increment)
+    const rounded = roundToIncrement(raw, increment)
     if (raw > LIMITS.weight || rounded > LIMITS.weight) throw tooLarge()
     return rounded
   }
-  const rule = (r: RuleInput | null): RuleInput | null => {
-    if (r === null || same || r.success_action !== 'add_weight') return r
-    const amount = Math.max(ctx.increment, roundToIncrement(toUnits(r.success_amount), ctx.increment))
+  const rule = (r: RuleInput | null, to: Units = ctx.units, increment: number = ctx.increment): RuleInput | null => {
+    if (r === null || snap.units === to || r.success_action !== 'add_weight') return r
+    const amount = Math.max(increment, roundToIncrement(toUnits(r.success_amount), increment))
     if (amount > LIMITS.weight) throw tooLarge()
     return { ...r, success_amount: amount }
   }
@@ -357,7 +365,9 @@ export function planFromSnapshot(snapshot: unknown, source: unknown, ctx: AdoptC
         group = groups.get(it.superset) ?? ctx.newId()
         groups.set(it.superset, group)
       }
-      const r = rule(it.rule)
+      const exUnit = exerciseUnit(ex, ctx.units)
+      const exStep = stepFor(exUnit, { units: ctx.units, weight_increment: ctx.increment })
+      const r = rule(it.rule, exUnit, exStep)
       const row = parseOr(
         planItemSchema,
         {
@@ -367,7 +377,7 @@ export function planFromSnapshot(snapshot: unknown, source: unknown, ctx: AdoptC
           position,
           sets: it.sets,
           reps: it.reps,
-          weight: weight(it.weight),
+          weight: weight(it.weight, exUnit, exStep),
           target_reps: null,
           target_weight: null,
           angle: it.angle !== null && ex.supports_angle ? it.angle : null,

@@ -145,6 +145,7 @@ export function toExercise(row: typeof exercise.$inferSelect): Exercise {
     default_reps: row.defaultReps,
     default_weight: clampWeight(num(row.defaultWeight)),
     supports_angle: row.supportsAngle,
+    unit: row.unit,
     default_rule: row.defaultRule === null ? null : readRule(row.defaultRule),
     user_id: row.userId,
     created_at: iso(row.createdAt),

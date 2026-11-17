@@ -57,6 +57,13 @@
       "when": 1794943467607,
       "tag": "0007_third_ben_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794958951333,
+      "tag": "0008_burly_tomorrow_man",
+      "breakpoints": true
     }
   ]
 }

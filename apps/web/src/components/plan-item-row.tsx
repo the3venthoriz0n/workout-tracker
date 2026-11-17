@@ -1,4 +1,4 @@
-import { ANGLES, type Angle } from '@workout/shared'
+import { ANGLES, exerciseUnit, type Angle } from '@workout/shared'
 import { ChevronDown, ChevronRight, ChevronUp, Trash2 } from 'lucide-react'
 import { useId, useState, type CSSProperties } from 'react'
 import { Disclosure } from '@/components/disclosure'
@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import { summarizeRule } from '@/lib/rule-summary'
+import { useWeightText } from '@/lib/weight-text'
 import type { useDragReorder } from '@/lib/use-drag-reorder'
 import { segmentedItem, segmentedTrack } from '@/lib/styles'
 import { cn } from '@/lib/utils'
@@ -37,7 +38,8 @@ type Props = { item: Item; isFirst?: boolean; isLast?: boolean; supersetLabel?: 
 
 export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLabel, drag }: Props) {
   const profile = useProfile().data
-  const units = profile?.units ?? 'lb'
+  const units = exerciseUnit(item.exercise, profile?.units ?? 'lb')
+  const weightText = useWeightText()
   const update = useUpdatePlanItem()
   const move = useMove()
   const remove = useDeletePlanItem()
@@ -106,7 +108,7 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
             </span>
             <span className="text-muted-foreground block text-sm tabular-nums">
               Next: {eff.sets}×{eff.targetReps}
-              {item.amrap_last && '+'} @ {formatWeight(eff.targetWeight)} {units}
+              {item.amrap_last && '+'} @ {weightText(eff.targetWeight, units)}
             </span>
           </span>
         </button>
@@ -242,6 +244,7 @@ export function PlanItemRow({ item, isFirst = false, isLast = false, supersetLab
               rule={rule}
               source={ruleSource}
               itemName={name}
+              unit={units}
               idPrefix={`rule-${item.id}`}
               onSave={(next) => setRule.mutateAsync({ planItemId: item.id, rule: next })}
               onClear={() => clearRule.mutateAsync(item.id)}

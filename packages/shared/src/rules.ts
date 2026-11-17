@@ -1,6 +1,7 @@
 // Rule layering (spec §6): item override ?? exercise.default_rule ?? profile.default_rule ?? built-in.
 import { defaultRule } from './progression.js'
 import type { RuleInput, RuleSource } from './schemas.js'
+import { convertAmount, exerciseUnit, stepFor, type Units } from './units.js'
 
 export type InheritedSource = Exclude<RuleSource, 'item'>
 
@@ -31,6 +32,24 @@ export function resolveRule(input: {
   return inheritedRule(input.exerciseRule, input.profileRule, input.increment)
 }
 
+/**
+ * What an exercise needs to resolve and run its rule in its own unit: that unit, its progression step,
+ * and the app default rule with its "add weight" amount converted when the exercise uses the other unit.
+ */
+export function exerciseRuleContext(
+  exercise: { unit?: Units | null | undefined },
+  profile: { units: Units; weight_increment: number; default_rule?: RuleInput | undefined },
+): { unit: Units; increment: number; profileRule: RuleInput | undefined } {
+  const unit = exerciseUnit(exercise, profile.units)
+  const increment = stepFor(unit, profile)
+  const rule = profile.default_rule
+  const profileRule =
+    rule && rule.success_action === 'add_weight' && unit !== profile.units
+      ? { ...rule, success_amount: convertAmount(rule.success_amount, profile.units, unit, profile.weight_increment, increment) }
+      : rule
+  return { unit, increment, profileRule }
+}
+
 /** Picks only the rule fields (drops plan_item_id and sync columns from a stored row). */
 export function ruleFieldsOf(r: RuleInput): RuleInput {
   return {
@@ -58,11 +77,12 @@ type Row = ItemPlacement & { exercise_id: string; rule: RuleInput | null; ruleSo
 
 /** Groups the per-item progression list by exercise; every exercise given appears once, in the given order. */
 export function groupProgressionByExercise(
-  exercises: { id: string; name: string; default_rule: RuleInput | null }[],
+  exercises: { id: string; name: string; default_rule: RuleInput | null; unit?: Units | null | undefined }[],
   rows: Row[],
-  profile: { default_rule?: RuleInput | undefined; weight_increment: number },
+  profile: { units: Units; default_rule?: RuleInput | undefined; weight_increment: number },
 ): ExerciseProgression[] {
   return exercises.map((e) => {
+    const ctx = exerciseRuleContext(e, profile)
     const mine = rows.filter((r) => r.exercise_id === e.id)
     const place = (r: Row): ItemPlacement => ({
       plan_id: r.plan_id,
@@ -74,7 +94,7 @@ export function groupProgressionByExercise(
     return {
       exercise_id: e.id,
       exercise_name: e.name,
-      ...inheritedRule(e.default_rule, profile.default_rule, profile.weight_increment),
+      ...inheritedRule(e.default_rule, ctx.profileRule, ctx.increment),
       overrides: mine.filter((r) => r.ruleSource === 'item').map((r) => ({ ...place(r), rule: r.rule })),
       inheriting: mine.filter((r) => r.ruleSource !== 'item').map(place),
     }

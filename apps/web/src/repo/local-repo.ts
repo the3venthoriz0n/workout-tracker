@@ -19,6 +19,11 @@ import {
   planSessionSets,
   resolveRule,
   ruleFieldsOf,
+  convertAmount,
+  convertLoad,
+  exerciseRuleContext,
+  exerciseUnit,
+  stepFor,
   itemStateSchema,
   planDaySchema,
   planItemSchema,
@@ -175,8 +180,8 @@ export class LocalRepo implements Repo {
 
   async saveExercise(input: ExerciseInput): Promise<Exercise> {
     const parsed = exerciseInputSchema.parse(input)
-    const { profile, exercises, planItems } = this.db
-    return this.db.transaction('rw', profile, exercises, planItems, async () => {
+    const { profile, exercises, planItems, setLogs, rules } = this.db
+    return this.db.transaction('rw', profile, exercises, planItems, setLogs, rules, async () => {
       const existing = parsed.id ? await this.db.exercises.get(parsed.id) : undefined
       const ts = now()
       // Not mentioning supports_angle keeps the stored value.
@@ -194,6 +199,11 @@ export class LocalRepo implements Repo {
               deleted_at: null,
             },
       )
+      // Keeping an exercise in the other unit converts every weight that belongs to it, once.
+      const prof = await this.getProfile()
+      const was = existing ? exerciseUnit(existing, prof.units) : undefined
+      const now_ = exerciseUnit(exercise, prof.units)
+      if (existing && was && was !== now_) await this.convertExercise(exercise, was, now_, prof, ts)
       await this.db.exercises.put(exercise)
       if (existing && existing.deleted_at === null && !supports_angle) {
         // Turning angle support off clears the angle of the exercise's live items.
@@ -205,6 +215,45 @@ export class LocalRepo implements Repo {
       }
       return exercise
     })
+  }
+
+  /** Moves one exercise's weights (default, plan items, logged sets, rules) from one unit to the other. */
+  private async convertExercise(
+    exercise: Exercise,
+    from: Units,
+    to: Units,
+    prof: Profile,
+    ts: string,
+  ): Promise<void> {
+    const fromStep = stepFor(from, prof)
+    const toStep = stepFor(to, prof)
+    const amount = (a: number) => convertAmount(a, from, to, fromStep, toStep)
+    const load = (w: number) => convertLoad(w, from, to)
+    const loadOrNull = (w: number | null) => (w === null ? null : load(w))
+    exercise.default_weight = load(exercise.default_weight)
+    if (exercise.default_rule?.success_action === 'add_weight') {
+      exercise.default_rule = { ...exercise.default_rule, success_amount: amount(exercise.default_rule.success_amount) }
+    }
+    const items = await this.db.planItems.where('exercise_id').equals(exercise.id).toArray()
+    for (const item of items) {
+      await this.db.planItems.put({
+        ...item,
+        weight: loadOrNull(item.weight),
+        target_weight: loadOrNull(item.target_weight),
+        updated_at: ts,
+      })
+      const row = await this.db.rules.get(item.id)
+      if (row && row.success_action === 'add_weight') {
+        await this.db.rules.put({ ...row, success_amount: amount(row.success_amount), updated_at: ts })
+      }
+    }
+    await this.db.setLogs
+      .filter((l) => l.exercise_id === exercise.id)
+      .modify((l) => {
+        l.weight = load(l.weight)
+        l.target_weight = load(l.target_weight)
+        l.updated_at = ts
+      })
   }
 
   async setExerciseRule(exerciseId: string, rule: RuleInput | null): Promise<void> {
@@ -321,24 +370,29 @@ export class LocalRepo implements Repo {
               ? newIncrement
               : Math.max(newIncrement, roundToIncrement(conv(amount), newIncrement)),
           )
-        await d.exercises.toCollection().modify((e) => {
+        // Exercises kept in their own unit do not follow the app unit
+        const kept = new Set((await d.exercises.toArray()).filter((e) => e.unit).map((e) => e.id))
+        const keptItems = new Set(
+          (await d.planItems.toArray()).filter((i) => kept.has(i.exercise_id)).map((i) => i.id),
+        )
+        await d.exercises.filter((e) => !e.unit).modify((e) => {
           e.default_weight = conv(e.default_weight)
           if (e.default_rule?.success_action === 'add_weight') {
             e.default_rule = { ...e.default_rule, success_amount: convAmount(e.default_rule.success_amount) }
           }
           e.updated_at = ts
         })
-        await d.planItems.toCollection().modify((i) => {
+        await d.planItems.filter((i) => !kept.has(i.exercise_id)).modify((i) => {
           i.weight = convNull(i.weight)
           i.target_weight = convNull(i.target_weight)
           i.updated_at = ts
         })
-        await d.setLogs.toCollection().modify((l) => {
+        await d.setLogs.filter((l) => !kept.has(l.exercise_id)).modify((l) => {
           l.weight = conv(l.weight)
           l.target_weight = conv(l.target_weight)
           l.updated_at = ts
         })
-        await d.rules.toCollection().modify((r) => {
+        await d.rules.filter((r) => !keptItems.has(r.plan_item_id)).modify((r) => {
           if (r.success_action !== 'add_weight') return
           r.success_amount = convAmount(r.success_amount)
           r.updated_at = ts
@@ -372,12 +426,13 @@ export class LocalRepo implements Repo {
     profile: Profile,
   ): Promise<{ rule: RuleInput | null; source: RuleSource }> {
     const row = await this.db.rules.get(item.id)
+    const ctx = exerciseRuleContext(exercise, profile)
     return resolveRule({
       itemRule: row ? ruleFieldsOf(row) : null,
       inherit: item.inherit_rule,
       exerciseRule: exercise.default_rule,
-      profileRule: profile.default_rule,
-      increment: profile.weight_increment,
+      profileRule: ctx.profileRule,
+      increment: ctx.increment,
     })
   }
 
@@ -666,11 +721,13 @@ export class LocalRepo implements Repo {
       else groups.set(log.plan_item_id, [log])
     }
     const exercises: SessionDetail['exercises'] = []
+    const appUnits = (await this.getProfile()).units
     for (const [plan_item_id, sets] of groups) {
       const first = sets[0]
       if (!first) continue
       const exercise = await this.db.exercises.get(first.exercise_id)
       exercises.push({
+        unit: exercise ? exerciseUnit(exercise, appUnits) : appUnits,
         plan_item_id,
         exercise_id: first.exercise_id,
         exercise_name: first.exercise_name,
@@ -790,7 +847,6 @@ export class LocalRepo implements Repo {
         if (session.completed_at !== null) throw new Error('Session already completed')
         const detail = await this.sessionDetail(session)
         const prof = await this.getProfile()
-        const increment = prof.weight_increment
         const ts = now()
         const summary: FinishSummary = []
         for (const group of detail.exercises) {
@@ -810,6 +866,7 @@ export class LocalRepo implements Repo {
           }
           const eff = effectiveValues(item, exercise)
           const { rule } = await this.ruleOf(item, exercise, prof)
+          const increment = exerciseRuleContext(exercise, prof).increment
           const state = await itemStates.get(item.id)
           const result = progress(
             {

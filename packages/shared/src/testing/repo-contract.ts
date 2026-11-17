@@ -288,6 +288,78 @@ export function runRepoContract(
       expect(updated.nutrition).toEqual({ tracked: ['calories', 'protein_g'], goals: { protein_g: 160 } })
       expect((await repo.getProfile()).nutrition?.goals.protein_g).toBe(160)
     })
+    contract(
+      'profile',
+      'an exercise kept in its own unit converts only its own weights, once; the app-wide switch skips it; flipping back restores it',
+      async ({ repo }) => {
+        const bench = await exercise(repo, 'Bench Press')
+        const squat = await exercise(repo, 'Back Squat')
+        await repo.saveExercise({ ...bench, default_weight: 135 })
+        const { plan, day } = await planWithDay(repo)
+        const a = await repo.addPlanItem(day.id, bench.id)
+        await repo.updatePlanItem(a.id, { sets: 1, reps: 5, weight: 130 })
+        await repo.setRule(a.id, rule({ success_amount: 10 }))
+        const b = await repo.addPlanItem(day.id, squat.id)
+        await repo.updatePlanItem(b.id, { sets: 1, reps: 5, weight: 225 })
+        const session = await repo.startSession(day.id)
+        await markDone(repo, session, a.id)
+        await repo.finishSession(session.id) // a: 130 + 10 -> target 140
+        expect(await planItem(repo, plan.id, a.id)).toMatchObject({ weight: 130, target_weight: 140 })
+
+        // Keep Bench Press in kg: its numbers convert, Back Squat's do not
+        await repo.saveExercise({ ...(await exercise(repo, 'Bench Press')), unit: 'kg' })
+        expect(await exercise(repo, 'Bench Press')).toMatchObject({ unit: 'kg', default_weight: 61 })
+        const kg = await planItem(repo, plan.id, a.id)
+        expect(kg).toMatchObject({ weight: 59, target_weight: 63.5 })
+        expect(kg.rule?.success_amount).toBe(5) // 10 lb, snapped to the kg step grid
+        const log = must(await repo.getSession(session.id), 'session').exercises.find((e) => e.plan_item_id === a.id)
+        expect(log?.unit).toBe('kg')
+        expect(log?.sets[0]).toMatchObject({ weight: 59, target_weight: 59 })
+        expect((await planItem(repo, plan.id, b.id)).weight).toBe(225)
+        expect((await exercise(repo, 'Back Squat')).unit).toBeNull()
+        expect((await repo.getProfile()).units).toBe('lb')
+
+        // Saving it again unchanged converts nothing
+        await repo.saveExercise({ ...(await exercise(repo, 'Bench Press')), notes: 'x' })
+        expect((await planItem(repo, plan.id, a.id)).weight).toBe(59)
+
+        // The app-wide switch moves Back Squat but leaves Bench Press in its own unit
+        await repo.updateProfile({ units: 'kg' })
+        expect((await planItem(repo, plan.id, a.id)).weight).toBe(59)
+        expect((await planItem(repo, plan.id, b.id)).weight).toBe(102.1)
+        await repo.updateProfile({ units: 'lb' })
+        expect((await planItem(repo, plan.id, a.id)).weight).toBe(59)
+
+        // Flipping to lb (the app unit) and back to the app default restores the numbers
+        await repo.saveExercise({ ...(await exercise(repo, 'Bench Press')), unit: 'lb' })
+        expect(await planItem(repo, plan.id, a.id)).toMatchObject({ weight: 130, target_weight: 140 })
+        expect((await exercise(repo, 'Bench Press')).default_weight).toBe(135)
+        expect(must(await repo.getSession(session.id), 'session').exercises.find((e) => e.plan_item_id === a.id)?.sets[0]?.weight).toBe(130)
+        await repo.saveExercise({ ...(await exercise(repo, 'Bench Press')), unit: null })
+        expect((await planItem(repo, plan.id, a.id)).weight).toBe(130) // lb -> follows the lb app unit: no change
+        expect((await exercise(repo, 'Bench Press')).unit).toBeNull()
+      },
+    )
+
+    contract(
+      'profile',
+      'the app default rule is converted for an exercise in the other unit; its step is that unit\'s default',
+      async ({ repo }) => {
+        const bench = await exercise(repo, 'Bench Press')
+        const squat = await exercise(repo, 'Back Squat')
+        await repo.updateProfile({ default_rule: rule({ success_amount: 10 }) })
+        const { plan, day } = await planWithDay(repo)
+        const a = await repo.addPlanItem(day.id, bench.id)
+        const b = await repo.addPlanItem(day.id, squat.id)
+        await repo.saveExercise({ ...bench, unit: 'kg' })
+        expect((await planItem(repo, plan.id, a.id)).rule?.success_amount).toBe(5)
+        expect((await planItem(repo, plan.id, b.id)).rule?.success_amount).toBe(10)
+        // The exercise's own progression row shows the converted rule too
+        const rows = await repo.listProgressionByExercise()
+        expect(rows.find((r) => r.exercise_id === bench.id)?.rule.success_amount).toBe(5)
+        expect(rows.find((r) => r.exercise_id === squat.id)?.rule.success_amount).toBe(10)
+      },
+    )
 
     // ------------------------------------------------------------------- gear
     contract('gear', 'saveGear renames and keeps the id; listGear is sorted by name', async ({ repo }) => {

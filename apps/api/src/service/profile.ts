@@ -1,6 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm'
-import type { AnyPgColumn } from 'drizzle-orm/pg-core'
-import type { SQL } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, notInArray, sql } from 'drizzle-orm'
 import {
   DEFAULT_INCREMENT,
   LIMITS,
@@ -18,6 +16,7 @@ import {
 import type { NutritionSettings, Profile, RuleInput, Units } from '@workout/shared'
 import { exercise, gear, planItem, profile, progressionRule, setLog } from '../db/schema.js'
 import type { Db } from '../db/types.js'
+import { distinctNumbers, mapping, remap } from './convert.js'
 import { dec, now, num, readRule, toProfile } from './mappers.js'
 
 export async function init(db: Db, userId: string): Promise<void> {
@@ -66,20 +65,6 @@ export async function getProfile(db: Db, userId: string): Promise<Profile> {
   return toProfile(row)
 }
 
-// CASE col WHEN old THEN new ... ELSE col END over the distinct values present.
-function remap(column: AnyPgColumn, mapping: Map<number, number>): SQL {
-  const whens = [...mapping].map(([from, to]) => sql`when ${dec(from)}::numeric then ${dec(to)}::numeric`)
-  return sql`case ${column} ${sql.join(whens, sql` `)} else ${column} end`
-}
-
-const distinctNumbers = (values: (string | null)[]): number[] => [
-  ...new Set(values.filter((v): v is string => v !== null).map(num)),
-]
-
-function mapping(values: number[], convert: (w: number) => number): Map<number, number> {
-  return new Map(values.map((v) => [v, convert(v)]))
-}
-
 type Patch = {
   units?: Units
   weight_increment?: number
@@ -98,19 +83,29 @@ async function convertUnits(tx: Parameters<Parameters<Db['transaction']>[0]>[0],
   const convAmount = (amount: number) =>
     Math.min(LIMITS.weight, amount === current.weight_increment ? step : Math.max(step, roundToIncrement(conv(amount), step)))
 
-  const ex = await tx.select({ v: exercise.defaultWeight }).from(exercise).where(eq(exercise.userId, userId))
+  // Exercises kept in their own unit do not follow the app unit: their rows are left alone.
+  const keptIds = (
+    await tx.select({ id: exercise.id }).from(exercise).where(and(eq(exercise.userId, userId), isNotNull(exercise.unit)))
+  ).map((r) => r.id)
+  const keptItemIds =
+    keptIds.length === 0
+      ? []
+      : (
+          await tx
+            .select({ id: planItem.id })
+            .from(planItem)
+            .where(and(eq(planItem.userId, userId), inArray(planItem.exerciseId, keptIds)))
+        ).map((r) => r.id)
+
+  const exScope = and(eq(exercise.userId, userId), isNull(exercise.unit))
+  const ex = await tx.select({ v: exercise.defaultWeight }).from(exercise).where(exScope)
   const exMap = mapping(distinctNumbers(ex.map((r) => r.v)), conv)
   if (exMap.size > 0) {
-    await tx
-      .update(exercise)
-      .set({ defaultWeight: remap(exercise.defaultWeight, exMap), updatedAt: ts })
-      .where(eq(exercise.userId, userId))
+    await tx.update(exercise).set({ defaultWeight: remap(exercise.defaultWeight, exMap), updatedAt: ts }).where(exScope)
   }
 
-  const items = await tx
-    .select({ w: planItem.weight, t: planItem.targetWeight })
-    .from(planItem)
-    .where(eq(planItem.userId, userId))
+  const itemScope = and(eq(planItem.userId, userId), keptIds.length ? notInArray(planItem.exerciseId, keptIds) : undefined)
+  const items = await tx.select({ w: planItem.weight, t: planItem.targetWeight }).from(planItem).where(itemScope)
   const itemMap = mapping(distinctNumbers(items.flatMap((r) => [r.w, r.t])), conv)
   if (itemMap.size > 0) {
     await tx
@@ -120,22 +115,24 @@ async function convertUnits(tx: Parameters<Parameters<Db['transaction']>[0]>[0],
         targetWeight: remap(planItem.targetWeight, itemMap),
         updatedAt: ts,
       })
-      .where(eq(planItem.userId, userId))
+      .where(itemScope)
   }
 
-  const logs = await tx
-    .select({ w: setLog.weight, t: setLog.targetWeight })
-    .from(setLog)
-    .where(eq(setLog.userId, userId))
+  const logScope = and(eq(setLog.userId, userId), keptIds.length ? notInArray(setLog.exerciseId, keptIds) : undefined)
+  const logs = await tx.select({ w: setLog.weight, t: setLog.targetWeight }).from(setLog).where(logScope)
   const logMap = mapping(distinctNumbers(logs.flatMap((r) => [r.w, r.t])), conv)
   if (logMap.size > 0) {
     await tx
       .update(setLog)
       .set({ weight: remap(setLog.weight, logMap), targetWeight: remap(setLog.targetWeight, logMap), updatedAt: ts })
-      .where(eq(setLog.userId, userId))
+      .where(logScope)
   }
 
-  const addWeight = and(eq(progressionRule.userId, userId), eq(progressionRule.successAction, 'add_weight'))
+  const addWeight = and(
+    eq(progressionRule.userId, userId),
+    eq(progressionRule.successAction, 'add_weight'),
+    keptItemIds.length ? notInArray(progressionRule.planItemId, keptItemIds) : undefined,
+  )
   const rules = await tx.select({ v: progressionRule.successAmount }).from(progressionRule).where(addWeight)
   const ruleMap = mapping(distinctNumbers(rules.map((r) => r.v)), convAmount)
   if (ruleMap.size > 0) {
@@ -149,7 +146,7 @@ async function convertUnits(tx: Parameters<Parameters<Db['transaction']>[0]>[0],
   const exRules = await tx
     .select({ id: exercise.id, rule: exercise.defaultRule })
     .from(exercise)
-    .where(and(eq(exercise.userId, userId), sql`${exercise.defaultRule}->>'success_action' = 'add_weight'`))
+    .where(and(exScope, sql`${exercise.defaultRule}->>'success_action' = 'add_weight'`))
   for (const row of exRules) {
     const r = readRule(row.rule)
     await tx

@@ -1,4 +1,4 @@
-import type { SetLog } from '@workout/shared'
+import { convertLoad, type SetLog, type Units } from '@workout/shared'
 import { CheckIcon, MinusIcon, PencilIcon, PlusIcon } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { NumberField } from '@/components/number-field'
@@ -6,12 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatWeight } from '@/lib/format'
 import { tapHaptic } from '@/lib/haptics'
+import { useShowBothUnits } from '@/lib/show-both-units-pref'
+import { otherUnit } from '@/lib/weight-text'
 import { cn } from '@/lib/utils'
 
 type Patch = { done?: boolean; actual_reps?: number; weight?: number; note?: string }
 type Props = {
   set: SetLog
-  unit: string
+  unit: Units
   /** The profile's progression step: how far the weight - and + buttons move. */
   step?: number
   onToggle: () => Promise<boolean>
@@ -60,7 +62,10 @@ export function SetRow({ set, unit, step = 5, onToggle, onEdit, member, restCoun
   // An AMRAP set's reps are the minimum until logged: "5+" while untouched
   const reps = set.amrap && !set.done && set.actual_reps === set.target_reps ? `${set.actual_reps}+` : String(set.actual_reps)
   const numbers = `${reps} × ${formatWeight(set.weight)} ${unit}`
-  const label = `Set ${set.set_no}: ${numbers}${set.amrap ? ', AMRAP' : ''}${member ? `, ${member.label} ${member.name}` : ''}`
+  // With "show both units" on, the other unit follows in smaller type
+  const both = useShowBothUnits()
+  const alsoIn = both ? `${formatWeight(convertLoad(set.weight, unit, otherUnit(unit)))} ${otherUnit(unit)}` : null
+  const label = `Set ${set.set_no}: ${numbers}${alsoIn ? ` (${alsoIn})` : ''}${set.amrap ? ', AMRAP' : ''}${member ? `, ${member.label} ${member.name}` : ''}`
 
   function commitNote() {
     const next = note.trim()
@@ -168,7 +173,10 @@ export function SetRow({ set, unit, step = 5, onToggle, onEdit, member, restCoun
                 )}
               </span>
             )}
-            <span className="truncate text-[26px] leading-none max-[374px]:text-[22px] font-semibold tracking-[-0.02em] tabular-nums">{numbers}</span>
+            <span className="truncate text-[26px] leading-none max-[374px]:text-[22px] font-semibold tracking-[-0.02em] tabular-nums">
+              {numbers}
+              {alsoIn && <span className="text-base font-normal opacity-70"> · {alsoIn}</span>}
+            </span>
           </span>
           {set.done && <CheckIcon aria-hidden strokeWidth={3} className="text-brand-foreground size-6 shrink-0" />}
         </button>

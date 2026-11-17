@@ -2,7 +2,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, CheckIcon, MinusIcon, Trash2Icon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { OfflineError, type SetLog } from '@workout/shared'
+import { OfflineError, stepFor, type SetLog, type Units } from '@workout/shared'
 import { toast } from 'sonner'
 import { Screen, headerIconButton } from '@/app/screen'
 import { AngleChip, DayDot, SupersetLabel, nameWithAngle } from '@/components/plan-bits'
@@ -28,6 +28,7 @@ import { formatWeight } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import { isHttpUrl } from '@/lib/links'
 import { useRestTimerEnabled } from '@/lib/rest-timer-pref'
+import { useWeightText } from '@/lib/weight-text'
 import { useWakeLock } from '@/lib/wake-lock'
 import { lastTimeByExercise } from '@/lib/last-time'
 import { nextDay } from '@/lib/next-day'
@@ -56,22 +57,25 @@ const selectClass = cn(fieldClass, 'h-12')
 const actionBarClass =
   'bg-background sticky bottom-(--nav-space) z-20 -mx-4 px-4 py-3 after:absolute after:inset-x-0 after:top-full after:h-(--nav-space) after:bg-background md:bottom-0 md:after:hidden'
 
-function summaryLine(row: FinishSummary[number], unit: string): string {
+type SummaryRow = FinishSummary[number] & { unit?: Units }
+
+function summaryLine(row: SummaryRow, appUnit: Units, fmt: (weight: number, unit: Units) => string): string {
+  const unit = row.unit ?? appUnit
   const { exercise_name: name, before, after } = row
   const w = formatWeight
   const repsChanged = after.reps !== before.reps
   switch (row.outcome) {
     case 'success':
       if (after.weight !== before.weight)
-        return `${name}: ${w(before.weight)} → ${w(after.weight)} ${unit} ✓${
+        return `${name}: ${w(before.weight)} → ${fmt(after.weight, unit)} ✓${
           repsChanged ? ` · reps ${before.reps} → ${after.reps}` : ''
         }`
       if (after.reps !== before.reps) return `${name}: ${before.reps} → ${after.reps} reps ✓`
       return `${name}: done ✓`
     case 'miss':
-      return `${name}: missed — stays at ${w(after.weight)} ${unit}`
+      return `${name}: missed — stays at ${fmt(after.weight, unit)}`
     case 'deload':
-      return `${name}: deload ${w(before.weight)} → ${w(after.weight)} ${unit}${
+      return `${name}: deload ${w(before.weight)} → ${fmt(after.weight, unit)}${
         repsChanged ? ` · reps reset to ${after.reps}` : ''
       }`
     default:
@@ -288,12 +292,12 @@ function ExerciseExtras({ ex }: { ex: SessionExercise }) {
 
 // Finish summary rows follow session.exercises order (LocalRepo and the API both build them from
 // it), so the angle snapshot comes from the same index; on any mismatch the angle is left out.
-function withAngles(summary: FinishSummary, session: SessionDetail): FinishSummary {
+function withAngles(summary: FinishSummary, session: SessionDetail): SummaryRow[] {
   if (summary.length !== session.exercises.length) return summary
   return summary.map((row, i) => {
     const ex = session.exercises[i]!
-    if (ex.exercise_name !== row.exercise_name) return row
-    return { ...row, exercise_name: nameWithAngle(row.exercise_name, ex.sets[0]?.angle) }
+    if (ex.exercise_name !== row.exercise_name) return { ...row, unit: ex.unit }
+    return { ...row, unit: ex.unit, exercise_name: nameWithAngle(row.exercise_name, ex.sets[0]?.angle) }
   })
 }
 
@@ -303,8 +307,8 @@ function ActiveSession({
   onFinished,
 }: {
   session: SessionDetail
-  unit: string
-  onFinished: (s: FinishSummary) => void
+  unit: Units
+  onFinished: (s: SummaryRow[]) => void
 }) {
   const updateSet = useUpdateSet()
   const finish = useFinishSession()
@@ -316,7 +320,10 @@ function ActiveSession({
   const restTimerOn = useRestTimerEnabled()
   const profile = useProfile().data
   const previous = usePreviousSession(session.plan_day_id, session.id).data
-  const lastTime = lastTimeByExercise(previous, unit)
+  const weightText = useWeightText()
+  const lastTime = lastTimeByExercise(previous, unit, weightText)
+  // Each exercise's own unit, by plan item (an exercise can be kept in the other unit)
+  const unitOfItem = new Map(session.exercises.map((e) => [e.plan_item_id, e.unit]))
   const allSets = session.exercises.flatMap((e) => e.sets)
   const doneCount = allSets.filter((s) => s.done).length
   const anyDone = session.exercises.some((e) => e.sets.some((s) => s.done))
@@ -347,12 +354,13 @@ function ActiveSession({
   const setRow = (s: SetLog, siblings: SetLog[], member?: { label: string; name: string }) => {
     // Later sets of the same exercise still to do: what "use this weight for the rest" would change
     const rest = siblings.slice(siblings.indexOf(s) + 1).filter((x) => !x.done && x.weight !== s.weight)
+    const setUnit = unitOfItem.get(s.plan_item_id) ?? unit
     return (
     <SetRow
       key={s.id}
       set={s}
-      unit={unit}
-      step={profile?.weight_increment}
+      unit={setUnit}
+      step={profile ? stepFor(setUnit, profile) : undefined}
       member={member}
       onToggle={async () => {
         const ok = await save(s.id, { done: !s.done })
@@ -526,12 +534,13 @@ function ActiveSession({
 export function TodayScreen() {
   const active = useActiveSession()
   const profile = useProfile().data
-  const [summary, setSummary] = useState<FinishSummary | null>(null)
+  const [summary, setSummary] = useState<SummaryRow[] | null>(null)
   // Keep the last summary on screen while the sheet slides out, so it does not collapse first
-  const lastSummary = useRef<FinishSummary | null>(null)
+  const lastSummary = useRef<SummaryRow[] | null>(null)
   if (summary) lastSummary.current = summary
   const shown = summary ?? lastSummary.current
   const unit = profile?.units ?? 'lb'
+  const weightText = useWeightText()
 
   let body
   if (active.isPending || !profile) {
@@ -572,7 +581,7 @@ export function TodayScreen() {
                 className={cn('flex items-start gap-2 tabular-nums', row.outcome === 'success' && 'text-success font-semibold')}
               >
                 <OutcomeGlyph outcome={row.outcome} />
-                <span>{summaryLine(row, unit)}</span>
+                <span>{summaryLine(row, unit, weightText)}</span>
               </li>
             ))}
           </ul>

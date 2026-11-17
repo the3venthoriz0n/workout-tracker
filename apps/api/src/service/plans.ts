@@ -9,6 +9,7 @@ import {
   effectiveValues,
   newId,
   planItemSchema,
+  exerciseRuleContext,
   resolveRule,
   ruleFieldsOf,
   ruleInputSchema,
@@ -27,12 +28,13 @@ export function ruleOf(
   prof: Profile,
   row: typeof progressionRule.$inferSelect | null | undefined,
 ): { rule: RuleInput | null; source: RuleSource } {
+  const ctx = exerciseRuleContext(ex, prof)
   return resolveRule({
     itemRule: row ? ruleFieldsOf(toRule(row)) : null,
     inherit: item.inherit_rule,
     exerciseRule: ex.default_rule,
-    profileRule: prof.default_rule,
-    increment: prof.weight_increment,
+    profileRule: ctx.profileRule,
+    increment: ctx.increment,
   })
 }
 

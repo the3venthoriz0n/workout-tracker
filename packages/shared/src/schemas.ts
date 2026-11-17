@@ -199,12 +199,15 @@ export const exerciseInputSchema = z.object({
   default_weight: weight,
   // Optional on input so a save that does not mention it keeps the stored value (false on create).
   supports_angle: z.boolean().optional(),
+  // The unit this exercise's weights are in; null follows the app unit. Omitted keeps the stored value.
+  unit: unitsSchema.nullable().optional(),
 })
 export type ExerciseInput = z.infer<typeof exerciseInputSchema>
 
 // New fields default on parse, so rows and exports written before them still load.
 export const exerciseSchema = exerciseInputSchema.required({ id: true }).extend({
   supports_angle: z.boolean().default(false),
+  unit: unitsSchema.nullable().default(null),
   // Default progression rule for this exercise's items (between the item override and the profile's).
   default_rule: ruleInputSchema.nullable().default(null),
   ...owned,

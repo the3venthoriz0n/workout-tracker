@@ -6,6 +6,7 @@ import { RouterProvider } from 'react-router/dom'
 import { afterEach, expect, test, vi } from 'vitest'
 import { routes } from '../src/app/router'
 import { AppDb } from '../src/repo/db'
+import { convertLoad } from '@workout/shared'
 import { LocalRepo } from '../src/repo/local-repo'
 import { RepoProvider } from '../src/repo/provider'
 
@@ -101,8 +102,8 @@ test('sheet puts name first, sets/reps/weight in one row, and hides optional det
   expect(within(dialog).queryByText('Required gear')).toBeNull()
 
   weight.focus()
-  await user.tab()
   // Has angle sits between the numbers and the dropdown
+  await user.tab()
   expect(document.activeElement).toBe(within(dialog).getByRole('switch', { name: 'Has angle (flat / incline / decline)' }))
   await user.tab()
   expect(document.activeElement).toBe(toggle)
@@ -594,4 +595,46 @@ test('editing an exercise does not focus the name field (no keyboard); adding on
   await user.click(screen.getByRole('button', { name: 'Add exercise' }))
   dialog = await screen.findByRole('dialog')
   await waitFor(() => expect(document.activeElement).toBe(within(dialog).getByLabelText('Name')))
+})
+
+test('an exercise can be kept in kg: the editor converts its weights on save and the tile shows kg', async () => {
+  const user = userEvent.setup()
+  const repo = await seeded()
+  const before = (await repo.listExercises()).find((e) => e.name === 'Back Squat')!
+  renderLibrary(repo)
+  await user.click(await screen.findByRole('button', { name: 'Edit Back Squat' }))
+  const dialog = await screen.findByRole('dialog')
+  // The Unit choice is optional, so it sits inside Optional details
+  expect(within(dialog).queryByRole('radio', { name: 'kg' })).toBeNull()
+  await user.click(within(dialog).getByRole('button', { name: 'Optional details' }))
+  expect(within(dialog).getByRole('radio', { name: 'App unit (lb)' }).getAttribute('aria-checked')).toBe('true')
+  await user.click(within(dialog).getByRole('radio', { name: 'kg' }))
+  // The weight field switches to kg straight away, and the dialog says what saving does
+  const converted = convertLoad(before.default_weight, 'lb', 'kg')
+  expect(within(dialog).getByLabelText('Weight (kg)')).toBeTruthy()
+  expect((within(dialog).getByLabelText('Weight (kg)') as HTMLInputElement).value).toBe(String(converted))
+  expect(within(dialog).getByText(/Saving converts this exercise's weights, plans and history to kg/)).toBeTruthy()
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+  await waitFor(async () => {
+    const saved = (await repo.listExercises()).find((e) => e.id === before.id)!
+    expect(saved.unit).toBe('kg')
+    expect(saved.default_weight).toBe(converted)
+  })
+  expect(await screen.findByText(new RegExp(`${converted} kg`))).toBeTruthy()
+  // The app unit is untouched
+  expect((await repo.getProfile()).units).toBe('lb')
+})
+
+test('the Show both units setting adds the other unit to an exercise tile', async () => {
+  localStorage.setItem('wt.showBothUnits', 'on')
+  try {
+    const repo = await seeded()
+    const ex = (await repo.listExercises()).find((e) => e.name === 'Back Squat')!
+    renderLibrary(repo)
+    const kg = convertLoad(ex.default_weight, 'lb', 'kg')
+    // Other exercises can share the weight, so look for at least one tile
+    expect((await screen.findAllByText(new RegExp(`@ ${ex.default_weight} lb · ${kg} kg`))).length).toBeGreaterThan(0)
+  } finally {
+    localStorage.removeItem('wt.showBothUnits')
+  }
 })

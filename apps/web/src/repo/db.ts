@@ -71,5 +71,16 @@ export class AppDb extends Dexie {
         await tx.table('profile').toCollection().modify((p) => fill(p, { display_name: null }))
         await tx.table('plans').toCollection().modify((p) => fill(p, { source: null, published: null }))
       })
+    // v4: an exercise can keep its weights in its own unit; existing exercises follow the app unit.
+    this.version(4)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx
+          .table('exercises')
+          .toCollection()
+          .modify((e) => {
+            if ((e as Record<string, unknown>).unit === undefined) (e as Record<string, unknown>).unit = null
+          })
+      })
   }
 }
