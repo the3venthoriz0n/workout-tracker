@@ -33,6 +33,8 @@ import {
 import { owns, type OwnedKind } from './ownership.js'
 import { exportAll, importAll, replaceAll } from './transfer.js'
 import { deleteAccount } from './account.js'
+import { deleteAiKeyRow, getAiKeyRow, putAiKeyRow } from './ai-key.js'
+import type { AiKeyRow } from './ai-key.js'
 import { deleteNutritionEntry, listNutrition, saveNutritionEntry, takeAiMeal } from './nutrition.js'
 import { adoptSharedPlan, hasVoted, listMyShared, publishPlan, setVote, unpublishPlan } from './community.js'
 
@@ -47,6 +49,10 @@ export type Service = Repo & {
   deleteAccount(): Promise<void>
   /** Counts one AI parse for `today`; returns how many remain, or null when the day's limit is reached. */
   takeAiMeal(dailyLimit: number, today: string): Promise<number | null>
+  /** The user's own AI provider, with the key still sealed (the route layer opens it). */
+  getAiKeyRow(): Promise<AiKeyRow | null>
+  putAiKeyRow(row: AiKeyRow): Promise<void>
+  deleteAiKey(): Promise<void>
 }
 
 export function createService(db: Db, userId: string): Service {
@@ -56,6 +62,16 @@ export function createService(db: Db, userId: string): Service {
     saveNutritionEntry: (input) => saveNutritionEntry(db, userId, input),
     deleteNutritionEntry: (id) => deleteNutritionEntry(db, userId, id),
     takeAiMeal: (dailyLimit, today) => takeAiMeal(db, userId, dailyLimit, today),
+    getAiKeyRow: () => getAiKeyRow(db, userId),
+    putAiKeyRow: (row) => putAiKeyRow(db, userId, row),
+    deleteAiKey: () => deleteAiKeyRow(db, userId),
+    // Reading and saving a key belong to the route layer, which holds the secret that seals it.
+    getAiKey: async () => {
+      throw new AiUnavailableError()
+    },
+    saveAiKey: async () => {
+      throw new AiUnavailableError()
+    },
     // Parsing belongs to the route layer, which holds the configured provider; the service has none.
     parseMeal: async () => {
       throw new AiUnavailableError()

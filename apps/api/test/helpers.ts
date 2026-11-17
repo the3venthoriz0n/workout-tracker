@@ -77,7 +77,7 @@ export function linkIn(mail: Mail): string {
  * App over an isolated test schema. Each harness gets its own client IP so the process-wide rate-limit store never leaks between tests.
  * Mail goes to `mail` (a capture mailer) unless `opts.mailer` replaces it.
  */
-export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mailer; mealParser?: MealParser | null } = {}) {
+export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mailer; mealParser?: MealParser | null; aiKeySecret?: string; userKeyFetch?: typeof fetch } = {}) {
   const t: TestDb = await withTestDb()
   const env = testEnv(over)
   const mail = createCaptureMailer()
@@ -91,6 +91,8 @@ export async function setupApp(over: Partial<TestEnv> = {}, opts: { mailer?: Mai
     publicRateLimit: { enabled: false },
     // A canned parser unless a test passes its own (or null for "no provider configured").
     mealParser: opts.mealParser === undefined ? defaultMealParser : opts.mealParser,
+    aiKeySecret: opts.aiKeySecret ?? 'test-ai-key-secret-0123456789',
+    ...(opts.userKeyFetch ? { userKeyFetch: opts.userKeyFetch } : {}),
   })
   const origin = env.BETTER_AUTH_URL
   const ip = freshIp()

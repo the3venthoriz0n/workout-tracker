@@ -274,12 +274,12 @@ export function runRepoContract(
       expect(first.items[0]!.calories).not.toBeNull()
       expect(first.items[0]!.protein_g).toBeNull()
       const second = await repo.parseMeal('toast')
-      expect(second.remaining_today).toBe(first.remaining_today - 1)
+      expect(second.remaining_today).toBe(first.remaining_today! - 1)
     })
 
     contract('nutrition', 'parseMeal past the daily limit throws AiLimitError', async ({ repo }) => {
       const first = await repo.parseMeal('x')
-      for (let i = 0; i < first.remaining_today; i++) await repo.parseMeal('x')
+      for (let i = 0; i < first.remaining_today!; i++) await repo.parseMeal('x')
       await expect(repo.parseMeal('x')).rejects.toBeInstanceOf(AiLimitError)
     })
 

@@ -10,6 +10,7 @@ import { AboutFooter } from '@/components/about-footer'
 import { AccountCard } from '@/components/account-card'
 import { DataSection } from '@/components/data-section'
 import { DeleteAccountCard } from '@/components/delete-account-card'
+import { NutritionAiCard } from '@/components/nutrition-ai-card'
 import { PublicNameCard } from '@/components/public-name-card'
 import { useSignedIn } from '@/auth/context'
 import { notifyError } from '@/lib/notify'
@@ -52,6 +53,7 @@ export function SettingsScreen() {
         {/* Who you are first: the account, then the name it shows on shared plans */}
         <AccountCard />
         {signedIn && <PublicNameCard />}
+        {signedIn && <NutritionAiCard />}
 
         {/* Two small preferences share one card: a label on the left, its control on the right */}
         <Card>

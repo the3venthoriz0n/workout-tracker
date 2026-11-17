@@ -185,9 +185,26 @@ export const ROUTES: RouteSpec[] = [
     path: `${V1}/nutrition/parse`,
     body: () => ({ text: '1 chicken burrito' }),
     status: 200,
-    response: z.object({ items: z.array(mealDraftSchema), remaining_today: z.number() }),
+    response: z.object({ items: z.array(mealDraftSchema), remaining_today: z.number().nullable() }),
     foreign: 'none',
   },
+
+  {
+    method: 'GET',
+    path: `${V1}/nutrition/ai-key`,
+    status: 200,
+    response: z.object({ configured: z.boolean() }).passthrough(),
+    foreign: 'none',
+  },
+  {
+    method: 'PUT',
+    path: `${V1}/nutrition/ai-key`,
+    body: () => ({ provider: 'anthropic', model: 'claude-haiku-5-5', api_key: 'sk-test-12345678' }),
+    status: 200,
+    response: z.object({ configured: z.literal(true), provider: z.literal('anthropic'), model: z.string() }).passthrough(),
+    foreign: 'none',
+  },
+  { method: 'DELETE', path: `${V1}/nutrition/ai-key`, status: 204, foreign: 'none' },
 
   { method: 'GET', path: `${V1}/gear`, status: 200, response: z.array(gearSchema), foreign: 'none' },
   {

@@ -27,6 +27,10 @@ export type AppDeps = {
   publicRateLimit?: Partial<PublicRateLimit>
   /** The AI meal parser for nutrition; absent or null means the feature is unavailable. */
   mealParser?: MealParser | null
+  /** Test seam: the fetch used with a user's own AI key (the default refuses private addresses). */
+  userKeyFetch?: typeof fetch
+  /** Seals users' own AI keys; without it that feature is off (BETTER_AUTH_SECRET in production). */
+  aiKeySecret?: string
   /** Resolves true when the database answers; defaults to always healthy (tests). */
   sqlHealth?: () => Promise<boolean>
 }
@@ -77,7 +81,13 @@ export function createApp(deps: AppDeps): Hono {
 
   const v1 = new Hono<AppEnv>()
   v1.use('*', requireUser(auth))
-  registerRoutes(v1, { getService: deps.getService, auth, mealParser: deps.mealParser ?? null })
+  registerRoutes(v1, {
+    getService: deps.getService,
+    auth,
+    mealParser: deps.mealParser ?? null,
+    aiKeySecret: deps.aiKeySecret ?? null,
+    ...(deps.userKeyFetch ? { userKeyFetch: deps.userKeyFetch } : {}),
+  })
   app.route(API_PREFIX, v1)
 
   // Public community area: outside the /api/v1 session guard, GET only, never reads a session.

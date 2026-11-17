@@ -12,5 +12,9 @@ export type RouteDeps = {
   passwordGate: PasswordGate
   /** The configured AI meal parser, or null when no key is set (parse then answers 503 ai_unavailable). */
   mealParser: MealParser | null
+  /** Seals and opens users' own AI keys (BETTER_AUTH_SECRET). */
+  aiKeySecret: string | null
+  /** The fetch used with a user's own provider; defaults to one that refuses private addresses. */
+  userKeyFetch?: typeof fetch
 }
 export type V1 = Hono<AppEnv>
