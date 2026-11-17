@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { idSchema, type PublicListQuery } from '@workout/shared'
+import type { InfiniteData, QueryClient } from '@tanstack/react-query'
+import { idSchema, type PublicListPage, type PublicListQuery, type PublicPlanDetail } from '@workout/shared'
 import { publicApi } from '@/lib/community'
 import { useRepo } from './provider'
 import type { Repo } from './types'
@@ -172,6 +173,18 @@ export const useCommunityPlan = (id: string, opts: { enabled?: boolean; quiet?: 
     staleTime: opts.quiet ? 10 * 60_000 : 30_000,
     refetchOnWindowFocus: !opts.quiet,
   })
+/**
+ * Writes a listing's upvote count into every cached copy (its detail and every list page), so the count
+ * is right wherever it is shown next instead of the pre-vote number cached for up to 30 s.
+ */
+export function setCachedUpvotes(qc: QueryClient, id: string, upvotes: number): void {
+  qc.setQueryData<PublicPlanDetail>(keys.communityPlan(id), (d) => (d ? { ...d, listing: { ...d.listing, upvotes } } : d))
+  qc.setQueriesData<InfiniteData<PublicListPage>>({ queryKey: ['community', 'list'] }, (data) =>
+    data
+      ? { ...data, pages: data.pages.map((p) => ({ ...p, items: p.items.map((l) => (l.id === id ? { ...l, upvotes } : l)) })) }
+      : data,
+  )
+}
 export const useHasVoted = (id: string, enabled: boolean) => {
   const repo = useRepo()
   return useQuery({ queryKey: keys.voted(id), queryFn: () => repo.hasVoted(id), enabled, retry: false })
