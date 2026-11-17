@@ -2,7 +2,7 @@
 
 Runs the app and Postgres on any Linux Docker host that already runs `cloudflared` (a Cloudflare Tunnel) in its own container. This stack does not include `cloudflared`; the only way in is the tunnel. The app is published on `127.0.0.1` only (never the LAN), for a `cloudflared` with host networking.
 
-Images come from `ghcr.io/<owner>/<repo>`; the `staging` tag is rebuilt only when a release tag (`vX.Y.Z`, on `main`) is pushed (the `staging-image` job in `.github/workflows/release.yml`). The host pulls, nothing in CI can reach it. Keep every site-specific value in `.env` on the host; this repository is public.
+Images come from `ghcr.io/<owner>/<repo>`; the `staging` tag is rebuilt only when a release tag (`vX.Y.Z`, on `main`) is pushed (`.github/workflows/staging.yml`). The host pulls, nothing in CI can reach it. Keep every site-specific value in `.env` on the host; this repository is public.
 
 ## 1. Prerequisites
 
