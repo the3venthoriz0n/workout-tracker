@@ -27,6 +27,8 @@ export function registerNutrition(v1: V1, { getService, mealParser, aiKeySecret,
   v1.put('/nutrition/ai-key', async (c) => {
     const input = await body(c, AiKeyBody)
     if (!aiKeySecret) return c.json({ error: 'ai_unavailable' }, 503)
+    // Same entitlement as parsing, checked before the address is resolved (a user who cannot use the AI cannot make us call out)
+    if (!can(await service(c, getService).getProfile(), 'ai_nutrition')) return c.json({ error: 'forbidden' }, 403)
     const baseUrl = input.provider === 'openai' ? (input.base_url ?? null) : null
     if (baseUrl) {
       try {
