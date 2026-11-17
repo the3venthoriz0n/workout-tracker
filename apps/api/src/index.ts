@@ -24,6 +24,7 @@ const app = createApp({
   getService: (userId) => createService(db, userId),
   getPublic: () => createPublicService(db),
   mealParser: createMealParser(env),
+  aiKeySecret: env.BETTER_AUTH_SECRET,
   sqlHealth: async () => {
     try {
       await sql`select 1`

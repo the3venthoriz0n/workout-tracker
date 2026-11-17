@@ -1,7 +1,9 @@
 import { AiFailedError, AiLimitError, AiUnavailableError, OfflineError, newId } from '@workout/shared'
-import type { NutritionEntryInput } from '@workout/shared'
+import type { NutrientKey, NutritionEntryInput } from '@workout/shared'
+import { Loader2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { NutritionEntrySheet } from '@/components/nutrition-entry-sheet'
 import { Input } from '@/components/ui/input'
 import { pluralize } from '@/lib/format'
 import { useParseMeal, useSaveNutritionEntry } from '@/repo/hooks'
@@ -11,7 +13,7 @@ type Message = { text: string; tone: 'error' | 'info' }
 function messageFor(err: unknown): string {
   // The daily allowance and a provider's own rate limit look the same from here, so do not promise tomorrow
   if (err instanceof AiLimitError) return 'AI limit reached. Try again later.'
-  if (err instanceof AiUnavailableError) return "AI isn't set up on this server yet."
+  if (err instanceof AiUnavailableError) return "AI isn't set up yet. Check your key in Settings."
   if (err instanceof AiFailedError) return "Couldn't read that. Try describing it differently."
   if (err instanceof OfflineError) return 'Needs a connection.'
   return "Couldn't add that. Try again."
@@ -22,7 +24,39 @@ function messageFor(err: unknown): string {
  * writes nothing by itself; the entries are saved here, each under a fresh id (so a retried save is
  * harmless). Add disables for the whole round trip, so a double tap costs one parse.
  */
-export function NutritionAdd({ date }: { date: string }) {
+export function NutritionAdd({ date, aiOn = true, tracked }: { date: string; aiOn?: boolean; tracked: NutrientKey[] }) {
+  if (!aiOn) return <ManualAdd date={date} tracked={tracked} />
+  return <AiAdd date={date} />
+}
+
+const blank = (date: string): NutritionEntryInput => ({
+  date,
+  source: 'manual',
+  name: '',
+  quantity: '',
+  calories: null,
+  protein_g: null,
+  carbs_g: null,
+  fat_g: null,
+  fiber_g: null,
+  sugar_g: null,
+  sodium_mg: null,
+})
+
+/** AI is off: one button opens the entry sheet empty, and what is typed is saved as the lifter's own numbers. */
+function ManualAdd({ date, tracked }: { date: string; tracked: NutrientKey[] }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button type="button" className="h-12" onClick={() => setOpen(true)}>
+        Add food
+      </Button>
+      <NutritionEntrySheet entry={blank(date)} isNew tracked={tracked} open={open} onOpenChange={setOpen} />
+    </>
+  )
+}
+
+function AiAdd({ date }: { date: string }) {
   const parse = useParseMeal()
   const save = useSaveNutritionEntry()
   const [text, setText] = useState('')
@@ -84,10 +118,15 @@ export function NutritionAdd({ date }: { date: string }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        <Button type="submit" className="h-12 px-5" disabled={busy || text.trim() === ''}>
-          Add
+        <Button type="submit" className="h-12 min-w-20 px-5" disabled={busy || text.trim() === ''}>
+          {busy ? <Loader2 aria-hidden className="size-5 animate-spin motion-reduce:animate-none" /> : 'Add'}
         </Button>
       </div>
+      {busy && (
+        <p role="status" className="text-muted-foreground text-sm">
+          Estimating your meal…
+        </p>
+      )}
       {message && (
         <p role="alert" className={message.tone === 'error' ? 'text-destructive text-sm' : 'text-muted-foreground text-sm'}>
           {message.text}

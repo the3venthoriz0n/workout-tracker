@@ -99,4 +99,4 @@ See [SECURITY.md](SECURITY.md) to report a vulnerability.
 
 ## License
 
-MIT
+Proprietary, all rights reserved. See [LICENSE](LICENSE). Copying or reuse needs written permission.

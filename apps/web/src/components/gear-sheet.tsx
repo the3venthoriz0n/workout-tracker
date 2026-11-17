@@ -8,12 +8,12 @@ import {
   Sheet,
   SheetContent,
   SheetDescription,
-  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import { notifyError } from '@/lib/notify'
+import { responsiveSheet } from '@/lib/sheet-classes'
 import { useSaveGear } from '@/repo/hooks'
 
 type Props = {
@@ -25,7 +25,16 @@ type Props = {
 export function GearSheet({ gear, open, onOpenChange }: Props) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto">
+      <SheetContent
+        side="bottom"
+        className={responsiveSheet}
+        // Editing existing gear must not pop the keyboard; new gear still starts on its name
+        onOpenAutoFocus={(e) => {
+          if (!gear) return
+          e.preventDefault()
+          ;(e.currentTarget as HTMLElement).focus({ preventScroll: true }) // focus the sheet itself, not a field
+        }}
+      >
         {open && <GearForm gear={gear} onDone={() => onOpenChange(false)} />}
       </SheetContent>
     </Sheet>
@@ -67,35 +76,37 @@ function GearForm({ gear, onDone }: { gear?: Gear; onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-5 overflow-y-auto p-5">
-      <SheetHeader className="p-0">
+    <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
+      <SheetHeader className="shrink-0 pr-14">
         <SheetTitle>{gear ? 'Edit gear' : 'Add gear'}</SheetTitle>
         <SheetDescription>Gear you own decides which exercises you can plan.</SheetDescription>
       </SheetHeader>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="gear-name">Name</Label>
-        <Input
-          id="gear-name"
-          autoComplete="off"
-          enterKeyHint="done"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          aria-invalid={!!error}
-        />
-        {error && <p className="text-destructive text-sm">{error}</p>}
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-5 pb-5">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="gear-name">Name</Label>
+          <Input
+            id="gear-name"
+            autoComplete="off"
+            enterKeyHint="done"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-invalid={!!error}
+          />
+          {error && <p className="text-destructive text-sm">{error}</p>}
+        </div>
+
+        <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
+          I own this
+          <Switch checked={owned} onCheckedChange={setOwned} aria-label="I own this" />
+        </label>
       </div>
 
-      <label className="flex min-h-11 items-center justify-between gap-3 text-sm font-medium">
-        I own this
-        <Switch checked={owned} onCheckedChange={setOwned} aria-label="I own this" />
-      </label>
-
-      <SheetFooter className="p-0">
-        <Button type="submit" size="big" disabled={save.isPending}>
+      <div className="bg-popover shrink-0 border-t px-5 py-4">
+        <Button type="submit" size="big" className="w-full" disabled={save.isPending}>
           Save
         </Button>
-      </SheetFooter>
+      </div>
     </form>
   )
 }

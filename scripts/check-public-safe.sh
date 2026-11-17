@@ -69,10 +69,11 @@ fail() { # fail <rule>   (uses $path and $line)
 # Files where a rule is expected to fire (exact paths).
 # pnpm-lock.yaml: package versions look like addresses; maintainer emails may appear.
 # origins.test.ts / hardening.test.ts: they test that private-range and user-info-spoofed
-#   origins are rejected, so they need such literals.
+#   origins are rejected, so they need such literals. ai-key.test.ts: the same for the address
+#   guard on a user's own AI provider (private, loopback and metadata addresses must be refused).
 allowed_file() { # allowed_file <rule> <path>
   case "$1:$2" in
-    ipv4:pnpm-lock.yaml | ipv4:apps/api/test/origins.test.ts | ipv4:apps/api/test/hardening.test.ts) return 0 ;;
+    ipv4:pnpm-lock.yaml | ipv4:apps/api/test/origins.test.ts | ipv4:apps/api/test/hardening.test.ts | ipv4:apps/api/test/ai-key.test.ts) return 0 ;;
     email:pnpm-lock.yaml | email:apps/api/test/origins.test.ts) return 0 ;;
     # The commit trailer (Co-Authored-By: ... <noreply@anthropic.com>) quoted in the M2 plan.
     email:docs/superpowers/plans/2026-10-22-m2-accounts-and-sync.md) return 0 ;;

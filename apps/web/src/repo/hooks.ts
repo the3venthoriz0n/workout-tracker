@@ -195,6 +195,13 @@ export const useNutrition = (date: string, enabled = true) => {
 export const useSaveNutritionEntry = () =>
   useRepoMutation((r, entry: Parameters<Repo['saveNutritionEntry']>[0]) => r.saveNutritionEntry(entry))
 export const useDeleteNutritionEntry = () => useRepoMutation((r, id: string) => r.deleteNutritionEntry(id))
+// The user's own AI key: write-only, so the app only ever learns whether one is saved and where it points.
+export const useAiKey = (enabled = true) => {
+  const repo = useRepo()
+  return useQuery({ queryKey: ['ai-key'], queryFn: () => repo.getAiKey(), enabled, retry: false })
+}
+export const useSaveAiKey = () => useRepoMutation((r, input: Parameters<Repo['saveAiKey']>[0]) => r.saveAiKey(input))
+export const useDeleteAiKey = () => useRepoMutation((r) => r.deleteAiKey())
 /** A parse writes nothing, so unlike the other mutations it does not refetch every query. */
 export const useParseMeal = () => {
   const repo = useRepo()

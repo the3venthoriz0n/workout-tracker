@@ -35,7 +35,7 @@ function systemPrompt(tracked: NutrientKey[]): string {
   return [
     'You turn a description of food and drink someone consumed into estimated nutrition.',
     `Reply with JSON only, no other text, in exactly this shape: {"items":[{${shape}}]}.`,
-    'Give one item per distinct food or drink. "quantity" is the amount as written or assumed (for example "1 burrito").',
+    'Give one item per distinct food or drink. "name" is a short title of 1 to 4 words (for example "Chicken burrito"), never a sentence and without the amount. "quantity" is the amount as written or assumed (for example "1 burrito").',
     `Estimate these values for the amount described: ${listed}. Use plain numbers, never strings or units inside values.`,
     'If you are unsure, give your best estimate.',
     'If the text does not describe food or drink, reply {"items":[]}.',

@@ -50,6 +50,13 @@
       "when": 1794855824011,
       "tag": "0006_cuddly_cobalt_man",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794943467607,
+      "tag": "0007_third_ben_grimm",
+      "breakpoints": true
     }
   ]
 }

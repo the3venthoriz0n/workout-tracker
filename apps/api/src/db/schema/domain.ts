@@ -302,6 +302,21 @@ export const nutritionEntry = pgTable(
   ],
 )
 
+// A user's own AI provider. The key is stored sealed (see ai/key-crypto.ts) and never leaves the server.
+export const userAiKey = pgTable(
+  'user_ai_key',
+  {
+    ...owner(),
+    provider: text('provider').notNull(),
+    baseUrl: text('base_url'),
+    model: text('model').notNull(),
+    keyEnc: text('key_enc').notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId] }), check('user_ai_key_provider_check', sql`${t.provider} in ('openai', 'anthropic')`)],
+)
+
 // How many AI parses a user has used on a day (the per-user cap).
 export const aiUsage = pgTable(
   'ai_usage',

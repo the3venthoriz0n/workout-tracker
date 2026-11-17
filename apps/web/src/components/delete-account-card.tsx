@@ -1,3 +1,4 @@
+import { ChevronDown } from 'lucide-react'
 import { useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,13 +8,14 @@ import { useAuth } from '@/auth/context'
 import type { AuthErrorKind } from '@/auth/client'
 import { AUTH_ERROR_TEXT } from '@/lib/auth-messages'
 import { confirmBox } from '@/lib/styles'
+import { cn } from '@/lib/utils'
 
 const CONFIRM_WORD = 'DELETE'
 
 /**
  * Settings (signed in only): delete the account (export lives in the "Your data" card right above). Deletion needs the password and the
  * word DELETE; on success the AuthProvider forgets the account on this device and returns to guest.
- * Errors keep the form as typed.
+ * Errors keep the form as typed. The whole card is a dropdown, closed until asked for, so it is never in the way.
  */
 export function DeleteAccountCard() {
   const a = useAuth()
@@ -43,19 +45,30 @@ export function DeleteAccountCard() {
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2>Delete account</h2>
+          <h2>
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={`${id}-panel`}
+              className="flex min-h-11 w-full items-center justify-between gap-3 text-left"
+              onClick={() => (open ? cancel() : setOpen(true))}
+            >
+              Delete account
+              <ChevronDown aria-hidden className={cn('text-muted-foreground size-5 shrink-0 transition-transform duration-150 motion-reduce:transition-none', open && 'rotate-180')} />
+            </button>
+          </h2>
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <p className="text-sm">
-          Deleting your account removes your profile, email, library, plans, workout history, votes and public name
-          from the server and signs you out everywhere. This can&apos;t be undone.
-        </p>
-        <p className="text-muted-foreground text-sm">
-          Plans you shared in Community stay there, shown as &ldquo;Deleted user&rdquo;. Export your data above first if
-          you want a copy.
-        </p>
-        {open ? (
+      {open && (
+        <CardContent id={`${id}-panel`} className="flex flex-col gap-3">
+          <p className="text-sm">
+            Deleting your account removes your profile, email, library, plans, workout history, votes and public name
+            from the server and signs you out everywhere. This can&apos;t be undone.
+          </p>
+          <p className="text-muted-foreground text-sm">
+            Plans you shared in Community stay there, shown as &ldquo;Deleted user&rdquo;. Export your data above first if
+            you want a copy.
+          </p>
           <form role="alertdialog" aria-label="Confirm account deletion" className={`${confirmBox} text-center`} noValidate onSubmit={submit}>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={`${id}-pw`}>Password</Label>
@@ -99,12 +112,8 @@ export function DeleteAccountCard() {
               </Button>
             </div>
           </form>
-        ) : (
-          <Button variant="destructive" className="min-h-11" onClick={() => setOpen(true)}>
-            Delete account
-          </Button>
-        )}
-      </CardContent>
+        </CardContent>
+      )}
     </Card>
   )
 }

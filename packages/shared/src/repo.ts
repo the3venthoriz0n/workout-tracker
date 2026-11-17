@@ -16,6 +16,7 @@ import type {
   WorkoutSession,
 } from './schemas.js'
 import type { MealDraft, NutritionEntry, NutritionEntryInput, NutritionSettings } from './nutrition.js'
+import type { AiKeyInfo, AiKeyInput } from './api.js'
 import type { ExerciseProgression } from './rules.js'
 import type { ListingMeta, SharedListing, SharedSnapshot } from './community.js'
 import type { Effective } from './effective.js'
@@ -287,7 +288,11 @@ export interface Repo {
   saveNutritionEntry(entry: NutritionEntryInput): Promise<NutritionEntry>
   deleteNutritionEntry(id: string): Promise<void>
   /** Estimates the foods in `text` for the tracked nutrients. Writes nothing; the caller saves what it keeps. */
-  parseMeal(text: string): Promise<{ items: MealDraft[]; remaining_today: number }>
+  parseMeal(text: string): Promise<{ items: MealDraft[]; remaining_today: number | null }>
+  /** The user's own AI key, if any (never the key itself). `remaining_today` from parseMeal is null while it is in use. */
+  getAiKey(): Promise<AiKeyInfo>
+  saveAiKey(input: AiKeyInput): Promise<AiKeyInfo>
+  deleteAiKey(): Promise<void>
 
   // Community plans (spec §3, §9). Guests (LocalRepo) cannot publish, unpublish or vote
   // (UnauthenticatedError); they have no listings and no votes, and adopt from a fetched snapshot.

@@ -45,6 +45,20 @@ export const PutNutritionEntryBody = nutritionEntryInputSchema.omit({ id: true }
 export const ParseMealBody = z.object({
   text: z.string().transform((t) => t.trim()).pipe(z.string().min(1).max(NUTRITION_LIMITS.text)),
 })
+/** A user's own AI provider. The key is write-only: it is never returned. `base_url` is required for an openai-compatible service. */
+export const AiKeyBody = z
+  .object({
+    provider: z.enum(['openai', 'anthropic']),
+    base_url: z.url().max(300).optional(),
+    model: z.string().trim().min(1).max(200).regex(/^\S+$/, 'must not contain spaces'),
+    api_key: z.string().trim().min(8).max(500).regex(/^\S+$/, 'must not contain spaces'),
+  })
+  .superRefine((v, ctx) => {
+    if (v.provider === 'openai' && !v.base_url) ctx.addIssue({ code: 'custom', path: ['base_url'], message: 'required for an OpenAI-compatible service' })
+  })
+export type AiKeyInput = z.infer<typeof AiKeyBody>
+/** What the app may know about a saved key: that it exists and where it points, never the key. */
+export type AiKeyInfo = { configured: false } | { configured: true; provider: 'openai' | 'anthropic'; base_url: string | null; model: string }
 export const AddItemBody = z.object({ exercise_id: idSchema, id: idSchema.optional() })
 export const PatchItemBody = planItemSchema
   .pick({ sets: true, reps: true, weight: true })

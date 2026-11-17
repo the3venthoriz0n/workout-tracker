@@ -43,6 +43,17 @@ export const NUTRITION_LIMITS = {
 const goal = (k: NutrientKey) => z.number().positive().max(NUTRITION_LIMITS[k]).optional()
 const byCanonicalOrder = (a: NutrientKey, b: NutrientKey) => NUTRIENT_KEYS.indexOf(a) - NUTRIENT_KEYS.indexOf(b)
 
+const goalShape = () =>
+  z.object({
+    calories: goal('calories'),
+    protein_g: goal('protein_g'),
+    carbs_g: goal('carbs_g'),
+    fat_g: goal('fat_g'),
+    fiber_g: goal('fiber_g'),
+    sugar_g: goal('sugar_g'),
+    sodium_mg: goal('sodium_mg'),
+  })
+
 export const nutritionSettingsSchema = z.object({
   tracked: z
     .array(nutrientKeySchema)
@@ -50,19 +61,25 @@ export const nutritionSettingsSchema = z.object({
     .max(NUTRIENT_KEYS.length)
     .refine((keys) => new Set(keys).size === keys.length, 'Each nutrient can be tracked once')
     .transform((keys) => [...keys].sort(byCanonicalOrder)),
-  goals: z
-    .object({
-      calories: goal('calories'),
-      protein_g: goal('protein_g'),
-      carbs_g: goal('carbs_g'),
-      fat_g: goal('fat_g'),
-      fiber_g: goal('fiber_g'),
-      sugar_g: goal('sugar_g'),
-      sodium_mg: goal('sodium_mg'),
-    })
-    .default({}),
+  /** The daily goal; with a minimum in `goalMins` it is the top of the range (170-190 g protein: min 170, goal 190). */
+  goals: goalShape().default({}),
+  /** An optional lower bound per nutrient, only meaningful alongside a goal at least as large. */
+  goalMins: goalShape().optional(),
+  /** false turns the AI off: food is entered by hand. Absent means on. */
+  aiEnabled: z.boolean().optional(),
 })
+  .superRefine((v, ctx) => {
+    for (const key of NUTRIENT_KEYS) {
+      const min = v.goalMins?.[key]
+      if (min === undefined) continue
+      const max = v.goals[key]
+      if (max === undefined || min > max) ctx.addIssue({ code: 'custom', path: ['goalMins', key], message: 'Minimum cannot exceed the goal' })
+    }
+  })
 export type NutritionSettings = z.infer<typeof nutritionSettingsSchema>
+
+/** Whether the AI is on for these settings (it is unless turned off). */
+export const aiEnabledOf = (s: Pick<NutritionSettings, 'aiEnabled'>): boolean => s.aiEnabled !== false
 
 /** A profile's settings, or the defaults when it has none. */
 export function nutritionSettingsOf(profile: { nutrition?: NutritionSettings | undefined }): NutritionSettings {

@@ -54,6 +54,8 @@ import type {
   SetLog,
   Units,
   MealDraft,
+  AiKeyInfo,
+  AiKeyInput,
   NutritionEntry,
   NutritionEntryInput,
   NutritionSettings,
@@ -977,7 +979,19 @@ export class LocalRepo implements Repo {
     throw new UnauthenticatedError()
   }
 
-  async parseMeal(_text: string): Promise<{ items: MealDraft[]; remaining_today: number }> {
+  async parseMeal(_text: string): Promise<{ items: MealDraft[]; remaining_today: number | null }> {
+    throw new UnauthenticatedError()
+  }
+
+  async getAiKey(): Promise<AiKeyInfo> {
+    throw new UnauthenticatedError()
+  }
+
+  async saveAiKey(_input: AiKeyInput): Promise<AiKeyInfo> {
+    throw new UnauthenticatedError()
+  }
+
+  async deleteAiKey(): Promise<void> {
     throw new UnauthenticatedError()
   }
 

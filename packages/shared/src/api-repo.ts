@@ -18,6 +18,7 @@ import {
 import type { ExportData, FinishSummary, PlanTree, ProgressionRow, Repo, SessionDetail } from './repo.js'
 import type { SharedListing } from './community.js'
 import type { MealDraft, NutritionEntry } from './nutrition.js'
+import type { AiKeyInfo } from './api.js'
 import type { ExerciseProgression } from './rules.js'
 import { newId } from './id.js'
 import type { Exercise, Gear, Plan, PlanDay, PlanItem, Profile, SetLog, WorkoutSession } from './schemas.js'
@@ -143,7 +144,10 @@ export function createApiRepo(opts: ApiRepoOptions = {}): ApiRepo {
       return put<NutritionEntry>(`/nutrition/entries/${seg(id ?? newId())}`, rest)
     },
     deleteNutritionEntry: (id) => del(`/nutrition/entries/${seg(id)}`),
-    parseMeal: (text) => post<{ items: MealDraft[]; remaining_today: number }>('/nutrition/parse', { text }),
+    parseMeal: (text) => post<{ items: MealDraft[]; remaining_today: number | null }>('/nutrition/parse', { text }),
+    getAiKey: () => get<AiKeyInfo>('/nutrition/ai-key'),
+    saveAiKey: (input) => put<AiKeyInfo>('/nutrition/ai-key', input),
+    deleteAiKey: () => del('/nutrition/ai-key'),
     deleteGear: (id) => del(`/gear/${seg(id)}`),
     listPlans: () => get<Plan[]>('/plans'),
     async getPlan(id) {
