@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { convertAmount, convertLoad, exerciseRuleContext, exerciseUnit, resolveRule, stepFor } from '../src/index.js'
+import { gearSchema, convertAmount, convertLimit, convertLoad, effectiveMaxWeight, exerciseRuleContext, exerciseUnit, resolveRule, stepFor } from '../src/index.js'
 
 const profile = { units: 'lb' as const, weight_increment: 5 }
 
@@ -51,5 +51,33 @@ describe('per-exercise units', () => {
     const r = resolveRule({ itemRule: null, inherit: true, exerciseRule: null, profileRule: ctx.profileRule, increment: ctx.increment })
     expect(r.source).toBe('builtin')
     expect(r.rule?.success_amount).toBe(2.5)
+  })
+})
+
+describe('gear limits', () => {
+  test('a converted limit never allows more than the equipment does', () => {
+    expect(convertLimit(45, 'lb', 'kg')).toBe(20) // 20.4 kg, rounded down to a half kilo
+    expect(convertLimit(50, 'lb', 'kg')).toBe(22.5) // 22.7 kg
+    expect(convertLimit(20, 'kg', 'lb')).toBe(44) // 44.09 lb, rounded down to a pound
+    expect(convertLimit(45, 'lb', 'lb')).toBe(45)
+  })
+
+  test('the lowest limit among the required gear decides; none means no limit', () => {
+    expect(effectiveMaxWeight([], 'lb', 'lb')).toBeNull()
+    expect(effectiveMaxWeight([null, undefined], 'lb', 'lb')).toBeNull()
+    expect(effectiveMaxWeight([50, null, 45], 'lb', 'lb')).toBe(45)
+    expect(effectiveMaxWeight([50], 'lb', 'kg')).toBe(22.5)
+  })
+})
+
+describe('gear schema limit', () => {
+  const gear = { id: '11111111-1111-4111-8111-111111111111', name: 'Dumbbells', owned: true, user_id: 'u', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', deleted_at: null }
+  test('is optional, nullable and positive', () => {
+    expect(gearSchema.safeParse(gear).success).toBe(true)
+    expect(gearSchema.safeParse({ ...gear, max_weight: null }).success).toBe(true)
+    expect(gearSchema.safeParse({ ...gear, max_weight: 45 }).success).toBe(true)
+    expect(gearSchema.safeParse({ ...gear, max_weight: 0 }).success).toBe(false)
+    expect(gearSchema.safeParse({ ...gear, max_weight: -5 }).success).toBe(false)
+    expect(gearSchema.safeParse({ ...gear, max_weight: 'heavy' }).success).toBe(false)
   })
 })

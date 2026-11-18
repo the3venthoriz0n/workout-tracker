@@ -2,6 +2,9 @@ import type { RuleInput, SetLog } from './schemas.js'
 import { LIMITS } from './schemas.js'
 import { roundToIncrement } from './units.js'
 
+/** Reps added per success once the weight has reached its limit. */
+const CAP_REP_STEP = 1
+
 export type Outcome = 'skipped' | 'success' | 'miss' | 'deload'
 
 export function defaultRule(increment: number): RuleInput {
@@ -15,13 +18,15 @@ export function progress(...args: Parameters<typeof progressRaw>): ReturnType<ty
 }
 
 function progressRaw(
-  input: { targetReps: number; targetWeight: number; baseReps: number; plannedSets: number },
+  // maxWeight: the heaviest this exercise can be loaded (its gear's lowest limit, in its own unit); null or absent = none.
+  input: { targetReps: number; targetWeight: number; baseReps: number; plannedSets: number; maxWeight?: number | null },
   rule: RuleInput | null,
   failStreak: number,
   sets: Pick<SetLog, 'done' | 'actual_reps' | 'weight'>[],
   increment: number,
 ): { targetReps: number; targetWeight: number; failStreak: number; outcome: Outcome; liftedWeight: number | null } {
   const { targetReps, targetWeight, baseReps, plannedSets } = input
+  const cap = input.maxWeight ?? null
   const doneSets = sets.filter((s) => s.done)
   if (!rule || doneSets.length === 0) return { targetReps, targetWeight, failStreak, outcome: 'skipped', liftedWeight: null }
 
@@ -34,14 +39,26 @@ function progressRaw(
     let reps = targetReps
     let weight = lifted
     if (rule.success_action === 'add_weight') {
-      // Snapped to the increment, but never a step smaller than one increment
-      const next = roundToIncrement(weight + rule.success_amount, increment)
-      weight = next > weight ? next : roundToIncrement(weight + increment, increment)
+      if (cap !== null && weight >= cap) {
+        // Already at the heaviest load: more reps instead, up to the rep ceiling, then hold.
+        const more = reps + CAP_REP_STEP
+        if (rule.rep_ceiling === null || more <= rule.rep_ceiling) reps = more
+      } else {
+        // Snapped to the increment, but never a step smaller than one increment
+        const next = roundToIncrement(weight + rule.success_amount, increment)
+        weight = next > weight ? next : roundToIncrement(weight + increment, increment)
+        if (cap !== null) weight = Math.min(weight, cap)
+      }
     } else {
       reps += rule.success_amount
       if (rule.rep_ceiling !== null && reps > rule.rep_ceiling) {
-        reps = baseReps
-        weight = roundToIncrement(weight + increment, increment)
+        if (cap !== null && weight >= cap) {
+          reps = rule.rep_ceiling // at the heaviest load and the ceiling: hold
+        } else {
+          reps = baseReps
+          weight = roundToIncrement(weight + increment, increment)
+          if (cap !== null) weight = Math.min(weight, cap)
+        }
       }
     }
     return { targetReps: reps, targetWeight: weight, failStreak: 0, outcome: 'success', liftedWeight: lifted }

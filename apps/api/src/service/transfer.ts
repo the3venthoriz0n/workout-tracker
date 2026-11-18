@@ -253,7 +253,7 @@ async function replaceOnce(db: Db, userId: string, d: ExportData): Promise<void>
 /** Inserts every row of a validated file under `userId` (ids and timestamps kept). */
 async function insertRows(tx: Tx, userId: string, d: ExportData): Promise<void> {
     await insertChunked(d.gear, (c) =>
-      tx.insert(gear).values(c.map((r) => ({ id: r.id, userId, name: r.name, owned: r.owned, ...sync(r) }))),
+      tx.insert(gear).values(c.map((r) => ({ id: r.id, userId, name: r.name, owned: r.owned, maxWeight: r.max_weight == null ? null : dec(r.max_weight), ...sync(r) }))),
     )
     await insertChunked(d.exercises, (c) =>
       tx.insert(exercise).values(

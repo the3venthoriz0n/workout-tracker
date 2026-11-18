@@ -49,6 +49,30 @@ export function convertAmount(amount: number, from: Units, to: Units, fromStep: 
   return Math.min(LIMITS.weight, Math.max(toStep, roundToIncrement(convertWeight(amount, from, to), toStep)))
 }
 
+/**
+ * A gear limit (stored in the app unit) expressed in `to`, rounded DOWN to the same snap as loads so a
+ * converted limit never allows more than the equipment does (45 lb is 20 kg, not 20.5).
+ */
+export function convertLimit(limit: number, from: Units, to: Units): number {
+  if (from === to) return limit
+  const snap = LOAD_SNAP[to]
+  return Math.max(snap, Math.floor(convertWeight(limit, from, to) / snap + 1e-9) * snap)
+}
+
+/**
+ * The heaviest weight an exercise can be loaded to, in the exercise's own unit: the lowest limit among
+ * its required gear (the weakest piece decides), or null when none of it has one.
+ */
+export function effectiveMaxWeight(
+  gearLimits: readonly (number | null | undefined)[],
+  appUnits: Units,
+  exUnit: Units,
+): number | null {
+  const set = gearLimits.filter((m): m is number => typeof m === 'number')
+  if (set.length === 0) return null
+  return convertLimit(Math.min(...set), appUnits, exUnit)
+}
+
 // null = empty input, undefined = invalid
 export function parseWeight(text: string): number | null | undefined {
   const t = text.trim().replace(',', '.')

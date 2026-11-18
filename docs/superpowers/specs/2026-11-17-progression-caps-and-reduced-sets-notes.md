@@ -1,6 +1,14 @@
 # Progression: reduced sets and a max weight (notes)
 
-Status: notes for the `feat/progression-caps` branch. Nothing here is built or decided. Open questions are at the end. When a decision is made, move it into [spec §6](../../spec.md#6-core-logic-packagesshared-pure-functions) and the decisions log, as CLAUDE.md asks.
+Status: notes for the `feat/progression-caps` branch.
+
+**Decided (2026-11-17):**
+- Sets edited down: keep today's behaviour (a lighter weight is a miss). No `hold` outcome, no per-set counting (sections 1 and the options below are kept as history only).
+- The weight limit lives on the **gear** (optional, in the app unit), not on the exercise; an exercise uses the lowest limit among its required gear.
+- At the limit: add 1 rep per success up to the rep ceiling, then hold (fixed step, not a setting).
+- Built and recorded in [spec §6](../../spec.md#6-core-logic-packagesshared-pure-functions) (Gear weight limit) and the decisions log.
+
+The rest of this file is the original thinking; sections 2 and 3 describe the exercise-level version that was replaced by the gear-level one above.
 
 Two small features, both inside the pure `progress()` function in `packages/shared/src/progression.ts` (shared by guests and the server, so they cannot drift):
 

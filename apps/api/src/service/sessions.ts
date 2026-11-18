@@ -6,6 +6,7 @@ import {
   compareSetLogs,
   effectiveValues,
   exerciseRuleContext,
+  effectiveMaxWeight,
   exerciseUnit,
   newId,
   planSessionSets,
@@ -15,6 +16,7 @@ import {
 import type { FinishSummary, SessionDetail, SetLog, Units, WorkoutSession } from '@workout/shared'
 import {
   exercise,
+  gear,
   itemState,
   plan,
   planDay,
@@ -278,8 +280,20 @@ export async function finishSession(db: Db, userId: string, id: string): Promise
         .select()
         .from(itemState)
         .where(and(eq(itemState.userId, userId), eq(itemState.planItemId, item.id)))
+      // The heaviest this exercise can be loaded: its required gear's lowest limit, in the exercise's unit
+      const limits = ex.required_gear_ids.length
+        ? await tx
+            .select({ m: gear.maxWeight })
+            .from(gear)
+            .where(and(eq(gear.userId, userId), isNull(gear.deletedAt), inArray(gear.id, ex.required_gear_ids)))
+        : []
+      const maxWeight = effectiveMaxWeight(
+        limits.map((r) => (r.m === null ? null : num(r.m))),
+        profileView.units,
+        exerciseRuleContext(ex, profileView).unit,
+      )
       const result = progress(
-        { targetReps: eff.targetReps, targetWeight: eff.targetWeight, baseReps: eff.baseReps, plannedSets: eff.sets },
+        { targetReps: eff.targetReps, targetWeight: eff.targetWeight, baseReps: eff.baseReps, plannedSets: eff.sets, maxWeight },
         ruleOf(item, ex, profileView, ruleRow).rule,
         stateRow?.failStreak ?? 0,
         group.sets,

@@ -73,6 +73,8 @@ export const gear = pgTable(
     ...owner(),
     name: text('name').notNull(),
     owned: boolean('owned').notNull().default(false),
+    // Heaviest load this gear goes up to, in the app unit; null = no limit.
+    maxWeight: numeric('max_weight', { precision: 8, scale: 2 }),
     ...syncColumns(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.id] })],
