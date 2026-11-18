@@ -31,9 +31,11 @@ function GoogleButton() {
   const [error, setError] = useState<string | null>(() => {
     // Google or the server refused: Better Auth comes back to /settings?error=...
     try {
-      return new URLSearchParams(window.location.search).has('error')
-        ? "Google sign-in didn't work. If sign-up is invite-only, ask the owner to add your email."
-        : null
+      const code = new URLSearchParams(window.location.search).get('error')
+      if (!code) return null
+      // The sign-in started and ended on different addresses (the cookie that proves it is per address), or took too long.
+      if (code === 'state_mismatch') return 'Google sign-in could not be matched to this browser. Open the app at the same address you started from and try again.'
+      return "Google sign-in didn't work. If sign-up is invite-only, ask the owner to add your email."
     } catch {
       return null
     }
