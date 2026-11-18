@@ -110,7 +110,10 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
           socialProviders: {
             google: { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET! },
           },
-          account: { accountLinking: { enabled: true } },
+          // requireLocalEmailVerified off: an owner who signed up by email but never finished the set-up link
+          // can still come in with Google (which proves the mailbox). That is only safe because the hook
+          // below removes any pre-set password of such an account before it is linked.
+          account: { accountLinking: { enabled: true, requireLocalEmailVerified: false } },
         }
       : {}),
     // The invite list also guards accounts created by a social sign-in (the email sign-up path is
