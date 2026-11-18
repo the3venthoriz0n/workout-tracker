@@ -8,7 +8,7 @@ function systemIs(dark: boolean) {
 describe('theme preference', () => {
   beforeEach(() => {
     localStorage.clear()
-    document.head.innerHTML = '<meta name="theme-color" content="#f3f5f8">'
+    document.head.innerHTML = '<meta name="theme-color" content="#eceff3">'
   })
 
   it('follows the system by default', () => {
@@ -25,7 +25,7 @@ describe('theme preference', () => {
     setThemePref('light')
     expect(document.documentElement.dataset.theme).toBe('light')
     expect(localStorage.getItem('wt.theme')).toBe('light')
-    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#f3f5f8')
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#eceff3')
     setThemePref('dark')
     expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#090f15')
   })

@@ -6,7 +6,7 @@ import { useSyncExternalStore } from 'react'
 export type ThemePref = 'system' | 'light' | 'dark'
 const KEY = 'wt.theme'
 const DARK_BG = '#090f15'
-const LIGHT_BG = '#f3f5f8'
+const LIGHT_BG = '#eceff3'
 const listeners = new Set<() => void>()
 let memory: ThemePref = 'system' // used when storage is blocked, so the choice still holds for this page load
 

@@ -55,7 +55,7 @@
    spec (section 8). */
 :root {
     color-scheme: light;
-    --background: #f3f5f8; /* cool paper grey, same hue family as the dark page */
+    --background: #eceff3; /* cool paper grey, same hue family as the dark page */
     --foreground: #0b121a;
     --card: #ffffff; /* white surfaces lift off the grey page */
     --card-foreground: #0b121a;
@@ -63,11 +63,11 @@
     --popover-foreground: #0b121a;
     --primary: #0b121a; /* near-black pill buttons */
     --primary-foreground: #ffffff;
-    --secondary: #e6eaef;
+    --secondary: #dfe4ea;
     --secondary-foreground: #0b121a;
-    --muted: #e6eaef;
-    --muted-foreground: #505c69; /* >= 5.6:1 on --muted */
-    --accent: #edf0f4; /* hover fill */
+    --muted: #dfe4ea;
+    --muted-foreground: #505c69; /* >= 5.2:1 on --muted */
+    --accent: #e4e8ee; /* hover fill */
     --accent-foreground: #0b121a;
     --destructive: #c2362b;
     --destructive-foreground: #ffffff;
