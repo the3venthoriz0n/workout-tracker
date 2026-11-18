@@ -7,7 +7,7 @@ export type ThemePref = 'system' | 'light' | 'dark' | 'color'
 // What <html data-theme> holds. "color" is a light scheme with its own palette.
 export type Scheme = 'light' | 'dark' | 'color'
 const KEY = 'wt.theme'
-const BAR: Record<Scheme, string> = { light: '#eceff3', dark: '#090f15', color: '#f8f9fa' }
+const BAR: Record<Scheme, string> = { light: '#eceff3', dark: '#090f15', color: '#eaf1fe' }
 const listeners = new Set<() => void>()
 let memory: ThemePref = 'system' // used when storage is blocked, so the choice still holds for this page load
 

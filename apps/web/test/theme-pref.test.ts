@@ -37,6 +37,6 @@ describe('color theme', () => {
     setThemePref('color')
     expect(document.documentElement.dataset.theme).toBe('color')
     expect(localStorage.getItem('wt.theme')).toBe('color')
-    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#f8f9fa')
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#eaf1fe')
   })
 })

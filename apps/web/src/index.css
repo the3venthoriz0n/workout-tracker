@@ -142,7 +142,7 @@
    (buttons, active tab and segment), red / green / amber as the status colours. */
 :root[data-theme="color"] {
     color-scheme: light;
-    --background: #f8f9fa;
+    --background: #eaf1fe; /* soft Google-blue wash */
     --foreground: #202124;
     --card: #ffffff;
     --card-foreground: #202124;
@@ -150,11 +150,11 @@
     --popover-foreground: #202124;
     --primary: #1967d2; /* white text on it 5.4:1 */
     --primary-foreground: #ffffff;
-    --secondary: #e8eaed;
+    --secondary: #d6e3fb;
     --secondary-foreground: #202124;
-    --muted: #e8eaed;
-    --muted-foreground: #5f6368; /* >= 5.0:1 on --muted */
-    --accent: #e8f0fe; /* blue tint hover fill */
+    --muted: #d6e3fb;
+    --muted-foreground: #4a4f55; /* >= 6.3:1 on --muted */
+    --accent: #dce8fc; /* blue tint hover fill */
     --accent-foreground: #174ea6;
     --destructive: #d93025;
     --destructive-foreground: #ffffff;
@@ -162,11 +162,11 @@
     --success-foreground: #ffffff;
     --brand: #1967d2;
     --brand-foreground: #ffffff;
-    --border: #dadce0;
-    --border-strong: #bdc1c6;
+    --border: #cfdcf5;
+    --border-strong: #a9bde2;
     --field: #ffffff;
-    --control: #80868b;
-    --input: #bdc1c6;
+    --control: #6f7782;
+    --input: #a9bde2;
     --ring: #1a73e8;
     --shadow-float: 0 10px 30px -8px rgb(32 33 36 / 0.2), 0 2px 6px rgb(32 33 36 / 0.08);
     --day-blue: #1967d2;
@@ -179,6 +179,15 @@
     --day-slate: #5f6368;
     --day-foreground: #ffffff;
 }
+
+/* Color theme: each tab carries one of Google's colours, as the icon when idle and the pill when active
+   (the pill's shape and weight still say "active", not colour alone). */
+:root[data-theme="color"] a[data-tab] { --tab: #1967d2; }
+:root[data-theme="color"] a[data-tab="plans"] { --tab: #d93025; }
+:root[data-theme="color"] a[data-tab="library"] { --tab: #b06000; }
+:root[data-theme="color"] a[data-tab="nutrition"] { --tab: #188038; }
+:root[data-theme="color"] a[data-tab][aria-current="page"] { background-color: var(--tab); color: #fff; }
+:root[data-theme="color"] a[data-tab]:not([aria-current="page"]) svg { color: var(--tab); }
 
 /* A soft surface (card, day section, superset block): fields and rows inside it use the page
    colour so they still stand out. */
