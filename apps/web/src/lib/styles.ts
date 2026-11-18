@@ -12,5 +12,8 @@ export const segmentedItem = (on: boolean) =>
   )
 
 // Inline confirmation inside a surface (card) or on the page.
-export const confirmBox = 'bg-background flex flex-col gap-3 rounded-row p-4'
+// Fields inside take the card colour (not the page colour this box already is) and an outline, so each one
+// reads as its own entry.
+export const confirmBox =
+  'bg-background flex flex-col gap-3 rounded-row p-4 [--field:var(--card)] [&_input]:border-border-strong [&_input:focus-visible]:border-transparent'
 export const confirmPanel = 'surface flex flex-col gap-3 rounded-card p-4 text-center'
