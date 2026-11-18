@@ -65,3 +65,26 @@ export function useGoogleEnabled(): boolean {
   })
   return q.data?.google === true
 }
+
+export type SignInMethods = { google: boolean; password: boolean }
+
+/** How this account signs in (null while unknown or offline: the card then says nothing). */
+export function useSignInMethods(email: string | undefined): SignInMethods | null {
+  const q = useQuery({
+    queryKey: ['auth-methods', email],
+    enabled: !!email,
+    staleTime: 60_000,
+    retry: false,
+    queryFn: async (): Promise<SignInMethods | null> => {
+      try {
+        const res = await fetch('/api/auth-methods', { credentials: 'include' })
+        if (!res.ok) return null
+        const d = (await res.json().catch(() => null)) as Partial<SignInMethods> | null
+        return { google: d?.google === true, password: d?.password === true }
+      } catch {
+        return null
+      }
+    },
+  })
+  return q.data ?? null
+}

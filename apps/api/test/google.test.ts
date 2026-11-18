@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { setupApp, type Harness } from './helpers.js'
+import { cookieJar, setupApp, type Harness } from './helpers.js'
 
 let h: Harness
 afterEach(async () => {
@@ -80,5 +80,22 @@ describe('linking Google to an unverified, pre-registered account', () => {
     await ctx.internalAdapter.linkAccount({ userId: found!.user.id, providerId: 'google', accountId: 'google-sub-2' })
     const after = await ctx.internalAdapter.findUserByEmail(email, { includeAccounts: true })
     expect(after?.accounts.map((a) => a.providerId).sort()).toEqual(['credential', 'google'])
+  })
+})
+
+describe('GET /api/auth-methods', () => {
+  it('needs a session and reports only which methods the account has', async () => {
+    h = await setupApp(GOOGLE)
+    expect((await h.request('/api/auth-methods')).status).toBe(401)
+    const email = 'both@example.com'
+    const signedIn = await h.signUpVerified(email)
+    expect(signedIn.status).toBe(200)
+    const cookie = cookieJar(signedIn)
+    expect(await (await h.request('/api/auth-methods', { cookie })).json()).toEqual({ google: false, password: true })
+
+    const ctx = await h.auth.$context
+    const found = await ctx.internalAdapter.findUserByEmail(email)
+    await ctx.internalAdapter.linkAccount({ userId: found!.user.id, providerId: 'google', accountId: 'g-3' })
+    expect(await (await h.request('/api/auth-methods', { cookie })).json()).toEqual({ google: true, password: true })
   })
 })

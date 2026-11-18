@@ -83,6 +83,19 @@ export function createApp(deps: AppDeps): Hono {
     return c.json({ google: googleEnabled(env) })
   })
 
+  // How the signed-in user can sign in (for the Account card): which login methods their account has.
+  // Session required; only booleans leave, never account ids or tokens.
+  app.get('/api/auth-methods', async (c) => {
+    c.header('Cache-Control', 'no-store')
+    const session = await auth.api.getSession({ headers: c.req.raw.headers })
+    if (!session) return c.json({ error: 'unauthenticated' }, 401)
+    const accounts = await (await auth.$context).internalAdapter.findAccounts(session.user.id)
+    return c.json({
+      google: accounts.some((a) => a.providerId === 'google'),
+      password: accounts.some((a) => a.providerId === 'credential'),
+    })
+  })
+
   // Better Auth owns /api/auth/* (sign-up, sign-in, sign-out, get-session, ...).
   app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 

@@ -1,8 +1,9 @@
+import { KeyRound } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/auth/context'
-import { startGoogleSignIn, useGoogleEnabled } from '@/auth/google'
+import { startGoogleSignIn, useGoogleEnabled, useSignInMethods } from '@/auth/google'
 import { toKind } from '@/auth/client'
 import { downloadExport } from '@/lib/download-export'
 import { AUTH_ERROR_TEXT } from '@/lib/auth-messages'
@@ -21,6 +22,29 @@ function GoogleMark() {
       <path fill="#FBBC04" d="M5.37 14.3a7.2 7.2 0 0 1 0-4.6V6.61H1.4a12 12 0 0 0 0 10.78l3.97-3.09Z" />
       <path fill="#EA4335" d="M12 4.75c1.76 0 3.34.6 4.58 1.8l3.43-3.43A11.5 11.5 0 0 0 12 0 12 12 0 0 0 1.4 6.61L5.37 9.7A7.2 7.2 0 0 1 12 4.75Z" />
     </svg>
+  )
+}
+
+/** How this account signs in, as small labelled badges (icon plus words, never the icon alone). */
+function SignInMethods({ email }: { email: string | undefined }) {
+  const m = useSignInMethods(email)
+  if (!m || (!m.google && !m.password)) return null
+  const badge = 'bg-muted text-foreground inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-sm font-medium'
+  return (
+    <ul aria-label="Sign-in methods" className="flex flex-wrap gap-2">
+      {m.google && (
+        <li className={badge}>
+          <GoogleMark />
+          Google
+        </li>
+      )}
+      {m.password && (
+        <li className={badge}>
+          <KeyRound aria-hidden className="size-4 shrink-0" />
+          Password
+        </li>
+      )}
+    </ul>
   )
 }
 
@@ -116,6 +140,7 @@ export function AccountCard() {
         <p className="text-sm">
           Signed in as <strong className="break-all">{a.email}</strong>
         </p>
+        <SignInMethods email={a.email} />
         {a.pendingUpload && (
           <p role="alert" className="text-destructive text-sm">
             Your account is ready, but your guest data hasn&apos;t been uploaded. It is untouched on
