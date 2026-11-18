@@ -9,8 +9,10 @@ import { isOfflineRepo, type OfflineRepo } from '@/repo/offline'
 import { RepoProvider } from '@/repo/provider'
 import { AuthError, toKind, type AuthClient, type AuthErrorKind } from './client'
 import { AuthContext, type AuthState } from './context'
+import { consumeGoogleReturn } from './google'
 import {
   cancelDiscard as cancelDiscardFlow,
+  googleReturnFlow,
   confirmDiscard as confirmDiscardFlow,
   retryUpload as retryUploadFlow,
   signInFlow,
@@ -170,6 +172,20 @@ export function AuthProvider({
       if (cancelled) return
       if (!user) return go({ kind: 'guest' })
       accountRef.current = user.userId
+      // Back from Google: handle the guest data like a password sign-in would.
+      if (consumeGoogleReturn()) {
+        try {
+          const o = await googleReturnFlow(deps())
+          if (!cancelled) applyOutcome(o, user.email)
+        } catch (e) {
+          if (cancelled) return
+          dropApi()
+          accountRef.current = ''
+          go({ kind: 'guest' })
+          setError(toKind(e))
+        }
+        return
+      }
       try {
         await getApi().getProfile()
         if (cancelled) return

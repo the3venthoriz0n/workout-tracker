@@ -1,7 +1,7 @@
 import { betterAuth } from 'better-auth'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { Db } from './db/index.js'
 import { account, session, user, verification } from './db/schema.js'
 import type { Env } from './env.js'
@@ -10,7 +10,11 @@ import { logMailFailure, resetEmail, setupEmail, type Mail, type Mailer } from '
 import { configuredOrigins, isTrustedOrigin } from './origins.js'
 
 export type AuthEnv = Pick<Env, 'NODE_ENV' | 'BETTER_AUTH_URL' | 'BETTER_AUTH_SECRET' | 'TRUSTED_ORIGINS'> &
-  Partial<Pick<Env, 'CLIENT_IP_HEADER' | 'SIGNUP_ALLOWLIST'>>
+  Partial<Pick<Env, 'CLIENT_IP_HEADER' | 'SIGNUP_ALLOWLIST' | 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_SECRET'>>
+
+/** Google sign-in is on only when both halves of the OAuth client are set. */
+export const googleEnabled = (env: Pick<AuthEnv, 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_SECRET'>) =>
+  Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET)
 
 export type AuthOptions = {
   /** Sends verification and password-reset mail. Never awaited inside a request. */
@@ -95,6 +99,55 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
         throw new APIError('FORBIDDEN', { code: 'SIGNUP_CLOSED', message: 'signup_closed' })
       }),
     },
+    // "Continue with Google": sign-in only (linking from inside an account stays closed, see disabledPaths).
+    // An existing password account with the same email is linked only when Google reports the email as verified
+    // (no trustedProviders: Better Auth then refuses an unverified Google email, so a Google account that merely
+    // claims someone's address cannot enter it). Google only reports an email as
+    // verified when it is; an unverified one is refused by Better Auth (no takeover of a pre-registered
+    // address). Only `sub` and the verified email are used; Better Auth keeps Google's tokens in `account`.
+    ...(googleEnabled(env)
+      ? {
+          socialProviders: {
+            google: { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET! },
+          },
+          // requireLocalEmailVerified off: an owner who signed up by email but never finished the set-up link
+          // can still come in with Google (which proves the mailbox). That is only safe because the hook
+          // below removes any pre-set password of such an account before it is linked.
+          account: { accountLinking: { enabled: true, requireLocalEmailVerified: false } },
+        }
+      : {}),
+    // The invite list also guards accounts created by a social sign-in (the email sign-up path is
+    // checked above, before anything is written). Existing users are never affected.
+    databaseHooks: {
+      // Pre-registration takeover through linking: anyone can sign up an address with a password of their
+      // own choosing (the account stays unverified, so the password cannot sign in yet). If the real owner
+      // then signs in with Google, the account is linked and becomes verified, which would switch that
+      // password on. So when Google is linked to a still-unverified account, the password login and every
+      // session of it are removed first (this runs before the link, and before emailVerified flips). The
+      // owner can choose a password again through the reset link. Verified accounts are left alone.
+      account: {
+        create: {
+          before: async (acc) => {
+            if (acc.providerId !== 'google') return
+            const [u] = await db.select({ emailVerified: user.emailVerified }).from(user).where(eq(user.id, acc.userId))
+            if (!u || u.emailVerified) return
+            await db.transaction(async (tx) => {
+              await tx.delete(account).where(and(eq(account.userId, acc.userId), eq(account.providerId, 'credential')))
+              await tx.delete(session).where(eq(session.userId, acc.userId))
+            })
+          },
+        },
+      },
+      user: {
+        create: {
+          before: async (u) => {
+            if (allowlist.size > 0 && !allowlist.has(u.email.toLowerCase())) {
+              throw new APIError('FORBIDDEN', { code: 'SIGNUP_CLOSED', message: 'signup_closed' })
+            }
+          },
+        },
+      },
+    },
     emailAndPassword: {
       enabled: true,
       // Sign-in needs a verified email (403 EMAIL_NOT_VERIFIED otherwise). With this on, Better
@@ -170,6 +223,7 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
       customRules: {
         '/sign-in/email': { window: 60, max: 5 },
         '/sign-up/email': { window: 60 * 60, max: 10 },
+        '/sign-in/social': { window: 60, max: 10 },
         '/request-password-reset': { window: 60 * 60, max: 5 },
       },
     },

@@ -16,6 +16,8 @@ export type TestEnv = OriginEnv & {
   BETTER_AUTH_SECRET: string
   STATIC_DIR?: string
   SIGNUP_ALLOWLIST?: string[]
+  GOOGLE_CLIENT_ID?: string
+  GOOGLE_CLIENT_SECRET?: string
 }
 
 export function testEnv(over: Partial<TestEnv> = {}): TestEnv {

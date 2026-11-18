@@ -1,3 +1,4 @@
+import { googleEnabled } from './auth.js'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { API_PREFIX, type Health } from '@workout/shared'
 import { Hono } from 'hono'
@@ -19,7 +20,7 @@ import type { Service } from './service/index.js'
 export type AppDeps = {
   auth: Auth
   env: Pick<Env, 'NODE_ENV' | 'BETTER_AUTH_URL' | 'TRUSTED_ORIGINS' | 'STATIC_DIR'> &
-    Partial<Pick<Env, 'CLIENT_IP_HEADER' | 'AUTH_RATE_LIMIT'>>
+    Partial<Pick<Env, 'CLIENT_IP_HEADER' | 'AUTH_RATE_LIMIT' | 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_SECRET'>>
   getService: (userId: string) => Service
   /** Session-less reads for the public community area. */
   getPublic: () => PublicService
@@ -74,6 +75,25 @@ export function createApp(deps: AppDeps): Hono {
       ok = false
     }
     return c.json({ ok } satisfies Health, ok ? 200 : 503)
+  })
+
+  // Which sign-in methods the login form may offer. Public, no secrets: only whether Google is on.
+  app.get('/api/auth/config', (c) => {
+    c.header('Cache-Control', 'no-store')
+    return c.json({ google: googleEnabled(env) })
+  })
+
+  // How the signed-in user can sign in (for the Account card): which login methods their account has.
+  // Session required; only booleans leave, never account ids or tokens.
+  app.get('/api/auth/methods', async (c) => {
+    c.header('Cache-Control', 'no-store')
+    const session = await auth.api.getSession({ headers: c.req.raw.headers })
+    if (!session) return c.json({ error: 'unauthenticated' }, 401)
+    const accounts = await (await auth.$context).internalAdapter.findAccounts(session.user.id)
+    return c.json({
+      google: accounts.some((a) => a.providerId === 'google'),
+      password: accounts.some((a) => a.providerId === 'credential'),
+    })
   })
 
   // Better Auth owns /api/auth/* (sign-up, sign-in, sign-out, get-session, ...).

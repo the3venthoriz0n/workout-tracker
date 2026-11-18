@@ -41,6 +41,9 @@ services:
       # without them in production; add both to .env by hand (deploy.sh does not generate them).
       RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY in .env}
       MAIL_FROM: ${MAIL_FROM:?set MAIL_FROM in .env}
+      # Optional: "Continue with Google" (both or neither). See .env.example.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       # Optional: the AI that estimates nutrition (Nutrition tab). Any OpenAI-compatible service or
       # Anthropic; unset means the feature reports itself unavailable. See .env.example.
       AI_PROVIDER: ${AI_PROVIDER:-openai}

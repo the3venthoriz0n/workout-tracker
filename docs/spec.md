@@ -373,6 +373,7 @@ Everything is free at launch. Gating later is a config change, not a refactor.
 | Nutrition: each user chooses which of seven nutrients to track; entries store `null` for the rest (owner's choice) | Only tracked nutrients are asked of the AI and shown. Turning one on later leaves older entries blank for it (a dash, left out of that total) instead of counting zero; turning one off hides it but keeps what was stored |
 | Nutrition: an entry's date is the client's local day; no separate "day" row; goals live on the profile | Simple: a day is the entries sharing a date and totals are computed in `packages/shared`. Changing a goal changes how past days are measured; no per-day snapshot in N1 |
 | Nutrition: no PATCH for entries; an edit is a full idempotent PUT; parse checks that a provider is configured before taking the daily allowance | Nothing needs a partial update; an unconfigured server must never burn a user's daily allowance on 503s |
+| Google sign-in beside email+password (2026-11-17) | Better Auth's Google provider, on only when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are both set. A verified Google email links to the existing account with that email (no duplicate); `SIGNUP_ALLOWLIST` also gates accounts created this way; linking from inside an account stays closed. Back from Google, the web runs the same guest-data steps as a password sign-in. |
 
 ## 14. Open questions
 
