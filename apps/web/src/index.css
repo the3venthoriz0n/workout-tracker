@@ -57,42 +57,42 @@
     color-scheme: light;
     --background: #fdfcfc;
     --foreground: #090f15;
-    --card: #f5f3f1; /* soft surface */
+    --card: #eeebe6; /* soft surface */
     --card-foreground: #090f15;
     --popover: #fdfcfc;
     --popover-foreground: #090f15;
     --primary: #090f15; /* near-black pill buttons */
     --primary-foreground: #fdfcfc;
-    --secondary: #ebe8e4;
+    --secondary: #e4e0da;
     --secondary-foreground: #090f15;
-    --muted: #ebe8e4;
-    --muted-foreground: #6b655d; /* warm grey, darkened from #777169: 4.72:1 on --muted */
-    --accent: #efece8; /* hover fill */
+    --muted: #e4e0da;
+    --muted-foreground: #57514a; /* warm grey: >= 5.8:1 on --muted */
+    --accent: #e9e5df; /* hover fill */
     --accent-foreground: #090f15;
     --destructive: #c2362b;
     --destructive-foreground: #ffffff;
-    --success: #1f7a4d;
+    --success: #1b7045;
     --success-foreground: #ffffff;
-    --brand: #1a66e0; /* the accent as text and as a fill under white text (>= 4.72:1) */
+    --brand: #165bd0; /* the accent as text and as a fill under white text (>= 4.72:1) */
     --brand-foreground: #ffffff;
-    --border: #ebe8e4; /* hairlines */
-    --border-strong: #d7d2cc;
-    --field: #f5f3f1; /* input fill on the page; surfaces swap it for the page colour */
-    --control: #8a847c; /* switch track off, checkbox edge: >= 3.34:1 on page and surface */
-    --input: #d7d2cc;
-    --ring: #2b7fff; /* bright accent, focus only: 3.40:1 on the surface */
+    --border: #ddd8d1; /* hairlines */
+    --border-strong: #c4beb6;
+    --field: #eeebe6; /* input fill on the page; surfaces swap it for the page colour */
+    --control: #6f6960; /* switch track off, checkbox edge: >= 3.34:1 on page and surface */
+    --input: #c4beb6;
+    --ring: #1f6fef; /* focus only: >= 3.9:1 on the surface */
     --radius: 0.75rem;
     --shadow-float: 0 10px 30px -8px rgb(9 15 21 / 0.18), 0 2px 6px rgb(9 15 21 / 0.06);
-    /* Plan-day colours (DAY_COLORS): dots next to the day name. Each is >= 4.37:1 on the page
-       and surface, and --day-foreground on a swatch is >= 4.83:1 (lowest: amber). */
-    --day-blue: #3567d6;
-    --day-red: #c2453a;
-    --day-green: #2b7d52;
-    --day-amber: #a8600c;
-    --day-violet: #7553c4;
-    --day-teal: #1a7770;
-    --day-pink: #b8467b;
-    --day-slate: #66707a;
+    /* Plan-day colours (DAY_COLORS): dots next to the day name. Each is >= 4.3:1 on the page
+       and surface, and --day-foreground on a swatch is >= 5.6:1 (lowest: amber). */
+    --day-blue: #2f5fc9;
+    --day-red: #b83b30;
+    --day-green: #27744b;
+    --day-amber: #9a560a;
+    --day-violet: #6c49b8;
+    --day-teal: #176b65;
+    --day-pink: #ab3e70;
+    --day-slate: #5c6670;
     --day-foreground: #ffffff;
 }
 
