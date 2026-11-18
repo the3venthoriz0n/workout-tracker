@@ -10,7 +10,11 @@ import { logMailFailure, resetEmail, setupEmail, type Mail, type Mailer } from '
 import { configuredOrigins, isTrustedOrigin } from './origins.js'
 
 export type AuthEnv = Pick<Env, 'NODE_ENV' | 'BETTER_AUTH_URL' | 'BETTER_AUTH_SECRET' | 'TRUSTED_ORIGINS'> &
-  Partial<Pick<Env, 'CLIENT_IP_HEADER' | 'SIGNUP_ALLOWLIST'>>
+  Partial<Pick<Env, 'CLIENT_IP_HEADER' | 'SIGNUP_ALLOWLIST' | 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_SECRET'>>
+
+/** Google sign-in is on only when both halves of the OAuth client are set. */
+export const googleEnabled = (env: Pick<AuthEnv, 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_SECRET'>) =>
+  Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET)
 
 export type AuthOptions = {
   /** Sends verification and password-reset mail. Never awaited inside a request. */
@@ -95,6 +99,31 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
         throw new APIError('FORBIDDEN', { code: 'SIGNUP_CLOSED', message: 'signup_closed' })
       }),
     },
+    // "Continue with Google": sign-in only (linking from inside an account stays closed, see disabledPaths).
+    // An existing password account with the same email is linked, because Google only reports an email as
+    // verified when it is; an unverified one is refused by Better Auth (no takeover of a pre-registered
+    // address). Only `sub` and the verified email are used; Better Auth keeps Google's tokens in `account`.
+    ...(googleEnabled(env)
+      ? {
+          socialProviders: {
+            google: { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET! },
+          },
+          account: { accountLinking: { enabled: true, trustedProviders: ['google'] } },
+        }
+      : {}),
+    // The invite list also guards accounts created by a social sign-in (the email sign-up path is
+    // checked above, before anything is written). Existing users are never affected.
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (u) => {
+            if (allowlist.size > 0 && !allowlist.has(u.email.toLowerCase())) {
+              throw new APIError('FORBIDDEN', { code: 'SIGNUP_CLOSED', message: 'signup_closed' })
+            }
+          },
+        },
+      },
+    },
     emailAndPassword: {
       enabled: true,
       // Sign-in needs a verified email (403 EMAIL_NOT_VERIFIED otherwise). With this on, Better
@@ -170,6 +199,7 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
       customRules: {
         '/sign-in/email': { window: 60, max: 5 },
         '/sign-up/email': { window: 60 * 60, max: 10 },
+        '/sign-in/social': { window: 60, max: 10 },
         '/request-password-reset': { window: 60 * 60, max: 5 },
       },
     },

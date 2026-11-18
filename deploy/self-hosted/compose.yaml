@@ -41,6 +41,8 @@ services:
       # loudly instead of silently opening sign-up.
       SIGNUP_ALLOWLIST: ${SIGNUP_ALLOWLIST?set SIGNUP_ALLOWLIST in .env (empty means open sign-up)}
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     ports:
       # Loopback only (never the LAN): lets a cloudflared that runs with host networking reach the
       # app at http://127.0.0.1:${APP_HOST_PORT:-18080}. With cloudflared on the shared Docker

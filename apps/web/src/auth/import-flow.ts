@@ -30,8 +30,8 @@ export async function signUpFlow(deps: FlowDeps, email: string): Promise<FlowOut
   return 'verify-email'
 }
 
-export async function signInFlow(deps: FlowDeps, email: string, password: string): Promise<FlowOutcome> {
-  await deps.auth.signIn(email, password)
+// The part of a sign-in after the session exists: decide what happens to the guest data.
+async function afterSignIn(deps: FlowDeps): Promise<FlowOutcome> {
   try {
     await deps.api.getProfile()
   } catch (e) {
@@ -48,6 +48,14 @@ export async function signInFlow(deps: FlowDeps, email: string, password: string
   }
   return 'confirm-discard'
 }
+
+export async function signInFlow(deps: FlowDeps, email: string, password: string): Promise<FlowOutcome> {
+  await deps.auth.signIn(email, password)
+  return afterSignIn(deps)
+}
+
+/** Back from Google with a session already set: the same guest-data steps as a password sign-in. */
+export const googleReturnFlow = afterSignIn
 
 export const retryUpload = upload
 

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/auth/context'
+import { startGoogleSignIn, useGoogleEnabled } from '@/auth/google'
+import { toKind } from '@/auth/client'
 import { downloadExport } from '@/lib/download-export'
 import { AUTH_ERROR_TEXT } from '@/lib/auth-messages'
 import { notifyError } from '@/lib/notify'
@@ -10,6 +12,65 @@ import { useRepo } from '@/repo/provider'
 import { CredentialsForm } from './credentials-form'
 import { ForgotPasswordForm } from './forgot-password-form'
 import { ResendEmail } from './resend-email'
+
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="size-5 shrink-0">
+      <path fill="#4285F4" d="M23.5 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.45a5.52 5.52 0 0 1-2.39 3.62v3h3.87c2.27-2.09 3.57-5.17 3.57-8.81Z" />
+      <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.94-2.92l-3.87-3a7.2 7.2 0 0 1-10.7-3.78H1.4v3.09A12 12 0 0 0 12 24Z" />
+      <path fill="#FBBC04" d="M5.37 14.3a7.2 7.2 0 0 1 0-4.6V6.61H1.4a12 12 0 0 0 0 10.78l3.97-3.09Z" />
+      <path fill="#EA4335" d="M12 4.75c1.76 0 3.34.6 4.58 1.8l3.43-3.43A11.5 11.5 0 0 0 12 0 12 12 0 0 0 1.4 6.61L5.37 9.7A7.2 7.2 0 0 1 12 4.75Z" />
+    </svg>
+  )
+}
+
+/** "Continue with Google", only when the server has it configured. */
+function GoogleButton() {
+  const enabled = useGoogleEnabled()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(() => {
+    // Google or the server refused: Better Auth comes back to /settings?error=...
+    try {
+      return new URLSearchParams(window.location.search).has('error')
+        ? "Google sign-in didn't work. If sign-up is invite-only, ask the owner to add your email."
+        : null
+    } catch {
+      return null
+    }
+  })
+  if (!enabled) return null
+  return (
+    <div className="flex flex-col gap-3">
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-11 gap-2"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true)
+          setError(null)
+          startGoogleSignIn().catch((e) => {
+            setBusy(false)
+            setError(AUTH_ERROR_TEXT[toKind(e)])
+          })
+        }}
+      >
+        <GoogleMark />
+        {busy ? 'Opening Google...' : 'Continue with Google'}
+      </Button>
+      {error && (
+        <p role="alert" className="text-destructive text-sm">
+          {error}
+        </p>
+      )}
+      <div className="text-muted-foreground flex items-center gap-3 text-xs" aria-hidden>
+        <span className="bg-border-strong h-px flex-1" />
+        or
+        <span className="bg-border-strong h-px flex-1" />
+      </div>
+    </div>
+  )
+}
 
 export function AccountCard() {
   const a = useAuth()
@@ -152,6 +213,7 @@ export function AccountCard() {
             </button>
           ))}
         </div>
+        <GoogleButton />
         <CredentialsForm
           key={mode}
           mode={mode}
