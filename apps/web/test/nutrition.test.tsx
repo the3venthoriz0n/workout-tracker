@@ -11,6 +11,7 @@ import {
 import type { MealDraft, NutritionEntry, NutritionSettings } from '@workout/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { canGoNext, canGoPrev, dateLabel, localDate, shiftDate } from '../src/lib/nutrition-date'
+import { longDate } from '../src/lib/nutrition-calendar'
 import { guestRepo, renderApp } from './community-helpers'
 
 const today = localDate()
@@ -363,5 +364,77 @@ describe('review fixes', () => {
     const { repo } = await setup({ entries: [entryOf()] })
     renderApp(repo, '/nutrition', { signedIn: true })
     expect(await screen.findByRole('button', { name: /Chicken burrito.*estimate.*680 kcal · 32 g protein/ })).toBeTruthy()
+  })
+})
+
+describe('Calendar', () => {
+  it('opens on the month of the day you are on, marks days with food, jumps to one and back to today', async () => {
+    const user = userEvent.setup()
+    const target = day(-40)
+    const { repo } = await setup({ entries: [entryOf({ date: target, name: 'Old lunch' })] })
+    renderApp(repo, '/nutrition', { signedIn: true })
+
+    await user.click(await screen.findByRole('button', { name: 'Choose a day' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Jump to a day' })
+    // Today is in view and named as such; nothing but the pressed day is selected
+    expect(within(dialog).getByRole('button', { name: new RegExp(`${longDate(today)}, today`) }).getAttribute('aria-pressed')).toBe('true')
+
+    // Walk back until the old day is on screen (it is one or two months away)
+    const name = (d: string) => new RegExp(`^${longDate(d)}`)
+    for (let i = 0; i < 3 && !within(dialog).queryByRole('button', { name: name(target) }); i++) {
+      await user.click(within(dialog).getByRole('button', { name: 'Previous month' }))
+    }
+    const cell = await within(dialog).findByRole('button', { name: name(target) })
+    await waitFor(() => expect(cell.getAttribute('aria-label')).toMatch(/food logged/)) // the marked day says so in words
+    expect(within(dialog).getByRole('button', { name: name(day(-39)) }).getAttribute('aria-label')).not.toMatch(/food logged/)
+
+    await user.click(cell)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByRole('heading', { name: dateLabel(target, today) })).toBeTruthy()
+    expect(await screen.findByText('Old lunch')).toBeTruthy()
+
+    // Reopen: the day you chose is the selected one, and there is a way straight back to today
+    await user.click(screen.getByRole('button', { name: 'Choose a day' }))
+    const again = await screen.findByRole('dialog', { name: 'Jump to a day' })
+    expect(within(again).getByRole('button', { name: name(target) }).getAttribute('aria-pressed')).toBe('true')
+    await user.click(within(again).getByRole('button', { name: 'Go to today' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByRole('heading', { name: 'Today' })).toBeTruthy()
+  })
+
+  it('days outside the log window cannot be picked, and the calendar stops at a year back', async () => {
+    const user = userEvent.setup()
+    const { repo } = await setup()
+    renderApp(repo, '/nutrition', { signedIn: true })
+    await user.click(await screen.findByRole('button', { name: 'Choose a day' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Jump to a day' })
+    // Walk back to the oldest month: the last step is refused
+    for (let i = 0; i < 14; i++) {
+      const prev = within(dialog).getByRole('button', { name: 'Previous month' })
+      if ((prev as HTMLButtonElement).disabled) break
+      await user.click(prev)
+    }
+    expect((within(dialog).getByRole('button', { name: 'Previous month' }) as HTMLButtonElement).disabled).toBe(true)
+    const oldest = shiftDate(today, -366)
+    const before = within(dialog).queryByRole('button', { name: new RegExp(`^${longDate(oldest)}`) })
+    if (before) expect((before as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('arrow keys move between days; Escape closes without changing the day', async () => {
+    const user = userEvent.setup()
+    const { repo } = await setup()
+    renderApp(repo, '/nutrition', { signedIn: true })
+    await user.click(await screen.findByRole('button', { name: 'Choose a day' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Jump to a day' })
+    const here = within(dialog).getByRole('button', { name: new RegExp(`^${longDate(today)}`) })
+    here.focus()
+    await user.keyboard('{ArrowLeft}')
+    const yesterday = shiftDate(today, -1)
+    if (yesterday.slice(0, 7) === today.slice(0, 7)) {
+      expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: new RegExp(`^${longDate(yesterday)}`) }))
+    }
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByRole('heading', { name: 'Today' })).toBeTruthy()
   })
 })

@@ -1,11 +1,12 @@
 import { aiEnabledOf, nutritionSettingsOf } from '@workout/shared'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Screen } from '@/app/screen'
 import { useSignedIn } from '@/auth/context'
 import { LoadError } from '@/components/load-error'
 import { NutritionAdd } from '@/components/nutrition-add'
+import { NutritionCalendar } from '@/components/nutrition-calendar'
 import { NutritionGoals } from '@/components/nutrition-goals'
 import { NutritionLog } from '@/components/nutrition-log'
 import { NutritionTotals } from '@/components/nutrition-totals'
@@ -84,6 +85,7 @@ export function NutritionScreen() {
 function Track() {
   const today = localDate()
   const [date, setDate] = useState(today)
+  const [calendarOpen, setCalendarOpen] = useState(false)
   const profile = useProfile()
   const entries = useNutrition(date)
   const settings = profile.data ? nutritionSettingsOf(profile.data) : null
@@ -101,7 +103,19 @@ function Track() {
         >
           <ChevronLeft aria-hidden />
         </Button>
-        <h2 className="text-xl leading-tight font-semibold tracking-[-0.015em]">{dateLabel(date, today)}</h2>
+        <div className="flex min-w-0 items-center gap-1">
+          <h2 className="text-xl leading-tight font-semibold tracking-[-0.015em]">{dateLabel(date, today)}</h2>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground min-h-11 min-w-11"
+            aria-label="Choose a day"
+            aria-haspopup="dialog"
+            onClick={() => setCalendarOpen(true)}
+          >
+            <CalendarDays aria-hidden />
+          </Button>
+        </div>
         <Button
           variant="ghost"
           size="icon"
@@ -113,6 +127,17 @@ function Track() {
           <ChevronRight aria-hidden />
         </Button>
       </div>
+
+      <NutritionCalendar
+        date={date}
+        today={today}
+        open={calendarOpen}
+        onOpenChange={setCalendarOpen}
+        onPick={(d) => {
+          setDate(d)
+          setCalendarOpen(false)
+        }}
+      />
 
       {profile.isError || entries.isError ? (
         <LoadError
