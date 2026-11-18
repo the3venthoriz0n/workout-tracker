@@ -8,5 +8,5 @@
   } catch (e) {}
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
   var meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', dark ? '#090f15' : '#fdfcfc')
+  if (meta) meta.setAttribute('content', dark ? '#090f15' : '#f3f5f8')
 })()
