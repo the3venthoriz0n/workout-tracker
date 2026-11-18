@@ -17,9 +17,16 @@ import { notifyError } from '@/lib/notify'
 import { cn } from '@/lib/utils'
 import { setRestTimerEnabled, useRestTimerEnabled } from '@/lib/rest-timer-pref'
 import { setShowBothUnits, useShowBothUnits } from '@/lib/show-both-units-pref'
+import { setThemePref, useThemePref } from '@/lib/theme-pref'
+import type { ThemePref } from '@/lib/theme-pref'
 import { confirmBox, segmentedItem, segmentedTrack } from '@/lib/styles'
 
 const UNITS: Units[] = ['lb', 'kg']
+const THEMES: { value: ThemePref; label: string }[] = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+]
 
 export function SettingsScreen() {
   const profile = useProfile().data
@@ -27,6 +34,7 @@ export function SettingsScreen() {
   const signedIn = useSignedIn()
   const restTimerOn = useRestTimerEnabled()
   const showBoth = useShowBothUnits()
+  const theme = useThemePref()
   const [pendingUnits, setPendingUnits] = useState<Units | null>(null)
   const [unitsError, setUnitsError] = useState<string | null>(null)
 
@@ -57,7 +65,7 @@ export function SettingsScreen() {
         {signedIn && <PublicNameCard />}
         {signedIn && <NutritionAiCard />}
 
-        {/* Two small preferences share one card: a label on the left, its control on the right */}
+        {/* Small preferences share one card: a label on the left, its control on the right */}
         <Card>
           <CardHeader>
             <CardTitle>
@@ -66,6 +74,29 @@ export function SettingsScreen() {
           </CardHeader>
           <CardContent className="divide-border-strong/70 flex flex-col divide-y">
             <div className="flex flex-col gap-3 pb-4">
+              <span className="flex min-w-0 flex-col text-sm">
+                <span id="theme-label" className="font-medium">
+                  Appearance
+                </span>
+                <span className="text-muted-foreground">System follows your device. Saved on this device only.</span>
+              </span>
+              <div role="radiogroup" aria-labelledby="theme-label" className={segmentedTrack}>
+                {THEMES.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={theme === t.value}
+                    className={segmentedItem(theme === t.value)}
+                    onClick={() => setThemePref(t.value)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 py-4">
               <div className="flex min-h-11 items-center justify-between gap-3">
                 <span id="units-label" className="text-sm font-medium">
                   Units

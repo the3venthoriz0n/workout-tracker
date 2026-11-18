@@ -3,8 +3,9 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
-/* Follow the OS colour scheme in CSS, so there is no light flash before JS runs. */
-@custom-variant dark (@media (prefers-color-scheme: dark));
+/* Dark is the `data-theme="dark"` attribute on <html>. public/theme-init.js sets it before first paint
+   (the saved choice, else the OS scheme) and src/lib/theme-pref.ts keeps it current. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
     --font-heading: 'Inter Variable', system-ui, sans-serif;
@@ -95,48 +96,46 @@
     --day-foreground: #ffffff;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        color-scheme: dark;
-        --background: #090f15;
-        --foreground: #f5f3f1;
-        --card: #11181f;
-        --card-foreground: #f5f3f1;
-        --popover: #11181f;
-        --popover-foreground: #f5f3f1;
-        --primary: #f5f3f1; /* off-white pill, near-black text */
-        --primary-foreground: #090f15;
-        --secondary: #1b232c;
-        --secondary-foreground: #f5f3f1;
-        --muted: #1b232c;
-        --muted-foreground: #a59f97; /* 6.05:1 on --muted */
-        --accent: #1b232c;
-        --accent-foreground: #f5f3f1;
-        --destructive: #ff7b6b;
-        --destructive-foreground: #090f15;
-        --success: #4cc38a;
-        --success-foreground: #090f15;
-        --brand: #4d93ff; /* 5.90:1 on the surface; near-black text on it 6.36:1 */
-        --brand-foreground: #090f15;
-        --border: rgb(255 255 255 / 0.09);
-        --border-strong: rgb(255 255 255 / 0.16);
-        --field: #1b232c;
-        --control: #6b737c; /* 3.30:1 on --muted, 3.72:1 on the surface */
-        --input: rgb(255 255 255 / 0.16);
-        --ring: #4d93ff;
-        --shadow-float: 0 10px 30px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
-        /* Lighter dots for dark: each >= 6.53:1 on the page, surface and --muted;
-           --day-foreground on a swatch >= 7.92:1. */
-        --day-blue: #7aa7f5;
-        --day-red: #f08a7e;
-        --day-green: #6cc79a;
-        --day-amber: #e6ae5c;
-        --day-violet: #b49cf0;
-        --day-teal: #5cc6ba;
-        --day-pink: #ee8dbb;
-        --day-slate: #a3abb5;
-        --day-foreground: #090f15;
-    }
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --background: #090f15;
+    --foreground: #f5f3f1;
+    --card: #11181f;
+    --card-foreground: #f5f3f1;
+    --popover: #11181f;
+    --popover-foreground: #f5f3f1;
+    --primary: #f5f3f1; /* off-white pill, near-black text */
+    --primary-foreground: #090f15;
+    --secondary: #1b232c;
+    --secondary-foreground: #f5f3f1;
+    --muted: #1b232c;
+    --muted-foreground: #a59f97; /* 6.05:1 on --muted */
+    --accent: #1b232c;
+    --accent-foreground: #f5f3f1;
+    --destructive: #ff7b6b;
+    --destructive-foreground: #090f15;
+    --success: #4cc38a;
+    --success-foreground: #090f15;
+    --brand: #4d93ff; /* 5.90:1 on the surface; near-black text on it 6.36:1 */
+    --brand-foreground: #090f15;
+    --border: rgb(255 255 255 / 0.09);
+    --border-strong: rgb(255 255 255 / 0.16);
+    --field: #1b232c;
+    --control: #6b737c; /* 3.30:1 on --muted, 3.72:1 on the surface */
+    --input: rgb(255 255 255 / 0.16);
+    --ring: #4d93ff;
+    --shadow-float: 0 10px 30px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
+    /* Lighter dots for dark: each >= 6.53:1 on the page, surface and --muted;
+       --day-foreground on a swatch >= 7.92:1. */
+    --day-blue: #7aa7f5;
+    --day-red: #f08a7e;
+    --day-green: #6cc79a;
+    --day-amber: #e6ae5c;
+    --day-violet: #b49cf0;
+    --day-teal: #5cc6ba;
+    --day-pink: #ee8dbb;
+    --day-slate: #a3abb5;
+    --day-foreground: #090f15;
 }
 
 /* A soft surface (card, day section, superset block): fields and rows inside it use the page
