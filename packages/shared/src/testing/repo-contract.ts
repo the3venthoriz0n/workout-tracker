@@ -362,6 +362,57 @@ export function runRepoContract(
     )
 
     // ------------------------------------------------------------------- gear
+    contract('gear', 'a gear limit (max_weight) is optional: kept when omitted, cleared with null, absent by default', async ({ repo }) => {
+      const sled = await repo.saveGear({ name: 'Limit sled', owned: true })
+      expect(sled.max_weight ?? null).toBeNull()
+      const limited = await repo.saveGear({ id: sled.id, name: 'Limit sled', owned: true, max_weight: 50 })
+      expect(limited.max_weight).toBe(50)
+      // A save that does not mention the limit keeps it
+      expect((await repo.saveGear({ id: sled.id, name: 'Renamed sled', owned: true })).max_weight).toBe(50)
+      expect((await repo.listGear()).find((g) => g.id === sled.id)?.max_weight).toBe(50)
+      // null clears it
+      expect((await repo.saveGear({ id: sled.id, name: 'Renamed sled', owned: true, max_weight: null })).max_weight ?? null).toBeNull()
+    })
+    contract(
+      'progression',
+      'an exercise stops gaining weight at its gear limit and adds reps instead; the lowest limit wins; the limit follows the app unit',
+      async ({ repo }) => {
+        const bench = await exercise(repo, 'Bench Press')
+        const dumbbells = must((await repo.listGear()).find((g) => g.name === 'Dumbbells'), 'seed gear')
+        const bench2 = must((await repo.listGear()).find((g) => g.name === 'Bench'), 'seed gear')
+        await repo.saveGear({ ...dumbbells, max_weight: 45 })
+        await repo.saveGear({ ...bench2, max_weight: 400 }) // a looser limit on a second piece: the lower one decides
+        await repo.saveExercise({ ...bench, required_gear_ids: [dumbbells.id, bench2.id] })
+        const { plan, day } = await planWithDay(repo)
+        const item = await repo.addPlanItem(day.id, bench.id)
+        await repo.updatePlanItem(item.id, { sets: 1, reps: 5, weight: 40 })
+        await repo.setRule(item.id, rule({ success_amount: 5 }))
+
+        const first = await repo.startSession(day.id)
+        await markDone(repo, first, item.id)
+        await repo.finishSession(first.id) // 40 + 5 = 45: reaches the limit
+        expect(await planItem(repo, plan.id, item.id)).toMatchObject({ target_weight: 45, target_reps: 5 })
+
+        const second = await repo.startSession(day.id)
+        await markDone(repo, second, item.id)
+        await repo.finishSession(second.id) // at the limit: one more rep, same weight
+        expect(await planItem(repo, plan.id, item.id)).toMatchObject({ target_weight: 45, target_reps: 6 })
+
+        // The limit is in the app unit and moves with it
+        await repo.updateProfile({ units: 'kg' })
+        expect((await repo.listGear()).find((g) => g.id === dumbbells.id)?.max_weight).toBe(20.4)
+        await repo.updateProfile({ units: 'lb' })
+        expect((await repo.listGear()).find((g) => g.id === dumbbells.id)?.max_weight).toBe(45)
+
+        // Removing the limit lets weight climb again
+        await repo.saveGear({ ...dumbbells, max_weight: null })
+        await repo.saveGear({ ...bench2, max_weight: null })
+        const third = await repo.startSession(day.id)
+        await markDone(repo, third, item.id, undefined, 6)
+        await repo.finishSession(third.id)
+        expect((await planItem(repo, plan.id, item.id)).target_weight).toBe(50)
+      },
+    )
     contract('gear', 'saveGear renames and keeps the id; listGear is sorted by name', async ({ repo }) => {
       const created = await repo.saveGear({ name: 'Zzz sled', owned: true })
       expect(created).toMatchObject({ name: 'Zzz sled', owned: true })

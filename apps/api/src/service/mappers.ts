@@ -126,6 +126,7 @@ export function toGear(row: typeof gear.$inferSelect): Gear {
     id: row.id,
     name: row.name,
     owned: row.owned,
+    max_weight: row.maxWeight === null ? null : num(row.maxWeight),
     user_id: row.userId,
     created_at: iso(row.createdAt),
     updated_at: iso(row.updatedAt),

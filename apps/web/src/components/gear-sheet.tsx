@@ -2,6 +2,7 @@ import { gearSchema, type Gear } from '@workout/shared'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { NumberField } from '@/components/number-field'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -14,7 +15,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { notifyError } from '@/lib/notify'
 import { responsiveSheet } from '@/lib/sheet-classes'
-import { useSaveGear } from '@/repo/hooks'
+import { useProfile, useSaveGear } from '@/repo/hooks'
 
 type Props = {
   gear?: Gear
@@ -45,6 +46,8 @@ function GearForm({ gear, onDone }: { gear?: Gear; onDone: () => void }) {
   const save = useSaveGear()
   const [name, setName] = useState(gear?.name ?? '')
   const [owned, setOwned] = useState(gear?.owned ?? true)
+  const [maxWeight, setMaxWeight] = useState<number | null>(gear?.max_weight ?? null)
+  const units = useProfile().data?.units ?? 'lb'
   const [error, setError] = useState<string | null>(null)
   const submitted = useRef(false)
 
@@ -61,7 +64,7 @@ function GearForm({ gear, onDone }: { gear?: Gear; onDone: () => void }) {
     setError(null)
     submitted.current = true
     save.mutate(
-      { ...(gear ? { id: gear.id } : {}), ...parsed.data },
+      { ...(gear ? { id: gear.id } : {}), ...parsed.data, max_weight: maxWeight },
       {
         onSuccess: () => {
           toast.success(gear ? 'Gear saved' : 'Gear added')
@@ -100,6 +103,23 @@ function GearForm({ gear, onDone }: { gear?: Gear; onDone: () => void }) {
           I own this
           <Switch checked={owned} onCheckedChange={setOwned} aria-label="I own this" />
         </label>
+
+        <div className="flex flex-col gap-1.5">
+          <NumberField
+            label={`Max weight (${units}), optional`}
+            kind="weight"
+            allowEmpty
+            value={maxWeight}
+            placeholder="No limit"
+            onCommit={(v) => {
+              if (v !== null && v <= 0) return false
+              setMaxWeight(v)
+            }}
+          />
+          <p className="text-muted-foreground text-sm">
+            The heaviest this goes. Once an exercise that needs it reaches this weight, progression adds reps instead.
+          </p>
+        </div>
       </div>
 
       <div className="bg-popover shrink-0 border-t px-5 py-4">

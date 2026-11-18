@@ -3,9 +3,9 @@ import { gearSchema, newId } from '@workout/shared'
 import type { Gear } from '@workout/shared'
 import { exercise, gear } from '../db/schema.js'
 import type { Db } from '../db/types.js'
-import { assertUuid, byName, isUuid, now, toGear } from './mappers.js'
+import { assertUuid, byName, dec, isUuid, now, toGear } from './mappers.js'
 
-const gearInputSchema = gearSchema.pick({ id: true, name: true, owned: true }).partial({ id: true })
+const gearInputSchema = gearSchema.pick({ id: true, name: true, owned: true, max_weight: true }).partial({ id: true })
 
 export async function listGear(db: Db, userId: string): Promise<Gear[]> {
   const rows = await db.select().from(gear).where(and(eq(gear.userId, userId), isNull(gear.deletedAt)))
@@ -16,17 +16,31 @@ export async function listGear(db: Db, userId: string): Promise<Gear[]> {
 export async function saveGear(
   db: Db,
   userId: string,
-  input: { id?: string; name: string; owned: boolean },
+  // max_weight: omitted keeps the stored limit, null clears it.
+  input: { id?: string; name: string; owned: boolean; max_weight?: number | null },
 ): Promise<Gear> {
   const parsed = gearInputSchema.parse(input)
   const id = assertUuid(parsed.id ?? newId(), 'gear id')
   const ts = now()
   const [row] = await db
     .insert(gear)
-    .values({ id, userId, name: parsed.name, owned: parsed.owned, createdAt: ts, updatedAt: ts })
+    .values({
+      id,
+      userId,
+      name: parsed.name,
+      owned: parsed.owned,
+      maxWeight: parsed.max_weight == null ? null : dec(parsed.max_weight),
+      createdAt: ts,
+      updatedAt: ts,
+    })
     .onConflictDoUpdate({
       target: [gear.userId, gear.id],
-      set: { name: parsed.name, owned: parsed.owned, updatedAt: ts },
+      set: {
+        name: parsed.name,
+        owned: parsed.owned,
+        ...(parsed.max_weight === undefined ? {} : { maxWeight: parsed.max_weight === null ? null : dec(parsed.max_weight) }),
+        updatedAt: ts,
+      },
     })
     .returning()
   return toGear(row!)

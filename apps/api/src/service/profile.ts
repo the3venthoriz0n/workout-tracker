@@ -97,6 +97,16 @@ async function convertUnits(tx: Parameters<Parameters<Db['transaction']>[0]>[0],
             .where(and(eq(planItem.userId, userId), inArray(planItem.exerciseId, keptIds)))
         ).map((r) => r.id)
 
+  // A gear limit is in the app unit, so it follows the app unit.
+  const limits = await tx
+    .select({ v: gear.maxWeight })
+    .from(gear)
+    .where(and(eq(gear.userId, userId), isNotNull(gear.maxWeight)))
+  const limitMap = mapping(distinctNumbers(limits.map((r) => r.v)), conv)
+  if (limitMap.size > 0) {
+    await tx.update(gear).set({ maxWeight: remap(gear.maxWeight, limitMap), updatedAt: ts }).where(eq(gear.userId, userId))
+  }
+
   const exScope = and(eq(exercise.userId, userId), isNull(exercise.unit))
   const ex = await tx.select({ v: exercise.defaultWeight }).from(exercise).where(exScope)
   const exMap = mapping(distinctNumbers(ex.map((r) => r.v)), conv)

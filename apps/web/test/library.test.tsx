@@ -638,3 +638,34 @@ test('the Show both units setting adds the other unit to an exercise tile', asyn
     localStorage.removeItem('wt.showBothUnits')
   }
 })
+
+test('a gear limit is set in the popup, shown on the row, kept by the owned switch, and cleared by emptying it', async () => {
+  const user = userEvent.setup()
+  const repo = renderLibrary(undefined, '/library?section=gear')
+  await user.click(await screen.findByRole('button', { name: 'Add gear' }))
+  let dialog = await screen.findByRole('dialog')
+  await user.type(within(dialog).getByLabelText('Name'), 'Limit Bells')
+  await user.type(within(dialog).getByLabelText('Max weight (lb), optional'), '45')
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+  await waitFor(async () => {
+    expect((await repo.listGear()).find((g) => g.name === 'Limit Bells')?.max_weight).toBe(45)
+  })
+  expect(await screen.findByText(/up to 45 lb/)).toBeTruthy()
+
+  // Flipping "owned" in the list does not touch the limit
+  await user.click(screen.getByRole('switch', { name: 'Limit Bells' }))
+  await waitFor(async () => {
+    expect((await repo.listGear()).find((g) => g.name === 'Limit Bells')?.owned).toBe(false)
+  })
+  expect((await repo.listGear()).find((g) => g.name === 'Limit Bells')?.max_weight).toBe(45)
+
+  // Emptying the field removes the limit
+  await user.click(screen.getByRole('button', { name: 'Limit Bells details' }))
+  dialog = await screen.findByRole('dialog')
+  await user.clear(within(dialog).getByLabelText('Max weight (lb), optional'))
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+  await waitFor(async () => {
+    expect((await repo.listGear()).find((g) => g.name === 'Limit Bells')?.max_weight ?? null).toBeNull()
+  })
+  expect(screen.queryByText(/up to 45 lb/)).toBeNull()
+})

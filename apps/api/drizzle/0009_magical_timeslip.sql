@@ -1,0 +1,1 @@
+ALTER TABLE "gear" ADD COLUMN "max_weight" numeric(8, 2);

@@ -183,6 +183,9 @@ export const gearSchema = z.object({
   id,
   name,
   owned: z.boolean(),
+  // The heaviest load this gear goes up to, in the app unit (profile.units); null or absent = no limit.
+  // Progression adds reps instead of weight once an exercise that needs it reaches the limit.
+  max_weight: z.number().positive().max(LIMITS.weight).nullable().optional(),
   ...owned,
 })
 export type Gear = z.infer<typeof gearSchema>

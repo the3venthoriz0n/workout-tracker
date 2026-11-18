@@ -236,7 +236,8 @@ export interface Repo {
     nutrition?: NutritionSettings
   }): Promise<Profile>
   listGear(): Promise<Gear[]>
-  saveGear(input: { id?: string; name: string; owned: boolean }): Promise<Gear>
+  /** `max_weight`: the gear's heaviest load in the app unit; omitted keeps the stored value, null clears it. */
+  saveGear(input: { id?: string; name: string; owned: boolean; max_weight?: number | null }): Promise<Gear>
   listExercises(): Promise<Exercise[]> // sorted by name
   saveExercise(input: ExerciseInput): Promise<Exercise>
   deleteExercise(id: string): Promise<void> // cascades: soft-deletes its live plan items too

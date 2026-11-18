@@ -28,7 +28,7 @@ const MAX_CLOCK_SKEW_MS = 5 * 60_000
 
 export const IdParam = idSchema
 
-export const PutGearBody = gearSchema.pick({ name: true, owned: true })
+export const PutGearBody = gearSchema.pick({ name: true, owned: true, max_weight: true })
 export const PutExerciseBody = exerciseInputSchema.omit({ id: true })
 export const PutPlanBody = planSchema.pick({ name: true })
 // color: omitted keeps the stored colour, null clears it

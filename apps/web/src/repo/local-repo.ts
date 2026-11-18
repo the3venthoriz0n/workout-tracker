@@ -14,6 +14,7 @@ import {
   angleSchema,
   compareSetLogs,
   dayColorSchema,
+  effectiveMaxWeight,
   effectiveValues,
   groupProgressionByExercise,
   planSessionSets,
@@ -149,17 +150,25 @@ export class LocalRepo implements Repo {
       .sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  async saveGear(input: { id?: string; name: string; owned: boolean }): Promise<Gear> {
+  // max_weight: omitted keeps the stored limit, null clears it.
+  async saveGear(input: { id?: string; name: string; owned: boolean; max_weight?: number | null }): Promise<Gear> {
     return this.db.transaction('rw', this.db.profile, this.db.gear, async () => {
       const existing = input.id ? await this.db.gear.get(input.id) : undefined
       const ts = now()
       const gear = gearSchema.parse(
         existing
-          ? { ...existing, name: input.name, owned: input.owned, updated_at: ts }
+          ? {
+              ...existing,
+              name: input.name,
+              owned: input.owned,
+              ...(input.max_weight === undefined ? {} : { max_weight: input.max_weight }),
+              updated_at: ts,
+            }
           : {
               id: input.id ?? newId(),
               name: input.name,
               owned: input.owned,
+              max_weight: input.max_weight ?? null,
               user_id: (await this.getProfile()).user_id,
               created_at: ts,
               updated_at: ts,
@@ -351,7 +360,7 @@ export class LocalRepo implements Repo {
       displayName = r.data
     }
     const d = this.db
-    return d.transaction('rw', [d.profile, d.exercises, d.planItems, d.setLogs, d.rules], async () => {
+    return d.transaction('rw', [d.profile, d.gear, d.exercises, d.planItems, d.setLogs, d.rules], async () => {
       const current = await this.getProfile()
       const ts = now()
       const next = { ...current, updated_at: ts }
@@ -371,6 +380,11 @@ export class LocalRepo implements Repo {
               : Math.max(newIncrement, roundToIncrement(conv(amount), newIncrement)),
           )
         // Exercises kept in their own unit do not follow the app unit
+        // A gear limit is in the app unit, so it follows the app unit
+        await d.gear.filter((g) => typeof g.max_weight === 'number').modify((g) => {
+          g.max_weight = conv(g.max_weight as number)
+          g.updated_at = ts
+        })
         const kept = new Set((await d.exercises.toArray()).filter((e) => e.unit).map((e) => e.id))
         const keptItems = new Set(
           (await d.planItems.toArray()).filter((i) => kept.has(i.exercise_id)).map((i) => i.id),
@@ -837,10 +851,10 @@ export class LocalRepo implements Repo {
   }
 
   async finishSession(id: string): Promise<FinishSummary> {
-    const { profile, sessions, setLogs, planItems, exercises, rules, itemStates } = this.db
+    const { profile, sessions, setLogs, planItems, exercises, rules, itemStates, gear } = this.db
     return this.db.transaction(
       'rw',
-      [profile, sessions, setLogs, planItems, exercises, rules, itemStates],
+      [profile, sessions, setLogs, planItems, exercises, rules, itemStates, gear],
       async () => {
         const session = await sessions.get(id)
         if (!session) throw new Error('Session not found')
@@ -867,6 +881,9 @@ export class LocalRepo implements Repo {
           const eff = effectiveValues(item, exercise)
           const { rule } = await this.ruleOf(item, exercise, prof)
           const increment = exerciseRuleContext(exercise, prof).increment
+          // The heaviest this exercise can be loaded: its required gear's lowest limit, in the exercise's unit
+          const limits = (await gear.bulkGet(exercise.required_gear_ids)).map((g) => (g && g.deleted_at === null ? g.max_weight : null))
+          const maxWeight = effectiveMaxWeight(limits, prof.units, exerciseRuleContext(exercise, prof).unit)
           const state = await itemStates.get(item.id)
           const result = progress(
             {
@@ -874,6 +891,7 @@ export class LocalRepo implements Repo {
               targetWeight: eff.targetWeight,
               baseReps: eff.baseReps,
               plannedSets: eff.sets,
+              maxWeight,
             },
             rule,
             state?.fail_streak ?? 0,

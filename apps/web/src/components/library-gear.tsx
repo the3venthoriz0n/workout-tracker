@@ -6,13 +6,14 @@ import { Switch } from '@/components/ui/switch'
 import { pluralize } from '@/lib/format'
 import { notifyError } from '@/lib/notify'
 import { listGroup } from '@/lib/styles'
-import { useDeleteGear, useExercises, useGear, useSaveGear } from '@/repo/hooks'
+import { useDeleteGear, useExercises, useGear, useProfile, useSaveGear } from '@/repo/hooks'
 import type { Gear } from '@workout/shared'
 
 export function LibraryGear({ onEdit }: { onEdit: (gear: Gear) => void }) {
   const gear = useGear().data ?? []
   const exercisesQuery = useExercises()
   const exercises = exercisesQuery.data ?? []
+  const units = useProfile().data?.units ?? 'lb'
 
   const counts = new Map<string, number>()
   const needing = new Map<string, number>()
@@ -33,6 +34,7 @@ export function LibraryGear({ onEdit }: { onEdit: (gear: Gear) => void }) {
           <GearRow
             key={g.id}
             gear={g}
+            units={units}
             activeCount={exercisesQuery.isSuccess ? (counts.get(g.id) ?? 0) : null}
             needCount={exercisesQuery.isSuccess ? (needing.get(g.id) ?? 0) : null}
             exercisesQuery={exercisesQuery}
@@ -46,12 +48,14 @@ export function LibraryGear({ onEdit }: { onEdit: (gear: Gear) => void }) {
 
 function GearRow({
   gear: g,
+  units,
   activeCount,
   needCount,
   exercisesQuery,
   onEdit,
 }: {
   gear: Gear
+  units: string
   activeCount: number | null
   needCount: number | null
   exercisesQuery: Pick<UseQueryResult<unknown>, 'isFetching' | 'isSuccess' | 'refetch'>
@@ -83,9 +87,11 @@ function GearRow({
           onClick={onEdit}
         >
           {g.name}
-          {activeCount !== null && (
+          {(activeCount !== null || g.max_weight) && (
             <span className="text-muted-foreground text-sm font-normal">
-              {pluralize(activeCount, 'exercise')}
+              {[activeCount !== null ? pluralize(activeCount, 'exercise') : null, g.max_weight ? `up to ${g.max_weight} ${units}` : null]
+                .filter(Boolean)
+                .join(' · ')}
             </span>
           )}
         </button>
