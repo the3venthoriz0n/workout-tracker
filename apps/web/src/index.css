@@ -189,6 +189,13 @@
 :root[data-theme="color"] a[data-tab][aria-current="page"] { background-color: var(--tab); color: #fff; }
 :root[data-theme="color"] a[data-tab]:not([aria-current="page"]) svg { color: var(--tab); }
 
+/* Color theme: cards take Google's four colours in turn (soft tint, darker ink for the title). */
+:root[data-theme="color"] [data-slot="card"] { --ink: #174ea6; background-color: #dbe8fc; }
+:root[data-theme="color"] [data-slot="card"]:nth-of-type(4n + 2) { --ink: #a50e0e; background-color: #fde3e0; }
+:root[data-theme="color"] [data-slot="card"]:nth-of-type(4n + 3) { --ink: #7a4a00; background-color: #fef3cf; }
+:root[data-theme="color"] [data-slot="card"]:nth-of-type(4n + 4) { --ink: #0d652d; background-color: #daf1e0; }
+:root[data-theme="color"] [data-slot="card-title"] { color: var(--ink); }
+
 /* A soft surface (card, day section, superset block): fields and rows inside it use the page
    colour so they still stand out. */
 @utility surface {
