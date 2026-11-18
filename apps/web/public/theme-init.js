@@ -1,12 +1,12 @@
 // Sets the colour scheme on <html> before first paint, so there is no light flash in dark mode.
 // Plain script (the CSP allows same-origin scripts only). Keep the logic in step with src/lib/theme-pref.ts.
 ;(function () {
-  var dark = false
+  var scheme = 'light'
   try {
     var pref = localStorage.getItem('wt.theme')
-    dark = pref === 'dark' || (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+    scheme = pref === 'dark' || pref === 'color' ? pref : pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   } catch (e) {}
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+  document.documentElement.setAttribute('data-theme', scheme)
   var meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', dark ? '#090f15' : '#eceff3')
+  if (meta) meta.setAttribute('content', ({ light: '#eceff3', dark: '#090f15', color: '#f8f9fa' })[scheme])
 })()

@@ -26,6 +26,7 @@ const THEMES: { value: ThemePref; label: string }[] = [
   { value: 'system', label: 'System' },
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
+  { value: 'color', label: 'Color' },
 ]
 
 export function SettingsScreen() {
@@ -78,7 +79,7 @@ export function SettingsScreen() {
                 <span id="theme-label" className="font-medium">
                   Appearance
                 </span>
-                <span className="text-muted-foreground">System follows your device. Saved on this device only.</span>
+                <span className="text-muted-foreground">System follows your device; Color is a light theme in Google's blue, red, green and yellow. Saved on this device only.</span>
               </span>
               <div role="radiogroup" aria-labelledby="theme-label" className={segmentedTrack}>
                 {THEMES.map((t) => (
@@ -87,7 +88,7 @@ export function SettingsScreen() {
                     type="button"
                     role="radio"
                     aria-checked={theme === t.value}
-                    className={segmentedItem(theme === t.value)}
+                    className={cn(segmentedItem(theme === t.value), 'px-1')}
                     onClick={() => setThemePref(t.value)}
                   >
                     {t.label}

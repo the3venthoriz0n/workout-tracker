@@ -30,3 +30,13 @@ describe('theme preference', () => {
     expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#090f15')
   })
 })
+
+describe('color theme', () => {
+  it('is its own scheme, saved, with its own browser bar colour', () => {
+    systemIs(true)
+    setThemePref('color')
+    expect(document.documentElement.dataset.theme).toBe('color')
+    expect(localStorage.getItem('wt.theme')).toBe('color')
+    expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#f8f9fa')
+  })
+})

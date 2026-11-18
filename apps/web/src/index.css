@@ -138,6 +138,48 @@
     --day-foreground: #090f15;
 }
 
+/* "Color": a light theme on Google's palette: white surfaces on Google grey, the blue as the primary
+   (buttons, active tab and segment), red / green / amber as the status colours. */
+:root[data-theme="color"] {
+    color-scheme: light;
+    --background: #f8f9fa;
+    --foreground: #202124;
+    --card: #ffffff;
+    --card-foreground: #202124;
+    --popover: #ffffff;
+    --popover-foreground: #202124;
+    --primary: #1967d2; /* white text on it 5.4:1 */
+    --primary-foreground: #ffffff;
+    --secondary: #e8eaed;
+    --secondary-foreground: #202124;
+    --muted: #e8eaed;
+    --muted-foreground: #5f6368; /* >= 5.0:1 on --muted */
+    --accent: #e8f0fe; /* blue tint hover fill */
+    --accent-foreground: #174ea6;
+    --destructive: #d93025;
+    --destructive-foreground: #ffffff;
+    --success: #188038;
+    --success-foreground: #ffffff;
+    --brand: #1967d2;
+    --brand-foreground: #ffffff;
+    --border: #dadce0;
+    --border-strong: #bdc1c6;
+    --field: #ffffff;
+    --control: #80868b;
+    --input: #bdc1c6;
+    --ring: #1a73e8;
+    --shadow-float: 0 10px 30px -8px rgb(32 33 36 / 0.2), 0 2px 6px rgb(32 33 36 / 0.08);
+    --day-blue: #1967d2;
+    --day-red: #d93025;
+    --day-green: #188038;
+    --day-amber: #b06000;
+    --day-violet: #8430ce;
+    --day-teal: #12858f;
+    --day-pink: #c2185b;
+    --day-slate: #5f6368;
+    --day-foreground: #ffffff;
+}
+
 /* A soft surface (card, day section, superset block): fields and rows inside it use the page
    colour so they still stand out. */
 @utility surface {
