@@ -161,7 +161,8 @@ describe('restore as a guest (this device)', () => {
     await user.click(submit)
     await waitFor(async () => expect((await local.listPlans()).map((p) => p.name)).toEqual(['Restored plan']))
     expect((await local.getProfile()).units).toBe('kg')
-    expect(ok).toHaveBeenCalled()
+    // The toast comes just after the data lands; under a busy machine it can trail the assertion above
+    await waitFor(() => expect(ok).toHaveBeenCalled())
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Restore summary' })).toBeNull())
   })
 
