@@ -78,14 +78,14 @@ export function createApp(deps: AppDeps): Hono {
   })
 
   // Which sign-in methods the login form may offer. Public, no secrets: only whether Google is on.
-  app.get('/api/auth-config', (c) => {
+  app.get('/api/auth/config', (c) => {
     c.header('Cache-Control', 'no-store')
     return c.json({ google: googleEnabled(env) })
   })
 
   // How the signed-in user can sign in (for the Account card): which login methods their account has.
   // Session required; only booleans leave, never account ids or tokens.
-  app.get('/api/auth-methods', async (c) => {
+  app.get('/api/auth/methods', async (c) => {
     c.header('Cache-Control', 'no-store')
     const session = await auth.api.getSession({ headers: c.req.raw.headers })
     if (!session) return c.json({ error: 'unauthenticated' }, 401)

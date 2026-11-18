@@ -18,19 +18,19 @@ async function startGoogle() {
 describe('Google sign-in', () => {
   it('is off unless both halves of the OAuth client are set', async () => {
     h = await setupApp()
-    const config = await h.request('/api/auth-config')
+    const config = await h.request('/api/auth/config')
     expect(await config.json()).toEqual({ google: false })
     expect(config.headers.get('cache-control')).toBe('no-store')
     expect((await startGoogle()).ok).toBe(false)
 
     await h.cleanup()
     h = await setupApp({ GOOGLE_CLIENT_ID: GOOGLE.GOOGLE_CLIENT_ID })
-    expect(await (await h.request('/api/auth-config')).json()).toEqual({ google: false })
+    expect(await (await h.request('/api/auth/config')).json()).toEqual({ google: false })
   })
 
   it('sends the browser to Google with the app callback when configured', async () => {
     h = await setupApp(GOOGLE)
-    expect(await (await h.request('/api/auth-config')).json()).toEqual({ google: true })
+    expect(await (await h.request('/api/auth/config')).json()).toEqual({ google: true })
     const res = await startGoogle()
     expect(res.status).toBe(200)
     const { url } = (await res.json()) as { url: string }
@@ -45,7 +45,7 @@ describe('Google sign-in', () => {
 
   it('never exposes the client secret', async () => {
     h = await setupApp(GOOGLE)
-    const body = await (await h.request('/api/auth-config')).text()
+    const body = await (await h.request('/api/auth/config')).text()
     expect(body).not.toContain(GOOGLE.GOOGLE_CLIENT_SECRET)
     const start = await (await startGoogle()).text()
     expect(start).not.toContain(GOOGLE.GOOGLE_CLIENT_SECRET)
@@ -83,19 +83,19 @@ describe('linking Google to an unverified, pre-registered account', () => {
   })
 })
 
-describe('GET /api/auth-methods', () => {
+describe('GET /api/auth/methods', () => {
   it('needs a session and reports only which methods the account has', async () => {
     h = await setupApp(GOOGLE)
-    expect((await h.request('/api/auth-methods')).status).toBe(401)
+    expect((await h.request('/api/auth/methods')).status).toBe(401)
     const email = 'both@example.com'
     const signedIn = await h.signUpVerified(email)
     expect(signedIn.status).toBe(200)
     const cookie = cookieJar(signedIn)
-    expect(await (await h.request('/api/auth-methods', { cookie })).json()).toEqual({ google: false, password: true })
+    expect(await (await h.request('/api/auth/methods', { cookie })).json()).toEqual({ google: false, password: true })
 
     const ctx = await h.auth.$context
     const found = await ctx.internalAdapter.findUserByEmail(email)
     await ctx.internalAdapter.linkAccount({ userId: found!.user.id, providerId: 'google', accountId: 'g-3' })
-    expect(await (await h.request('/api/auth-methods', { cookie })).json()).toEqual({ google: true, password: true })
+    expect(await (await h.request('/api/auth/methods', { cookie })).json()).toEqual({ google: true, password: true })
   })
 })

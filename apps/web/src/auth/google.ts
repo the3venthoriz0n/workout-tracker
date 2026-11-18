@@ -54,7 +54,7 @@ export function useGoogleEnabled(): boolean {
     retry: false,
     queryFn: async () => {
       try {
-        const res = await fetch('/api/auth-config')
+        const res = await fetch('/api/auth/config')
         if (!res.ok) return { google: false }
         const data = (await res.json().catch(() => null)) as { google?: unknown } | null
         return { google: data?.google === true }
@@ -77,7 +77,7 @@ export function useSignInMethods(email: string | undefined): SignInMethods | nul
     retry: false,
     queryFn: async (): Promise<SignInMethods | null> => {
       try {
-        const res = await fetch('/api/auth-methods', { credentials: 'include' })
+        const res = await fetch('/api/auth/methods', { credentials: 'include' })
         if (!res.ok) return null
         const d = (await res.json().catch(() => null)) as Partial<SignInMethods> | null
         return { google: d?.google === true, password: d?.password === true }
