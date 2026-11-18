@@ -51,7 +51,13 @@ const schema = z.object({
   // OAuth client (type Web) in Google Cloud and add `<BETTER_AUTH_URL>/api/auth/callback/google` as its
   // authorized redirect URI. The secret is never echoed.
   GOOGLE_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().regex(/^\S+$/, 'must not contain whitespace').optional()),
-  GOOGLE_CLIENT_SECRET: z.preprocess(emptyToUndefined, z.string().regex(/^\S+$/, 'must not contain whitespace').optional()),
+  GOOGLE_CLIENT_SECRET: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^\S+$/, 'must not contain whitespace')
+      .optional(),
+  ),
   // `off` disables the per-IP rate limit of the public community area outside production
   // (local load testing); production always keeps it on.
   AUTH_RATE_LIMIT: z.enum(['on', 'off']).default('on'),
