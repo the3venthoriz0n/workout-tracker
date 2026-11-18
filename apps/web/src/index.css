@@ -196,6 +196,46 @@
 :root[data-theme="color"] [data-slot="card"]:nth-of-type(4n + 4) { --ink: #0d652d; background-color: #daf1e0; }
 :root[data-theme="color"] [data-slot="card-title"] { color: var(--ink); }
 
+/* Color theme: every page wears its tab's colour: page wash, fills, hairlines, primary buttons and the
+   title. Settings (no tab) keeps the blue default. Needs :has(); without it the blue default shows. */
+:root[data-theme="color"] header h1 { color: var(--page-ink, #174ea6); }
+/* plans */
+:root[data-theme="color"]:has(a[data-tab="plans"][aria-current="page"]) {
+    --page-ink: #a50e0e;
+    --primary: #d93025;
+    --background: #fdeeec;
+    --muted: #f8d7d3;
+    --secondary: #f8d7d3;
+    --accent: #f8d7d3;
+    --border: #f3d0cc;
+    --border-strong: #e3a8a2;
+    --input: #e3a8a2;
+}
+/* library */
+:root[data-theme="color"]:has(a[data-tab="library"][aria-current="page"]) {
+    --page-ink: #7a4a00;
+    --primary: #b06000;
+    --background: #fef8e1;
+    --muted: #fbe9b0;
+    --secondary: #fbe9b0;
+    --accent: #fbe9b0;
+    --border: #f1e0b0;
+    --border-strong: #d9bf74;
+    --input: #d9bf74;
+}
+/* nutrition */
+:root[data-theme="color"]:has(a[data-tab="nutrition"][aria-current="page"]) {
+    --page-ink: #0d652d;
+    --primary: #188038;
+    --background: #e8f5ec;
+    --muted: #cdeadb;
+    --secondary: #cdeadb;
+    --accent: #cdeadb;
+    --border: #c4e3cf;
+    --border-strong: #8fc4a3;
+    --input: #8fc4a3;
+}
+
 /* A soft surface (card, day section, superset block): fields and rows inside it use the page
    colour so they still stand out. */
 @utility surface {
