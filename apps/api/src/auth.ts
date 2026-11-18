@@ -1,7 +1,7 @@
 import { betterAuth } from 'better-auth'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { Db } from './db/index.js'
 import { account, session, user, verification } from './db/schema.js'
 import type { Env } from './env.js'
@@ -100,7 +100,9 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
       }),
     },
     // "Continue with Google": sign-in only (linking from inside an account stays closed, see disabledPaths).
-    // An existing password account with the same email is linked, because Google only reports an email as
+    // An existing password account with the same email is linked only when Google reports the email as verified
+    // (no trustedProviders: Better Auth then refuses an unverified Google email, so a Google account that merely
+    // claims someone's address cannot enter it). Google only reports an email as
     // verified when it is; an unverified one is refused by Better Auth (no takeover of a pre-registered
     // address). Only `sub` and the verified email are used; Better Auth keeps Google's tokens in `account`.
     ...(googleEnabled(env)
@@ -108,12 +110,31 @@ export function createAuth(db: Db, env: AuthEnv, opts: AuthOptions) {
           socialProviders: {
             google: { clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET! },
           },
-          account: { accountLinking: { enabled: true, trustedProviders: ['google'] } },
+          account: { accountLinking: { enabled: true } },
         }
       : {}),
     // The invite list also guards accounts created by a social sign-in (the email sign-up path is
     // checked above, before anything is written). Existing users are never affected.
     databaseHooks: {
+      // Pre-registration takeover through linking: anyone can sign up an address with a password of their
+      // own choosing (the account stays unverified, so the password cannot sign in yet). If the real owner
+      // then signs in with Google, the account is linked and becomes verified, which would switch that
+      // password on. So when Google is linked to a still-unverified account, the password login and every
+      // session of it are removed first (this runs before the link, and before emailVerified flips). The
+      // owner can choose a password again through the reset link. Verified accounts are left alone.
+      account: {
+        create: {
+          before: async (acc) => {
+            if (acc.providerId !== 'google') return
+            const [u] = await db.select({ emailVerified: user.emailVerified }).from(user).where(eq(user.id, acc.userId))
+            if (!u || u.emailVerified) return
+            await db.transaction(async (tx) => {
+              await tx.delete(account).where(and(eq(account.userId, acc.userId), eq(account.providerId, 'credential')))
+              await tx.delete(session).where(eq(session.userId, acc.userId))
+            })
+          },
+        },
+      },
       user: {
         create: {
           before: async (u) => {
