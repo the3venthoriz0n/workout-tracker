@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { AuthProvider } from './auth/auth-provider'
 import { createAuthClient } from './auth/client'
 import { createQueryClient } from './app/query-client'
+import { watchSystemTheme } from './lib/theme-pref'
 import { createRouter } from './app/router'
 import './index.css'
 import { AppDb } from './repo/db'
@@ -14,6 +15,7 @@ import { LocalRepo } from './repo/local-repo'
 import { withOffline } from './repo/offline'
 import { OutboxDb, createOutboxStore, dropOtherMirrors } from './repo/outbox'
 
+watchSystemTheme()
 const queryClient = createQueryClient()
 const repo = new LocalRepo(new AppDb('workout-tracker'))
 const authClient = createAuthClient()

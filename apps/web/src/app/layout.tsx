@@ -35,6 +35,7 @@ export function Layout() {
             key={to}
             to={to}
             end={end}
+            data-tab={to.slice(1) || 'today'}
             className={({ isActive }) =>
               cn(
                 // Active: a filled pill with icon and label (not colour alone: shape and weight change too)

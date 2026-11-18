@@ -3,8 +3,9 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
-/* Follow the OS colour scheme in CSS, so there is no light flash before JS runs. */
-@custom-variant dark (@media (prefers-color-scheme: dark));
+/* Dark is the `data-theme="dark"` attribute on <html>. public/theme-init.js sets it before first paint
+   (the saved choice, else the OS scheme) and src/lib/theme-pref.ts keeps it current. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
     --font-heading: 'Inter Variable', system-ui, sans-serif;
@@ -54,89 +55,185 @@
    spec (section 8). */
 :root {
     color-scheme: light;
-    --background: #fdfcfc;
-    --foreground: #090f15;
-    --card: #f5f3f1; /* soft surface */
-    --card-foreground: #090f15;
-    --popover: #fdfcfc;
-    --popover-foreground: #090f15;
-    --primary: #090f15; /* near-black pill buttons */
-    --primary-foreground: #fdfcfc;
-    --secondary: #ebe8e4;
-    --secondary-foreground: #090f15;
-    --muted: #ebe8e4;
-    --muted-foreground: #6b655d; /* warm grey, darkened from #777169: 4.72:1 on --muted */
-    --accent: #efece8; /* hover fill */
-    --accent-foreground: #090f15;
+    --background: #eceff3; /* cool paper grey, same hue family as the dark page */
+    --foreground: #0b121a;
+    --card: #ffffff; /* white surfaces lift off the grey page */
+    --card-foreground: #0b121a;
+    --popover: #ffffff;
+    --popover-foreground: #0b121a;
+    --primary: #0b121a; /* near-black pill buttons */
+    --primary-foreground: #ffffff;
+    --secondary: #dfe4ea;
+    --secondary-foreground: #0b121a;
+    --muted: #dfe4ea;
+    --muted-foreground: #505c69; /* >= 5.2:1 on --muted */
+    --accent: #e4e8ee; /* hover fill */
+    --accent-foreground: #0b121a;
     --destructive: #c2362b;
     --destructive-foreground: #ffffff;
-    --success: #1f7a4d;
+    --success: #1b7045;
     --success-foreground: #ffffff;
-    --brand: #1a66e0; /* the accent as text and as a fill under white text (>= 4.72:1) */
+    --brand: #165bd0; /* the accent as text and as a fill under white text (>= 5.1:1) */
     --brand-foreground: #ffffff;
-    --border: #ebe8e4; /* hairlines */
-    --border-strong: #d7d2cc;
-    --field: #f5f3f1; /* input fill on the page; surfaces swap it for the page colour */
-    --control: #8a847c; /* switch track off, checkbox edge: >= 3.34:1 on page and surface */
-    --input: #d7d2cc;
-    --ring: #2b7fff; /* bright accent, focus only: 3.40:1 on the surface */
+    --border: #dde2e9; /* hairlines */
+    --border-strong: #c3cad4;
+    --field: #ffffff; /* input fill on the page; surfaces swap it for the page colour */
+    --control: #6b7684; /* switch track off, checkbox edge: >= 3.9:1 on page and surface */
+    --input: #c3cad4;
+    --ring: #1f6fef; /* focus only: >= 3.9:1 on the surface */
     --radius: 0.75rem;
     --shadow-float: 0 10px 30px -8px rgb(9 15 21 / 0.18), 0 2px 6px rgb(9 15 21 / 0.06);
-    /* Plan-day colours (DAY_COLORS): dots next to the day name. Each is >= 4.37:1 on the page
-       and surface, and --day-foreground on a swatch is >= 4.83:1 (lowest: amber). */
-    --day-blue: #3567d6;
-    --day-red: #c2453a;
-    --day-green: #2b7d52;
-    --day-amber: #a8600c;
-    --day-violet: #7553c4;
-    --day-teal: #1a7770;
-    --day-pink: #b8467b;
-    --day-slate: #66707a;
+    /* Plan-day colours (DAY_COLORS): dots next to the day name. Each is >= 4.3:1 on the page
+       and surface, and --day-foreground on a swatch is >= 5.6:1 (lowest: amber). */
+    --day-blue: #2f5fc9;
+    --day-red: #b83b30;
+    --day-green: #27744b;
+    --day-amber: #9a560a;
+    --day-violet: #6c49b8;
+    --day-teal: #176b65;
+    --day-pink: #ab3e70;
+    --day-slate: #5c6670;
     --day-foreground: #ffffff;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        color-scheme: dark;
-        --background: #090f15;
-        --foreground: #f5f3f1;
-        --card: #11181f;
-        --card-foreground: #f5f3f1;
-        --popover: #11181f;
-        --popover-foreground: #f5f3f1;
-        --primary: #f5f3f1; /* off-white pill, near-black text */
-        --primary-foreground: #090f15;
-        --secondary: #1b232c;
-        --secondary-foreground: #f5f3f1;
-        --muted: #1b232c;
-        --muted-foreground: #a59f97; /* 6.05:1 on --muted */
-        --accent: #1b232c;
-        --accent-foreground: #f5f3f1;
-        --destructive: #ff7b6b;
-        --destructive-foreground: #090f15;
-        --success: #4cc38a;
-        --success-foreground: #090f15;
-        --brand: #4d93ff; /* 5.90:1 on the surface; near-black text on it 6.36:1 */
-        --brand-foreground: #090f15;
-        --border: rgb(255 255 255 / 0.09);
-        --border-strong: rgb(255 255 255 / 0.16);
-        --field: #1b232c;
-        --control: #6b737c; /* 3.30:1 on --muted, 3.72:1 on the surface */
-        --input: rgb(255 255 255 / 0.16);
-        --ring: #4d93ff;
-        --shadow-float: 0 10px 30px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
-        /* Lighter dots for dark: each >= 6.53:1 on the page, surface and --muted;
-           --day-foreground on a swatch >= 7.92:1. */
-        --day-blue: #7aa7f5;
-        --day-red: #f08a7e;
-        --day-green: #6cc79a;
-        --day-amber: #e6ae5c;
-        --day-violet: #b49cf0;
-        --day-teal: #5cc6ba;
-        --day-pink: #ee8dbb;
-        --day-slate: #a3abb5;
-        --day-foreground: #090f15;
-    }
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --background: #090f15;
+    --foreground: #f5f3f1;
+    --card: #11181f;
+    --card-foreground: #f5f3f1;
+    --popover: #11181f;
+    --popover-foreground: #f5f3f1;
+    --primary: #f5f3f1; /* off-white pill, near-black text */
+    --primary-foreground: #090f15;
+    --secondary: #1b232c;
+    --secondary-foreground: #f5f3f1;
+    --muted: #1b232c;
+    --muted-foreground: #a59f97; /* 6.05:1 on --muted */
+    --accent: #1b232c;
+    --accent-foreground: #f5f3f1;
+    --destructive: #ff7b6b;
+    --destructive-foreground: #090f15;
+    --success: #4cc38a;
+    --success-foreground: #090f15;
+    --brand: #4d93ff; /* 5.90:1 on the surface; near-black text on it 6.36:1 */
+    --brand-foreground: #090f15;
+    --border: rgb(255 255 255 / 0.09);
+    --border-strong: rgb(255 255 255 / 0.16);
+    --field: #1b232c;
+    --control: #6b737c; /* 3.30:1 on --muted, 3.72:1 on the surface */
+    --input: rgb(255 255 255 / 0.16);
+    --ring: #4d93ff;
+    --shadow-float: 0 10px 30px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
+    /* Lighter dots for dark: each >= 6.53:1 on the page, surface and --muted;
+       --day-foreground on a swatch >= 7.92:1. */
+    --day-blue: #7aa7f5;
+    --day-red: #f08a7e;
+    --day-green: #6cc79a;
+    --day-amber: #e6ae5c;
+    --day-violet: #b49cf0;
+    --day-teal: #5cc6ba;
+    --day-pink: #ee8dbb;
+    --day-slate: #a3abb5;
+    --day-foreground: #090f15;
+}
+
+/* "Color": a light theme on Google's palette: white surfaces on Google grey, the blue as the primary
+   (buttons, active tab and segment), red / green / amber as the status colours. */
+:root[data-theme="color"] {
+    color-scheme: light;
+    --background: #eaf1fe; /* soft Google-blue wash */
+    --foreground: #202124;
+    --card: #ffffff;
+    --card-foreground: #202124;
+    --popover: #ffffff;
+    --popover-foreground: #202124;
+    --primary: #1967d2; /* white text on it 5.4:1 */
+    --primary-foreground: #ffffff;
+    --secondary: #d6e3fb;
+    --secondary-foreground: #202124;
+    --muted: #d6e3fb;
+    --muted-foreground: #4a4f55; /* >= 6.3:1 on --muted */
+    --accent: #dce8fc; /* blue tint hover fill */
+    --accent-foreground: #174ea6;
+    --destructive: #d93025;
+    --destructive-foreground: #ffffff;
+    --success: #188038;
+    --success-foreground: #ffffff;
+    --brand: #1967d2;
+    --brand-foreground: #ffffff;
+    --border: #cfdcf5;
+    --border-strong: #a9bde2;
+    --field: #ffffff;
+    --control: #6f7782;
+    --input: #a9bde2;
+    --ring: #1a73e8;
+    --shadow-float: 0 10px 30px -8px rgb(32 33 36 / 0.2), 0 2px 6px rgb(32 33 36 / 0.08);
+    --day-blue: #1967d2;
+    --day-red: #d93025;
+    --day-green: #188038;
+    --day-amber: #b06000;
+    --day-violet: #8430ce;
+    --day-teal: #12858f;
+    --day-pink: #c2185b;
+    --day-slate: #5f6368;
+    --day-foreground: #ffffff;
+}
+
+/* Color theme: each tab carries one of Google's colours, as the icon when idle and the pill when active
+   (the pill's shape and weight still say "active", not colour alone). */
+:root[data-theme="color"] a[data-tab] { --tab: #1967d2; }
+:root[data-theme="color"] a[data-tab="plans"] { --tab: #d93025; }
+:root[data-theme="color"] a[data-tab="library"] { --tab: #b06000; }
+:root[data-theme="color"] a[data-tab="nutrition"] { --tab: #188038; }
+:root[data-theme="color"] a[data-tab][aria-current="page"] { background-color: var(--tab); color: #fff; }
+:root[data-theme="color"] a[data-tab]:not([aria-current="page"]) svg { color: var(--tab); }
+
+/* Color theme: cards take Google's four colours in turn (soft tint, darker ink for the title). */
+:root[data-theme="color"] [data-slot="card"] { --ink: #174ea6; background-color: #dbe8fc; }
+:root[data-theme="color"] [data-slot="card"]:nth-of-type(4n + 2) { --ink: #a50e0e; background-color: #fde3e0; }
+:root[data-theme="color"] [data-slot="card"]:nth-of-type(4n + 3) { --ink: #7a4a00; background-color: #fef3cf; }
+:root[data-theme="color"] [data-slot="card"]:nth-of-type(4n + 4) { --ink: #0d652d; background-color: #daf1e0; }
+:root[data-theme="color"] [data-slot="card-title"] { color: var(--ink); }
+
+/* Color theme: every page wears its tab's colour: page wash, fills, hairlines, primary buttons and the
+   title. Settings (no tab) keeps the blue default. Needs :has(); without it the blue default shows. */
+:root[data-theme="color"] header h1 { color: var(--page-ink, #174ea6); }
+/* plans */
+:root[data-theme="color"]:has(a[data-tab="plans"][aria-current="page"]) {
+    --page-ink: #a50e0e;
+    --primary: #d93025;
+    --background: #fdeeec;
+    --muted: #f8d7d3;
+    --secondary: #f8d7d3;
+    --accent: #f8d7d3;
+    --border: #f3d0cc;
+    --border-strong: #e3a8a2;
+    --input: #e3a8a2;
+}
+/* library */
+:root[data-theme="color"]:has(a[data-tab="library"][aria-current="page"]) {
+    --page-ink: #7a4a00;
+    --primary: #b06000;
+    --background: #fef8e1;
+    --muted: #fbe9b0;
+    --secondary: #fbe9b0;
+    --accent: #fbe9b0;
+    --border: #f1e0b0;
+    --border-strong: #d9bf74;
+    --input: #d9bf74;
+}
+/* nutrition */
+:root[data-theme="color"]:has(a[data-tab="nutrition"][aria-current="page"]) {
+    --page-ink: #0d652d;
+    --primary: #188038;
+    --background: #e8f5ec;
+    --muted: #cdeadb;
+    --secondary: #cdeadb;
+    --accent: #cdeadb;
+    --border: #c4e3cf;
+    --border-strong: #8fc4a3;
+    --input: #8fc4a3;
 }
 
 /* A soft surface (card, day section, superset block): fields and rows inside it use the page
