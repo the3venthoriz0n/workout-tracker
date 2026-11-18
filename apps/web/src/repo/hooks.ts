@@ -21,6 +21,7 @@ export const keys = {
   voted: (id: string) => ['community', 'voted', id] as const,
   myShared: ['community', 'mine'] as const,
   nutrition: (date: string) => ['nutrition', date] as const,
+  nutritionRange: (from: string, to: string) => ['nutrition', 'range', from, to] as const,
 }
 
 export const useProfile = () => {
@@ -204,6 +205,11 @@ export const useAdoptSharedPlan = () =>
 export const useNutrition = (date: string, enabled = true) => {
   const repo = useRepo()
   return useQuery({ queryKey: keys.nutrition(date), queryFn: () => repo.listNutrition(date, date), enabled, retry: false })
+}
+/** Entries over a range of days (the calendar marks the days that have any). */
+export const useNutritionRange = (from: string, to: string, enabled = true) => {
+  const repo = useRepo()
+  return useQuery({ queryKey: keys.nutritionRange(from, to), queryFn: () => repo.listNutrition(from, to), enabled, retry: false })
 }
 export const useSaveNutritionEntry = () =>
   useRepoMutation((r, entry: Parameters<Repo['saveNutritionEntry']>[0]) => r.saveNutritionEntry(entry))
