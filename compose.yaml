@@ -6,7 +6,7 @@ x-database-url: &database-url postgres://${POSTGRES_USER:?run just setup}:${POST
 
 services:
   db:
-    image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+    image: postgres:18.7-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -25,7 +25,7 @@ services:
   # Data lives in tmpfs and no port is published, so it is reachable only from the dev
   # container over the compose network. The fixed credentials guard nothing of value.
   db-test:
-    image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+    image: postgres:18.7-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
     environment:
       POSTGRES_USER: test
       POSTGRES_PASSWORD: test
